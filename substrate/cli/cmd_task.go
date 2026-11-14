@@ -12,12 +12,12 @@ import (
 	"strings"
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/types"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/handshake"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/task"
 	"github.com/spf13/cobra"
 )
 
 // NewTaskCmd constructs the canonical 'nomos task' command hierarchy.
+// @intent task_lifecycle_cli_spec.md
 func NewTaskCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "task",
@@ -25,6 +25,10 @@ func NewTaskCmd() *cobra.Command {
 		Long: `Living Ledger task management. Workspace mutability is procedurally locked
 across lifecycle phases: IDLE -> PLAN -> EDIT -> REVIEW -> SYNC -> LEARN.`,
 		Example: tui.HelpTaskExample,
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
 	}
 
 	cmd.AddCommand(newTaskCreateCmd())
@@ -40,7 +44,6 @@ across lifecycle phases: IDLE -> PLAN -> EDIT -> REVIEW -> SYNC -> LEARN.`,
 	cmd.AddCommand(taskui.NewTaskPruneCmd())
 	cmd.AddCommand(newTaskListCmd())
 	cmd.AddCommand(newTaskDAGCmd())
-	cmd.AddCommand(newTaskStatusCmd())
 	cmd.AddCommand(newTaskShowCmd())
 	return cmd
 }
@@ -178,67 +181,6 @@ func renderWavefront(out io.Writer, wf []task.WavefrontCandidate) {
 			tui.UiMutedStyle.Render(fmt.Sprintf("(%s, %s)", cand.Plane, cand.Tier)))
 	}
 	fmt.Fprintln(out, tui.UiRule(tui.RuleStandard))
-}
-
-func newTaskStatusCmd() *cobra.Command {
-	var jsonOutput bool
-
-	cmd := &cobra.Command{
-		Use:     "status",
-		Short:   "Display active workspace phase and CapBAC token allocation",
-		Long:    tui.HelpTaskStatusLong,
-		Example: tui.HelpTaskStatusExample,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			ps := collectPhaseStateSnapshot()
-			if err := ps.Validate(); err != nil {
-				return err
-			}
-			out := cmd.OutOrStdout()
-			if jsonOutput {
-				data, mErr := json.MarshalIndent(ps, "", "  ")
-				if mErr != nil {
-					return types.NewNomosError(types.ErrCodeCore, "failed marshaling phase state JSON: %v", mErr)
-				}
-				fmt.Fprintln(out, string(data))
-				return nil
-			}
-			fmt.Fprintln(out, tui.RenderBrandTitle("📋 Nomos Workspace Phase State"))
-			fmt.Fprintln(out, tui.UiRule(tui.RuleNarrow))
-			fmt.Fprintln(out, tui.KvLine("Active Phase", 15, tui.StyleSemanticBadge(string(ps.Phase))))
-			if ps.TaskID != "" {
-				fmt.Fprintln(out, tui.KvLine("Active Task", 15, tui.StyleTaskKey(ps.TaskID)))
-			}
-			fmt.Fprintln(out, tui.KvLine("Assignee", 15, tui.UiValueStyle.Render(ps.Assignee)))
-			fmt.Fprintln(out, tui.KvLine("Step Budget", 15, tui.UiBoldValueStyle.Render(fmt.Sprintf("%d", ps.StepBudget))))
-			fmt.Fprintln(out, tui.KvLine("Tokens Consumed", 15, tui.UiValueStyle.Render(fmt.Sprintf("%d", ps.TokensUsed))))
-			tui.RenderNextActions(out, ps.NextActions)
-			fmt.Fprintln(out, tui.UiRule(tui.RuleNarrow))
-			return nil
-		},
-	}
-	cmd.Flags().BoolVar(&jsonOutput, tui.FlagNameJSON, false, "Emit phase state as structured JSON")
-	return cmd
-}
-
-func collectPhaseStateSnapshot() *types.PhaseState {
-	ps := types.NewDefaultPhaseState()
-	if ev, hErr := handshake.SynthesizeDynamicHandshake(""); hErr == nil && ev != nil {
-		if ev.Seat != "" {
-			ps.Assignee = ev.Seat
-		}
-		if ev.ActiveTask != "" && ev.TokenID != "" {
-			ps.Phase = ev.Phase
-			ps.TaskID = ev.ActiveTask
-			ps.Token = ev.TokenID
-			ps.StepBudget = ev.StepBudget
-			ps.TokensUsed = ev.TokensUsed
-		}
-		ps.NextActions = ev.NextActions
-	}
-	if len(ps.NextActions) == 0 {
-		ps.NextActions = types.BuildPhaseNextActions(ps.Phase, ps.TaskID, "", nil, nil)
-	}
-	return ps
 }
 
 func newTaskShowCmd() *cobra.Command {

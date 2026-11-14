@@ -22,6 +22,10 @@ import (
 // StatusReport models the unified status snapshot for machine and human consumption.
 type StatusReport struct {
 	Phase            string                     `json:"phase"`
+	ActiveTask       string                     `json:"active_task,omitempty"`
+	Assignee         string                     `json:"assignee,omitempty"`
+	StepBudget       int                        `json:"step_budget,omitempty"`
+	TokensUsed       int                        `json:"tokens_used,omitempty"`
 	Project          string                     `json:"project,omitempty"`
 	RepoRoot         string                     `json:"repo_root"`
 	ActiveBranch     string                     `json:"active_branch"`
@@ -35,6 +39,15 @@ type StatusReport struct {
 	RemoteAheadCount int                        `json:"remote_ahead_count"`
 	StaleObligations []task.StaleSpecObligation `json:"stale_obligations,omitempty"`
 	NextActions      []types.ActionAffordance   `json:"next_actions,omitempty"`
+}
+
+type statusPhaseSnapshot struct {
+	phase      string
+	activeTask string
+	assignee   string
+	stepBudget int
+	tokensUsed int
+	actions    []types.ActionAffordance
 }
 
 // NewStatusCmd constructs the top-level 'nomos status' command.
@@ -68,7 +81,9 @@ trunk branch, database connectivity, and repository-scoped Living Ledger task wa
 	return cmd
 }
 
-// CollectStatusReport executes deterministic diag verification logic (@intent task_lifecycle_cli_spec.md).
+// CollectStatusReport executes deterministic diag verification logic.
+// @intent task_lifecycle_cli_spec.md
+// @intent mneme_memory_spec.md
 func CollectStatusReport() *StatusReport {
 	return collectStatusReportWithScope(false)
 }
@@ -99,12 +114,16 @@ func collectStatusReportWithScope(allProjects bool) *StatusReport {
 		total, active, pending, wavefront = 0, 0, 0, 0
 	}
 
-	phase, nextActions := resolveStatusPhaseAndActions(treeRoot, isWorktree)
+	snap := resolveStatusPhaseSnapshot(treeRoot, isWorktree)
 	remoteAhead := resolveRemoteAheadCount(repoRoot)
 	staleObligations := ResolveStaleObligations(repoRoot)
 
 	return &StatusReport{
-		Phase:            phase,
+		Phase:            snap.phase,
+		ActiveTask:       snap.activeTask,
+		Assignee:         snap.assignee,
+		StepBudget:       snap.stepBudget,
+		TokensUsed:       snap.tokensUsed,
 		Project:          project,
 		RepoRoot:         repoRoot,
 		ActiveBranch:     activeBranch,
@@ -117,18 +136,31 @@ func collectStatusReportWithScope(allProjects bool) *StatusReport {
 		WavefrontCount:   wavefront,
 		RemoteAheadCount: remoteAhead,
 		StaleObligations: staleObligations,
-		NextActions:      nextActions,
+		NextActions:      snap.actions,
 	}
 }
 
-func resolveStatusPhaseAndActions(treeRoot string, isWorktree bool) (string, []types.ActionAffordance) {
+func resolveStatusPhaseSnapshot(treeRoot string, isWorktree bool) statusPhaseSnapshot {
 	if ev, hErr := handshake.SynthesizeDynamicHandshake(treeRoot); hErr == nil && ev != nil {
-		return string(ev.Phase), ev.NextActions
+		return statusPhaseSnapshot{
+			phase:      string(ev.Phase),
+			activeTask: ev.ActiveTask,
+			assignee:   ev.Seat,
+			stepBudget: ev.StepBudget,
+			tokensUsed: ev.TokensUsed,
+			actions:    ev.NextActions,
+		}
 	}
 	if isWorktree {
-		return string(types.PhaseEdit), types.BuildPhaseNextActions(types.PhaseEdit, "", treeRoot, nil, nil)
+		return statusPhaseSnapshot{
+			phase:   string(types.PhaseEdit),
+			actions: types.BuildPhaseNextActions(types.PhaseEdit, "", treeRoot, nil, nil),
+		}
 	}
-	return string(types.PhaseIdle), types.BuildPhaseNextActions(types.PhaseIdle, "", "", nil, nil)
+	return statusPhaseSnapshot{
+		phase:   string(types.PhaseIdle),
+		actions: types.BuildPhaseNextActions(types.PhaseIdle, "", "", nil, nil),
+	}
 }
 
 // ResolveStaleObligations executes deterministic diag verification logic (@intent task_lifecycle_cli_spec.md).
@@ -213,6 +245,7 @@ func renderStatusReport(out io.Writer, r *StatusReport) {
 	fmt.Fprintln(out, tui.RenderBrandTitle("📋 Nomos Operational Status"))
 	fmt.Fprintln(out, tui.UiRule(tui.RuleNarrow))
 	fmt.Fprintln(out, tui.KvLine("Active Phase", 15, tui.StyleSemanticBadge(r.Phase)))
+	renderActiveLeaseLines(out, r)
 	if r.Project != "" {
 		fmt.Fprintln(out, tui.KvLine("Project Scope", 15, tui.UiBoldValueStyle.Render(r.Project)))
 	}
@@ -241,6 +274,19 @@ func renderStatusReport(out io.Writer, r *StatusReport) {
 	renderStaleObligationsLine(out, r.StaleObligations)
 	tui.RenderNextActions(out, r.NextActions)
 	fmt.Fprintln(out, tui.UiRule(tui.RuleNarrow))
+}
+
+func renderActiveLeaseLines(out io.Writer, r *StatusReport) {
+	if r.ActiveTask != "" {
+		fmt.Fprintln(out, tui.KvLine("Active Task", 15, tui.StyleTaskKey(r.ActiveTask)))
+	}
+	if r.StepBudget > 0 {
+		budgetLine := fmt.Sprintf("%d / %d steps consumed", r.TokensUsed, r.StepBudget)
+		if r.Assignee != "" {
+			budgetLine += " (" + r.Assignee + ")"
+		}
+		fmt.Fprintln(out, tui.KvLine("CapBAC Lease", 15, tui.UiValueStyle.Render(budgetLine)))
+	}
 }
 
 func renderStaleObligationsLine(out io.Writer, stale []task.StaleSpecObligation) {

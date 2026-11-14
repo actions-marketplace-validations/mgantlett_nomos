@@ -23,11 +23,6 @@ dependencies are satisfied (DONE), scoped to the active repository project by de
   nomos task dag --plane substrate --limit 10
   nomos task dag --all-projects --json`
 
-	HelpTaskStatusLong = `Display active workspace lifecycle phase (IDLE, PLAN, EDIT, REVIEW, SYNC, LEARN),
-bound task key, CapBAC capability token budget consumption, and HATEOAS Next Actions.`
-	HelpTaskStatusExample = `  nomos task status
-  nomos task status --json`
-
 	HelpTaskShowLong = `Inspect the complete Living Ledger 3-section task card, plane metadata, bilateral
 twin linkage, upstream/downstream causal dependencies, and active worktree path.`
 	HelpTaskShowExample = `  nomos task show SUB-101

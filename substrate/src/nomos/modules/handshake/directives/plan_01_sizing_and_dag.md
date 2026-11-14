@@ -86,10 +86,10 @@ Before writing production code, the cross-plane dependency graph must be populat
 - **Task Lifecycle**:
   - Transition task through `PLAN` → `EDIT` (`nomos task start <KEY>`, `nomos task edit <KEY>`).
   - Execute mutations strictly within the transient worktree `worktrees/<repo>-<KEY>`.
-  - Validate DoD quality gates before committing (`nomos task review <KEY>`).
+  - Validate DoD quality gates (`nomos verify`) or explicitly lock edits (`nomos task review <KEY>`).
 
 ### Phase 4: Terminal 2PC Atomic Release
-- **Atomic Sync (`nomos task sync -F <walkthrough-file> <KEY>`)**:
+- **Atomic Sync (`nomos task sync <KEY> -m "<summary>"` or `-F <walkthrough-file>`)**:
   - Merges task branch into trunk `main`, records cryptographic release receipt in Git Notes, marks task `DONE`, and deletes transient worktree.
 
 ---

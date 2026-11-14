@@ -57,7 +57,9 @@ Zero trust in conversational claims; non-verbal proof via AST and compilation ex
 	cmd.Flags().StringVar(&commitRange, "range", "", "Evaluate unattested commits in range (e.g. origin/main..HEAD) for pre-push verification")
 	cmd.Flags().BoolVar(&prFlags.prMode, "pr", false, "Emit tamper-evident Pull Request proof receipt (Markdown or --json)")
 	cmd.Flags().StringVar(&prFlags.prOutput, "pr-output", "", "Optional file path to write rendered Pull Request proof receipt")
-	cmd.Flags().BoolVar(&prFlags.mutateDiff, "mutate-diff", false, "Probe modified Go functions with zero-token AST micro-mutants")
+	// @intent nomos_intent_traceability_spec.md
+	// @intent tree_sitter_ast_gate_spec.md
+	cmd.Flags().BoolVar(&prFlags.mutateDiff, "mutate-diff", false, "Probe modified Go, TypeScript/JS, and Python functions with zero-token AST micro-mutants")
 	cmd.Flags().StringVar(&prFlags.baseRef, "base-ref", "", "Git base reference for PR receipt and diff micro-mutation comparison")
 
 	cmd.AddCommand(newVerifyProofCmd())

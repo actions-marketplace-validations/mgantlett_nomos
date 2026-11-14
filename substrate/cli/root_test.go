@@ -49,14 +49,22 @@ func TestRootCmd_VersionExecution(t *testing.T) {
 	}
 }
 
-func TestRootCmd_TaskStatusExecution(t *testing.T) {
+func TestRootCmd_StatusExecutionAndRemovedTaskStatusAlias(t *testing.T) {
 	root := cli.NewRootCmd()
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
-	root.SetArgs([]string{"task", "status"})
+	root.SetArgs([]string{"status"})
 
 	if err := root.Execute(); err != nil {
-		t.Fatalf("task status command failed: %v", err)
+		t.Fatalf("status command failed: %v", err)
+	}
+
+	removed := cli.NewRootCmd()
+	removed.SilenceErrors = true
+	removed.SilenceUsage = true
+	removed.SetArgs([]string{"task", "status"})
+	if err := removed.Execute(); err == nil {
+		t.Fatal("expected removed 'nomos task status' duplicate command to fail closed under Law 6")
 	}
 }
 

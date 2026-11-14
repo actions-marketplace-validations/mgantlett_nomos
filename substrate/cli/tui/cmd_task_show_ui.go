@@ -52,11 +52,22 @@ func renderTaskShowNextActions(out io.Writer, rec task.TaskInspectionRecord) {
 			Command: fmt.Sprintf("nomos task start %s --edit", rec.Key),
 			Summary: "Provision isolated EDIT worktree for this task",
 		})
-	case task.StatusPlan, task.StatusEdit, task.StatusReview:
+	case task.StatusPlan:
 		actions = append(actions, types.ActionAffordance{
-			Command: fmt.Sprintf("nomos task review %s", rec.Key),
-			Summary: "Evaluate 42 Definition of Done quality gates on task worktree",
+			Command: fmt.Sprintf("nomos task edit %s", rec.Key),
+			Summary: "Transition task lease from PLAN to EDIT to enable file mutations",
 		})
+	case task.StatusEdit, task.StatusReview:
+		actions = append(actions,
+			types.ActionAffordance{
+				Command: "nomos verify",
+				Summary: "Evaluate 42 Definition of Done quality gates on task worktree",
+			},
+			types.ActionAffordance{
+				Command: fmt.Sprintf(`nomos task sync %s -m "<summary>"`, rec.Key),
+				Summary: "1-turn atomic 2PC merge to trunk with inline summary receipt",
+			},
+		)
 	}
 	if rec.TwinKey != "" {
 		actions = append(actions, types.ActionAffordance{

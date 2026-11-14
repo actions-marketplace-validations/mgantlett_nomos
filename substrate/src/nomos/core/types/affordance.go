@@ -116,6 +116,11 @@ func buildEditAffordances(key, wt string) []ActionAffordance {
 	wtWalkthrough := walkthroughHintPath(key, wt)
 	actions = append(actions,
 		ActionAffordance{
+			Command: "nomos verify",
+			Summary: "Evaluate all 42 Definition of Done quality gates",
+			Phase:   PhaseReview,
+		},
+		ActionAffordance{
 			Command: fmt.Sprintf(`nomos task sync %s -m "<summary>"`, key),
 			Summary: "1-turn fast release: auto-commit, run 42 DoD gates, merge to trunk, and seal Git Note",
 			Phase:   PhaseSync,
@@ -124,11 +129,6 @@ func buildEditAffordances(key, wt string) []ActionAffordance {
 			Command: fmt.Sprintf(`nomos task commit %s -m "<type(scope): summary>"`, key),
 			Summary: "Stage and commit worktree changes (hydrates Golden Commit rationale and Task/Twin trailers)",
 			Phase:   PhaseEdit,
-		},
-		ActionAffordance{
-			Command: "nomos verify",
-			Summary: "Evaluate all 42 Definition of Done quality gates",
-			Phase:   PhaseReview,
 		},
 		ActionAffordance{
 			Command: fmt.Sprintf("nomos task sync %s -F %s", key, wtWalkthrough),

@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/mgantlett/nomos/substrate/cli/diag"
 	"github.com/mgantlett/nomos/substrate/cli/selfupdate"
 	"strings"
 	"testing"
@@ -80,7 +81,7 @@ func TestTaskListAndDAG_FilterFlagsAndJSONParity(t *testing.T) {
 		t.Fatal("expected invalid --status BOGUS to fail closed")
 	}
 
-	// task show --json & task status --json & version --json
+	// task show --json & unified status --json & version --json
 	showJSON := newTaskShowCmd()
 	showBuf := new(bytes.Buffer)
 	showJSON.SetOut(showBuf)
@@ -89,12 +90,12 @@ func TestTaskListAndDAG_FilterFlagsAndJSONParity(t *testing.T) {
 		t.Fatalf("task show SUB-1 --json failed: err=%v out=%s", err, showBuf.String())
 	}
 
-	statusJSON := newTaskStatusCmd()
+	statusJSON := diag.NewStatusCmd()
 	statusBuf := new(bytes.Buffer)
 	statusJSON.SetOut(statusBuf)
 	statusJSON.SetArgs([]string{"--json"})
 	if err := statusJSON.Execute(); err != nil || !strings.Contains(statusBuf.String(), `"phase"`) {
-		t.Fatalf("task status --json failed: err=%v out=%s", err, statusBuf.String())
+		t.Fatalf("status --json failed: err=%v out=%s", err, statusBuf.String())
 	}
 
 	verJSON := selfupdate.NewVersionCmd()
