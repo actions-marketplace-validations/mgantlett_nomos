@@ -21,7 +21,7 @@ const (
 	roleInfra
 	roleDelivery
 	maxInferredBoundaryRules = 6
-	maxInferenceDirDepth     = 4
+	maxInferenceDirDepth     = 6
 )
 
 var (
@@ -56,7 +56,16 @@ func InferCleanArchitectureBoundaries(root string) []config.ArchitectureBoundary
 	if strings.TrimSpace(root) == "" {
 		return nil
 	}
-	allFiles := listNonTestBoundarySourceFiles(root)
+	return InferCleanArchitectureBoundariesForFiles(root, listNonTestBoundarySourceFiles(root))
+}
+
+// InferCleanArchitectureBoundariesForFiles discovers zero-violation layer rules across a
+// pre-collected Git-tracked file slice (@intent nomos_intent_traceability_spec.md #ArchitectureBoundaryRule).
+func InferCleanArchitectureBoundariesForFiles(root string, files []string) []config.ArchitectureBoundaryRule {
+	if strings.TrimSpace(root) == "" || len(files) == 0 {
+		return nil
+	}
+	allFiles := filterNonTestBoundarySlice(files)
 	if len(allFiles) == 0 {
 		return nil
 	}
@@ -67,7 +76,25 @@ func InferCleanArchitectureBoundaries(root string) []config.ArchitectureBoundary
 	return synthesizeVerifiedBoundaryRules(root, allFiles, layers)
 }
 
+func filterNonTestBoundarySlice(files []string) []string {
+	var out []string
+	for _, f := range files {
+		slash := filepath.ToSlash(strings.TrimSpace(f))
+		if slash == "" || IsVerificationSuiteFile(filepath.Base(slash)) {
+			continue
+		}
+		if vscope.IsSupportedPolyglotSourceFile(slash) {
+			out = append(out, slash)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 func listNonTestBoundarySourceFiles(root string) []string {
+	if gitFiles, ok := tryListGitTrackedPolyglotFiles(root); ok {
+		return filterNonTestBoundarySlice(gitFiles)
+	}
 	var out []string
 	walkErr := filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
 		if err != nil || info == nil {
@@ -162,12 +189,13 @@ func pruneContainerAppLayers(roleByDir map[string]layerRole) {
 }
 
 func synthesizeVerifiedBoundaryRules(root string, allFiles []string, layers []classifiedLayerDir) []config.ArchitectureBoundaryRule {
+	importCache := preloadFileImportCandidates(root, allFiles)
 	var rules []config.ArchitectureBoundaryRule
 	for _, inner := range layers {
 		if inner.role != roleDomain && inner.role != roleApp {
 			continue
 		}
-		forbids := collectZeroViolationForbids(root, allFiles, inner, layers)
+		forbids := collectZeroViolationForbids(allFiles, importCache, inner, layers)
 		if len(forbids) == 0 {
 			continue
 		}
@@ -183,23 +211,53 @@ func synthesizeVerifiedBoundaryRules(root string, allFiles []string, layers []cl
 	return rules
 }
 
-func collectZeroViolationForbids(root string, allFiles []string, inner classifiedLayerDir, layers []classifiedLayerDir) []string {
+func preloadFileImportCandidates(root string, allFiles []string) map[string][][]string {
+	cache := make(map[string][][]string, len(allFiles))
+	for _, relFile := range allFiles {
+		full := filepath.Join(root, filepath.FromSlash(relFile))
+		rawImports := ExtractPolyglotFileImports(full)
+		if len(rawImports) == 0 {
+			continue
+		}
+		sets := make([][]string, 0, len(rawImports))
+		for _, imp := range rawImports {
+			sets = append(sets, buildImportMatchCandidates(relFile, imp))
+		}
+		cache[relFile] = sets
+	}
+	return cache
+}
+
+func collectZeroViolationForbids(allFiles []string, importCache map[string][][]string, inner classifiedLayerDir, layers []classifiedLayerDir) []string {
+	innerPrefix := inner.relDir + "/"
+	var innerFiles []string
+	for _, f := range allFiles {
+		if strings.HasPrefix(f, innerPrefix) {
+			innerFiles = append(innerFiles, f)
+		}
+	}
 	var forbids []string
 	for _, outer := range layers {
 		if !isCandidateOuterForInner(inner, outer) {
 			continue
 		}
 		glob := outer.relDir + "/**"
-		probe := []config.ArchitectureBoundaryRule{{
-			Name:          "probe",
-			From:          inner.relDir + "/**",
-			ForbidImports: []string{glob},
-		}}
-		if len(EvaluateArchitectureBoundaries(root, allFiles, probe)) == 0 {
+		if !anyFileImportsPattern(innerFiles, importCache, glob) {
 			forbids = append(forbids, glob)
 		}
 	}
 	return forbids
+}
+
+func anyFileImportsPattern(innerFiles []string, importCache map[string][][]string, forbidGlob string) bool {
+	for _, f := range innerFiles {
+		for _, candSet := range importCache[f] {
+			if matchesAnyImportCandidate(forbidGlob, candSet) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func isCandidateOuterForInner(inner, outer classifiedLayerDir) bool {

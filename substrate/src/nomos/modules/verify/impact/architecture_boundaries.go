@@ -72,13 +72,16 @@ func resolveBoundaryTargetFile(root, entry string) (string, string, bool) {
 }
 
 func listBoundaryCandidateFiles(root string) []string {
+	if gitFiles, ok := tryListGitTrackedPolyglotFiles(root); ok {
+		return gitFiles
+	}
 	var out []string
 	walkErr := filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
 		if err != nil || info == nil {
 			return nil
 		}
 		if info.IsDir() {
-			if IsSkippedObligationDir(info.Name()) {
+			if p != root && (strings.HasPrefix(info.Name(), ".") || IsSkippedObligationDir(info.Name())) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -93,6 +96,7 @@ func listBoundaryCandidateFiles(root string) []string {
 	if walkErr != nil {
 		return out
 	}
+	sort.Strings(out)
 	return out
 }
 
@@ -170,6 +174,7 @@ func buildImportMatchCandidates(relFile, rawImp string) []string {
 		resolved := path.Clean(path.Join(path.Dir(relFile), rawImp))
 		add(resolved)
 	}
+	addAliasImportCandidates(relFile, rawImp, add)
 	slashImp := strings.ReplaceAll(strings.ReplaceAll(rawImp, "::", "/"), ".", "/")
 	if !strings.HasPrefix(rawImp, ".") {
 		add(slashImp)

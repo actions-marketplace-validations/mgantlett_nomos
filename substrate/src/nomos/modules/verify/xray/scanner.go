@@ -297,9 +297,17 @@ func finalizeScanReport(absRoot string, topLimit int, start time.Time, acc *scan
 	acc.report.MagicStringGroups = verify.CountCorpusMagicStringGroups(
 		acc.nonTestSources, verify.DefaultXrayMagicStringThreshold,
 	)
-	acc.report.InferredBoundaries = len(impact.InferCleanArchitectureBoundaries(absRoot))
+	acc.report.InferredBoundaries = len(impact.InferCleanArchitectureBoundariesForFiles(absRoot, nonTestSourcePaths(acc.nonTestSources)))
 	acc.report.HangoverScore = computeHangoverScore(acc.report)
 	acc.report.Grade = computeHangoverGrade(acc.report.HangoverScore)
 	acc.report.Hotspots = selectTopHotspots(acc.hotspotsByFile, topLimit)
 	acc.report.DurationMillis = time.Since(start).Milliseconds()
+}
+
+func nonTestSourcePaths(sources map[string][]byte) []string {
+	paths := make([]string, 0, len(sources))
+	for rel := range sources {
+		paths = append(paths, rel)
+	}
+	return paths
 }
