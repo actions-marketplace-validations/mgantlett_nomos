@@ -282,6 +282,9 @@ func EvaluateArchitectureBoundaries(root string, files []string, rules []config.
 // InferCleanArchitectureBoundaries discovers directional layer import rules that satisfy existing repository imports with zero violations.
 func InferCleanArchitectureBoundaries(root string) []config.ArchitectureBoundaryRule
 
+// InferCleanArchitectureBoundariesForFiles discovers zero-violation layer rules across a pre-collected Git-tracked file slice.
+func InferCleanArchitectureBoundariesForFiles(root string, files []string) []config.ArchitectureBoundaryRule
+
 // VerifyNoOrphanedTestObligations checks Go verification suites for @verifies TC-* annotations absent from specification tables.
 func VerifyNoOrphanedTestObligations(root string, specPaths []string) []string
 
@@ -385,8 +388,9 @@ func FormatPRProofMarkdown(receipt *PRProofReceipt) string
    - `nomos status` displays pending obligation deltas, and `IntentTraceabilityGate` fails closed when `contracts.fail_on_stale_obligations: true`.
 5. **Polyglot Architecture Boundary Enforcement (`architecture_boundaries`):**
    - Evaluates imports across Go (`go/parser`) and polyglot files (`import`, `require`, `from`, `use`, `using`, `#include`) against matching `from` globs.
+   - Resolves TypeScript and Svelte `$lib/`, `@/`, and `~/` path aliases relative to enclosing `src/` roots during boundary matching.
    - Executes in under `5ms` inside both `EvaluateFastFileRadar` (`PreToolUse` / `PostToolUse` hooks) and `nomos verify`.
-   - `InferCleanArchitectureBoundaries` scans existing source directories during `nomos init` and emits directional `forbid_imports` rules verified to produce zero baseline violations.
+   - `InferCleanArchitectureBoundaries` and `InferCleanArchitectureBoundariesForFiles` reuse Git-tracked source lists and memoized import maps to emit zero-violation `forbid_imports` rules.
 6. **Scoped `spec_roots` Steel-Man & Optional Schema Parity (`TC-TRC-005`):**
    - When `contracts.spec_roots` targets explicit files or nested subdirectories, `IntentSteelmanGate` audits only those paths and ignores sibling `intent/` directories.
    - When `project: nomos` or `contracts.spec_roots` remains empty, `IntentSteelmanGate` enforces flat `intent/architecture/specs/*_spec.md` topology across all of `intent/`.
@@ -433,6 +437,7 @@ func FormatPRProofMarkdown(receipt *PRProofReceipt) string
 | `TC-OBL-013` | `VerifyNoOrphanedTestObligations` | Go suite tags `@verifies TC-GHOST-99` absent from specs | Rejects dangling `TC-GHOST-99` while ignoring fixture strings | Law 2 & Law 4 |
 | `TC-OBL-014` | `VerifyNormativeRegistrySurjection` | Self-hosted `nomos` omits gate `ProbeID`, CLI `--flag`, or `ERR_*` | Rejects undocumented normative surface entry | Law 4 & Law 6 |
 | `TC-OBL-015` | `collectActiveSiblingTwinDeltas` | Concurrent `SUB-*` tasks share one domain spec file | Defers only sibling `INT-*` commit delta without blocking | Law 3 & Law 4 |
+| `TC-OBL-016` | `InferCleanArchitectureBoundariesForFiles` | Polyglot repo with `.gitignore` build output and `$lib/` / `@/` imports | Ignores untracked build trees and enforces `$lib/` / `@/` layer rules | Law 4 & Law 7 |
 | `TC-MAT-01` | `CanonicalMatrix` | `CanonicalMatrixModel{Laws: 7, Rings: 3, Cells: 21}` | Enforces exact `7x3 = 21` invariant cell topology | Law 2 & Law 6 |
 | `TC-MAT-02` | `CanonicalLaws` | Statutory 1..7 law metadata registry | Binds every cell to one of the 7 laws | Law 4 |
 | `TC-MAT-03` | `InvariantCellSpec` | Cell specification with syntactic, dynamic, or cryptographic ring | Maps every sensor probe to a canonical cell coordinate | Law 2 |
