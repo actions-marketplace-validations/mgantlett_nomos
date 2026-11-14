@@ -300,14 +300,14 @@ type UpdateCheckCache struct {
 * **Syntax**: `nomos task dag [-A|--all-projects] [--plane <intent|substrate>] [--tier <T1|T2>] [--project <PROJECT>] [--limit <N>] [--json]`
 * **Semantics**: Evaluates causal dependencies for the active `project` (or all projects with `-A, --all-projects`). Emits unblocked `WavefrontCandidate` records with plane, tier, project, and row-limit filters plus HATEOAS `Next Actions`.
 
-### 4.11 `nomos task pair` / `chore` / `project` / `commit` / `show` / `status`
+### 4.11 `nomos task pair` / `chore` / `project` / `commit` / `show` & `nomos status`
 * **`nomos task pair <TITLE>`**: Atomically allocates twinned `INT-<N>` and `SUB-<N>` rows in `SQLiteTaskStore`, enforcing `#TaskCardInput` (`--scope` / `--int-scope` / `--sub-scope`, `--ac`, `--verify`, or `-F` / `-d`).
 * **`nomos task chore <TITLE>`**: Provisions a 1-step `SUB-<N>` (or `--plane intent` `INT-<N>`) task directly into an `EDIT` worktree (`burden: 1`) without card templates.
 * **`nomos task project <PROJECT> <KEY> [KEY...]`**: Updates `project` on one or more existing Living Ledger tasks through `SQLiteTaskStore` under the Database Encapsulation Invariant.
 * **`nomos task commit [KEY] (-m|--message <MSG>) [--rationale <TEXT>] [--mechanics <TEXT>] [-F|--file <PATH>]`**: Stages and commits worktree changes under `NOMOS_COMMIT_IN_PROGRESS=1` as a Golden Conventional Commit (`[<KEY>] <type>(<scope>): <summary>`) with rationale prose, `___` visual divider, and `Task:` / `Twin:` Git trailers.
 * **`nomos issue [TITLE] [--body <TEXT>] [--output <PATH>] [--clear] [--yes] [--web] [--json]`**: Collects scrubbed `IssueReport` diagnostics (`PRAGMA journal_mode`, `PRAGMA busy_timeout`, `PRAGMA wal_checkpoint`, `PRAGMA optimize` DB health) or clears cached anomalies.
-* **`nomos task show <KEY> [--json]`**: Displays the detailed Living Ledger task inspection card, twin linkage, HATEOAS `Next Actions`, or structured JSON.
-* **`nomos task status [--json]`**: Displays active workspace phase state, CapBAC step budget consumption, and HATEOAS `Next Actions` (or structured `#PhaseState` JSON).
+* **`nomos task show <KEY> [--json]`**: Displays the detailed Living Ledger task inspection card, twin linkage, HATEOAS `Next Actions`, or structured JSON, steering `EDIT` tasks directly to `nomos verify` and `nomos task sync <KEY> -m`.
+* **`nomos status [-A|--all-projects] [--json]`**: Displays unified workspace phase state, bound task key, CapBAC step budget consumption, Living Ledger wavefront, and HATEOAS `Next Actions` under Law 6.
 
 ### 4.12 `nomos update`
 * **Syntax**: `nomos update [--check] [--version <TAG>] [--sync-workspace] [--dir <PATH>] [--json]`

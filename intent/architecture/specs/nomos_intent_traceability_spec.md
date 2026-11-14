@@ -402,7 +402,7 @@ func FormatPRProofMarkdown(receipt *PRProofReceipt) string
    - Active probes include `config_immutability`, `dead_code`, `ecosystem_drift`, `gate_integrity_proof`, `infra_ingress`, `ip_leak`, `review_receipt`, `threshold_integrity`, `topology_parity`, `uasset_dependency`, `ui_anti_mask`, and `visual_regression`.
    - `AntiShimGate` rejects hollow return stubs with `ERR_TRIVIAL_PASS_SHIM`.
 9. **Zero-Trust PR Proof Receipts & Diff Micro-Mutation Oracle (`TC-PR-01`..`TC-SHIM-02`):**
-   - `nomos verify --mutate-diff` mutates single-point Go AST operators inside ephemeral shadow directories using zero LLM tokens.
+   - `nomos verify --mutate-diff` mutates single-point Go, TypeScript/JS, and Python AST operators inside ephemeral shadow directories using zero LLM tokens.
    - Surviving behavioral mutants reject execution, catching tautological assertions that pass unchanged when branch predicates flip.
    - `nomos verify --pr` emits Markdown or `--json` `PRProofReceipt` digests sealing 42-gate posture, plane separation, `xray` debt delta, and SHA-256 provenance.
    - `EvaluateContainerPreToolHook` blocks shell and file snooping against `/tests`, `/solution`, `/logs/verifier`, `/verifier`, `/grading`, `/eval`, `/harness`, `/oracle`, and `/proc/1/environ`.

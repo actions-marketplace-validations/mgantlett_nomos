@@ -311,7 +311,7 @@ func ScanRepository(rootDir string, opts XrayScanOptions) (*XrayReport, error)
 ```
 
 ### 4.5 Diff-Targeted AST Micro-Mutation & Verifier-Snooping Airlock
-`prproof.EvaluateDiffMutations` (`nomos verify --mutate-diff`) extracts modified Go functions relative to `baseRef`. The mutator applies AST operator inversions (`>` to `>=`, `<` to `<=`, `==` to `!=`, and `true` to `false`) in shadow directories. Each mutant executes targeted `go test` runs with zero LLM tokens and rejects execution when behavioral mutants survive. `EvaluateContainerPreToolHook` enforces the `shim-02` airlock across single-file and multi-file payloads. The hook blocks reads targeting `/tests`, `/solution`, `/logs/verifier`, `/verifier`, `/grading`, `/eval`, `/harness`, `/oracle`, and `/proc/1/environ`.
+`prproof.EvaluateDiffMutations` (`nomos verify --mutate-diff`) extracts modified Go, TypeScript/JS, and Python functions relative to `baseRef`. The mutator applies AST operator inversions (`>` to `>=`, `<` to `<=`, `==` to `!=`, and `true` to `false`) in shadow directories. Each mutant executes targeted language verification runners with zero LLM tokens and rejects execution when behavioral mutants survive. `EvaluateContainerPreToolHook` enforces the `shim-02` airlock across single-file and multi-file payloads. The hook blocks reads targeting `/tests`, `/solution`, `/logs/verifier`, `/verifier`, `/grading`, `/eval`, `/harness`, `/oracle`, and `/proc/1/environ`.
 
 ---
 
