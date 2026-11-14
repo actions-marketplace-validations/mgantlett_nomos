@@ -412,6 +412,7 @@ type UpdateCheckCache struct {
 | Domain models & 2-plane key validation (`TaskRecord`) | `substrate/src/nomos/modules/task/task.go`, `card.go` | `Cell 6.3 (canonical_singularity)` |
 | Pure-Go SQLite ledger store (`SQLiteTaskStore`) | `substrate/src/nomos/modules/task/sqlite_store.go`, `project.go` | `Cell 1.2 (phase_discipline)`, `Cell 7.2 (unchecked_errors)` |
 | CapBAC task lease enforcement (`capbac.Lease`) | `substrate/src/nomos/core/capbac/lease.go` | `Cell 1.3 (capbac_lease)` |
-| Worktree lifecycle, 2PC sync & Git Notes receipts | `substrate/cli/cmd_task.go`, `substrate/src/nomos/modules/task/git_notes.go` | `Cell 3.2 (hermetic_worktree)`, `Cell 3.3 (release_receipt)` |
+| Worktree lifecycle, 2PC sync & Git Notes receipts | `substrate/cli/cmd_task.go`, `substrate/cli/cmd_task_sync.go`, `substrate/src/nomos/modules/task/git_notes.go` | `Cell 3.2 (hermetic_worktree)`, `Cell 3.3 (release_receipt)` |
+| Ambient provider lifecycle hooks (`nomos hook`) | `substrate/cli/hookcmd/` | `Cell 1.2 (phase_discipline)`, `Cell 3.2 (hermetic_worktree)` |
 
 Run `nomos verify` to execute all 42 Definition of Done quality gates and confirm exit code `0`.

@@ -472,7 +472,7 @@ func FormatPRProofMarkdown(receipt *PRProofReceipt) string
 1. **Compiled Go SSoT Paths:**
    - `substrate/src/nomos/core/config/config.go` (`ContractsConfig`, `ArchitectureBoundaryRule`, `QualityGatesConfig`).
    - `substrate/src/nomos/modules/task/git_notes.go` (`ReleaseNotePayload`, `StaleSpecObligation`, `ComputeStaleSpecObligations`).
-   - `substrate/src/nomos/modules/verify/gates_intent.go` & `substrate/src/nomos/modules/verify/intent_schema_helpers.go` (`IntentTraceabilityGate`, `VerifyExecutableObligations`, `VerifySpecTypeSignatures`, `EvaluateArchitectureBoundaries`).
+   - `substrate/src/nomos/modules/verify/gates_intent.go` & `substrate/src/nomos/modules/verify/intentlint/` (`IntentTraceabilityGate`, `VerifyExecutableObligations`, `VerifySpecTypeSignatures`, `EvaluateArchitectureBoundaries`).
    - `substrate/src/nomos/modules/verify/prproof/` (`DiffMutant`, `DiffMutationReport`, `PRProofReceipt`, `EvaluateDiffMutations`, `BuildPRProofReceipt`).
 2. **7x3 Invariant Matrix Coordinates:**
    - `Cell 4.1 (intent_traceability)` and `Cell 4.2 (contract_parity)` enforce `@intent` anchors, executable `TC-*` bindings, struct parity, taint checks, and import boundaries.
