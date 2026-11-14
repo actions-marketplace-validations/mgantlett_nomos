@@ -2,10 +2,12 @@
 package cli
 
 import (
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/types"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
 )
@@ -54,7 +56,7 @@ func validateReceiptTraceParityContent(wtPath, rawContent string, touchedFiles [
 	if content == "" {
 		return nil
 	}
-	trace := loadHookSessionTrace(wtPath)
+	trace := hookcmd.LoadHookSessionTrace(wtPath)
 	mutatedCount := len(touchedFiles)
 	if mutatedCount == 0 && trace != nil {
 		mutatedCount = len(trace.MutatedFiles)
@@ -95,7 +97,7 @@ func validateReceiptTraceParityContent(wtPath, rawContent string, touchedFiles [
 
 func walkthroughClaimsZeroMutations(content string) bool {
 	lower := strings.ToLower(content)
-	return hasAnySubstring(lower,
+	return hookcmd.HasAnySubstring(lower,
 		"no files were modified",
 		"no files modified",
 		"zero files modified",
@@ -156,4 +158,88 @@ func matchesAnyTouchedFile(claimed string, touchedFiles []string) bool {
 		}
 	}
 	return false
+}
+
+func rebaseOntoTrunkIfDiverged(repoRoot, wtPath, branch string) (bool, error) {
+	fi, err := os.Stat(wtPath)
+	if err != nil || !fi.IsDir() {
+		return false, nil
+	}
+	trunk := detectDefaultBranch(repoRoot)
+	ancCmd := workspace.SafeGitCommand(repoRoot, "merge-base", "--is-ancestor", trunk, branch)
+	if ancCmd.Run() == nil {
+		return false, nil
+	}
+	rebCmd := workspace.SafeGitCommand(wtPath, "rebase", trunk)
+	rebCmd.Env = append(rebCmd.Env, "NOMOS_COMMIT_IN_PROGRESS=1")
+	if out, rebErr := rebCmd.CombinedOutput(); rebErr != nil {
+		if abErr := workspace.SafeGitCommand(wtPath, "rebase", "--abort").Run(); abErr != nil {
+			// best-effort clean abort
+		}
+		return false, types.NewNomosError(types.ErrCodeBoundary,
+			"concurrent trunk conflict rebasing %s onto %s (rebase aborted cleanly): %s",
+			branch, trunk, strings.TrimSpace(string(out)))
+	}
+	return true, nil
+}
+
+func fastForwardTrunkMerge(repoRoot, branch string) error {
+	healAccidentalBareConfig(repoRoot)
+	unlockTrunk(repoRoot)
+	mergeCmd := workspace.SafeGitCommand(repoRoot, "merge", "--ff-only", branch)
+	if out, err := mergeCmd.CombinedOutput(); err != nil {
+		lockTrunk(repoRoot)
+		return types.NewNomosError(types.ErrCodeBoundary, "fast-forward merge failed: %s", string(out))
+	}
+	lockTrunk(repoRoot)
+	return nil
+}
+
+func healAccidentalBareConfig(repoRoot string) {
+	if repoRoot == "" {
+		return
+	}
+	gitDir := filepath.Join(repoRoot, ".git")
+	fi, err := os.Stat(gitDir)
+	if err != nil || !fi.IsDir() {
+		return
+	}
+	out, cfgErr := workspace.SafeGitCommand(repoRoot, "config", "--bool", "core.bare").Output()
+	if cfgErr != nil || strings.TrimSpace(string(out)) != "true" {
+		return
+	}
+	if setErr := workspace.SafeGitCommand(repoRoot, "config", "--bool", "core.bare", "false").Run(); setErr != nil {
+		// best-effort bare flag healing
+	}
+}
+
+func readWalkthroughContent(path string) string {
+	if path == "" {
+		return ""
+	}
+	absPath, aErr := filepath.Abs(filepath.Clean(path))
+	if aErr != nil {
+		return ""
+	}
+	absDir := filepath.Dir(absPath)
+	if rel, rErr := filepath.Rel(absDir, absPath); rErr != nil || strings.HasPrefix(rel, "..") {
+		return ""
+	}
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+func unlockTrunk(root string) {
+	if err := workspace.UnlockTrunk(root); err != nil {
+		// ignore non-fatal trunk permission errors
+	}
+}
+
+func lockTrunk(root string) {
+	if err := workspace.LockTrunk(root); err != nil {
+		// ignore non-fatal trunk permission errors
+	}
 }

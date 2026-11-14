@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
 	"github.com/mgantlett/nomos/substrate/cli/selfupdate"
 	"os"
 	"os/exec"
@@ -88,7 +89,7 @@ func TestOpenCodeHookPayloadParsingAndSub5msEvaluation(t *testing.T) {
 
 	start := time.Now()
 	var outBuf bytes.Buffer
-	hookCmd := NewHookCmd()
+	hookCmd := hookcmd.NewHookCmd(RootCmdVersion, newHookInstallCmd())
 	hookCmd.SetIn(bytes.NewReader(rawBefore))
 	hookCmd.SetOut(&outBuf)
 	hookCmd.SetArgs([]string{"pre-tool"})
@@ -102,8 +103,8 @@ func TestOpenCodeHookPayloadParsingAndSub5msEvaluation(t *testing.T) {
 
 	// Warm sub-5ms check on in-process pre-tool dispatch
 	warmStart := time.Now()
-	p := parseHookPayload(rawBefore)
-	dec := EvaluatePreToolHook(p, "")
+	p := hookcmd.ParseHookPayload(rawBefore)
+	dec := hookcmd.EvaluatePreToolHook(p, "")
 	warmElapsed := time.Since(warmStart)
 	if warmElapsed >= 5*time.Millisecond {
 		t.Fatalf("expected EvaluatePreToolHook < 5ms, took %v", warmElapsed)
@@ -113,7 +114,7 @@ func TestOpenCodeHookPayloadParsingAndSub5msEvaluation(t *testing.T) {
 	}
 
 	// Verify apply_patch patchText target extraction
-	patchPayload := parseHookPayload([]byte(`{
+	patchPayload := hookcmd.ParseHookPayload([]byte(`{
 		"hook_event_name":"tool.execute.before",
 		"tool":"apply_patch",
 		"cwd":"` + filepath.ToSlash(trunkDir) + `",
@@ -122,7 +123,7 @@ func TestOpenCodeHookPayloadParsingAndSub5msEvaluation(t *testing.T) {
 	if patchPayload.TargetFile != "app/models/user.rb" {
 		t.Fatalf("expected patchText target app/models/user.rb, got %q", patchPayload.TargetFile)
 	}
-	if patchDec := EvaluatePreToolHook(patchPayload, ""); patchDec.Decision != "deny" {
+	if patchDec := hookcmd.EvaluatePreToolHook(patchPayload, ""); patchDec.Decision != "deny" {
 		t.Fatalf("expected apply_patch on trunk to deny, got %+v", patchDec)
 	}
 }

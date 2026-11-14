@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/mgantlett/nomos/substrate/cli/diag"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
 	"github.com/mgantlett/nomos/substrate/cli/tui"
 	"io"
 	"os"
@@ -133,7 +134,7 @@ func normalizeVerifyTargetScope(targetDir string, baseline bool) (string, string
 
 func handleFailedVerificationReport(repoRoot, targetDir, activeTask string, allFiles, baseline bool, report *verify.PipelineReport) error {
 	if !allFiles && !baseline {
-		markWorktreeVerificationFailed(targetDir)
+		hookcmd.MarkWorktreeVerificationFailed(targetDir)
 		recordFailedReportTraps(repoRoot, targetDir, activeTask, report)
 	}
 	for _, res := range report.GateResults {

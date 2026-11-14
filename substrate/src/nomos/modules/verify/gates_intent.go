@@ -4,6 +4,7 @@ package verify
 import (
 	"fmt"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/intentlint"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -43,7 +44,7 @@ func (g *IntentTraceabilityGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.Ga
 	if scanAnchorDir == "" {
 		scanAnchorDir = root
 	}
-	if unresolved := verifyIntentASTAnchors(ctx, root, scanAnchorDir); len(unresolved) > 0 {
+	if unresolved := intentlint.VerifyIntentASTAnchors(ctx, root, scanAnchorDir); len(unresolved) > 0 {
 		return &vscope.GateResult{
 			GateName: g.Name(), ProbeID: probeIDIntentTraceability, Law: 4, Ring: RingSyntactic,
 			Passed:  false,
@@ -116,7 +117,7 @@ func (g *IntentSteelmanGate) Name() string { return "Intent Steel-Man Parity Gat
 func (g *IntentSteelmanGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
 	root := resolveIntentRoot(ctx)
 	cfg := vscope.ResolveVerifyConfig(ctx)
-	docCount, issues, skipped := evaluateConfiguredIntentSteelman(root, cfg)
+	docCount, issues, skipped := intentlint.EvaluateConfiguredIntentSteelman(root, cfg)
 	if skipped {
 		return &vscope.GateResult{
 			GateName: g.Name(), ProbeID: probeIntentSteelman, Law: 4, Ring: RingSyntactic,

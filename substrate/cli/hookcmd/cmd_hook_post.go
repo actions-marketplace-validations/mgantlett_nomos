@@ -1,0 +1,272 @@
+// Package hookcmd implements Tier 1 agent adapters, software physics telemetry,
+// release readiness, upgrades, and CLI command dispatch contracts.
+package hookcmd
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+
+	"github.com/mgantlett/nomos/substrate/src/nomos/core/capbac"
+	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/mtpo"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/treesitter"
+)
+
+var (
+	wildRmPattern      = regexp.MustCompile(`(?i)(?:^|[;&|]\s*|\bsudo\s+)rm\s+(?:(?:-[a-z]*r[a-z]*|--recursive)\s+(?:/|\*+|~|\.\.?)(?:\s|$|/)|(?:-[a-z]+\s+)*[^\n;|&]*\*)`)
+	gitNoVerifyPattern = regexp.MustCompile(`(?i)\bgit\s+(?:commit|merge|push)\b[^\n;|&]*(?:--no-verify\b|\s-n(?:\s|$))`)
+	bypassEnvPattern   = regexp.MustCompile(`\bNOMOS_(?:INIT|COMMIT)_IN_PROGRESS\s*=`)
+)
+
+const (
+	hookDecisionDeny  = "deny"
+	hookDecisionAllow = "allow"
+)
+
+func evaluateCommandGuard(cmdLine, baseCwd, hermeticDir string) HookDecision {
+	if wildRmPattern.MatchString(cmdLine) {
+		return HookDecision{
+			Decision: hookDecisionDeny,
+			Reason:   "❌ [NOMOS INTERCEPT] Wildcard or root/parent deletion ('rm ... *', 'rm -rf /', 'rm -rf ~', 'rm -rf ..') is strictly prohibited (Law 7). Verify item-level eligibility and remove explicit file paths only.",
+		}
+	}
+	if isForbiddenNomosGoInstall(cmdLine, baseCwd, hermeticDir) {
+		return HookDecision{
+			Decision: hookDecisionDeny,
+			Reason:   "❌ [NOMOS INTERCEPT] Manual binary installation ('go install' of nomos) outside a clean IDLE 'main' trunk is prohibited by Law 4 (Single Source of Truth). Sync active tasks to 'main' first or invoke the installed 'nomos' CLI binary directly.",
+		}
+	}
+	if isForbiddenSQLiteCmd(cmdLine) {
+		return HookDecision{
+			Decision: hookDecisionDeny,
+			Reason:   "❌ [NOMOS INTERCEPT] Direct SQLite access prohibited (Law 1 Database Encapsulation). Use canonical CLI commands: 'nomos mem recall', 'nomos mem list', or 'nomos task show'.",
+		}
+	}
+	if isForbiddenGitStashCmd(cmdLine) {
+		return HookDecision{
+			Decision: hookDecisionDeny,
+			Reason:   "❌ [NOMOS INTERCEPT] 'git stash' is prohibited (Law 2 & Law 3). Use 'nomos task chore \"<title>\"' or 'git restore <file>'.",
+		}
+	}
+	if isForbiddenGitHooksCmd(cmdLine) {
+		return HookDecision{
+			Decision: hookDecisionDeny,
+			Reason:   "❌ [NOMOS INTERCEPT] Tampering with CapBAC Git defense hooks (.git/hooks) is strictly prohibited (Law 3 & Law 7).",
+		}
+	}
+	if isForbiddenHookBypassCmd(cmdLine) {
+		return HookDecision{
+			Decision: hookDecisionDeny,
+			Reason:   "❌ [NOMOS INTERCEPT] Bypassing CapBAC Git verification hooks ('--no-verify', 'git commit -n', or internal NOMOS_*_IN_PROGRESS env spoofing) is strictly prohibited (Law 2 & Law 7).",
+		}
+	}
+	if hermeticDir != "" && strings.Contains(cmdLine, "/etc/") {
+		return HookDecision{
+			Decision: hookDecisionDeny,
+			Reason:   "❌ [NOMOS INTERCEPT] Hermetic Container Violation (Law 3): System directory access outside hermetic root is prohibited.",
+		}
+	}
+	if hermeticDir != "" {
+		if dec := evaluateInteractiveCommandGuard(cmdLine); dec.Decision == hookDecisionDeny {
+			return dec
+		}
+	}
+	return evaluateShellAliasAndRedirectGuard(cmdLine, baseCwd, hermeticDir)
+}
+
+func isForbiddenSQLiteCmd(cmdLine string) bool {
+	if !strings.Contains(cmdLine, "sqlite3") {
+		return false
+	}
+	return strings.Contains(cmdLine, ".nomos") || strings.Contains(cmdLine, ".db")
+}
+
+func isForbiddenGitStashCmd(cmdLine string) bool {
+	if !strings.Contains(cmdLine, "git stash") {
+		return false
+	}
+	if strings.Contains(cmdLine, "git stash clear") || strings.Contains(cmdLine, "git stash list") {
+		return false
+	}
+	return true
+}
+
+func isForbiddenGitHooksCmd(cmdLine string) bool {
+	if !strings.Contains(cmdLine, ".git/hooks") {
+		return false
+	}
+	for _, verb := range []string{"rm ", "unlink ", "chmod ", "mv "} {
+		if strings.Contains(cmdLine, verb) {
+			return true
+		}
+	}
+	return false
+}
+
+func isForbiddenHookBypassCmd(cmdLine string) bool {
+	return gitNoVerifyPattern.MatchString(cmdLine) || bypassEnvPattern.MatchString(cmdLine)
+}
+
+// evaluatePostToolHostHealth surfaces deduplicated host/tool-health snapshots on verified PostToolUse faults.
+func evaluatePostToolHostHealth(p *HookPayload, hermeticDir, style string) string {
+	return evaluateVerifiedHostHealthWithStyle(p, hermeticDir, style)
+}
+
+// EvaluatePostToolHook runs Law 4 zero-footprint in-memory syntax, AST radar, and one-time
+// JIT directory-scoped Mneme pitfall recall on mutated worktree files (@intent mneme_memory_spec.md).
+// It returns an empty string (100% silent) on Bash/Read/MCP channels and clean mutations without matching pitfalls.
+func EvaluatePostToolHook(p *HookPayload, hermeticDir string) string {
+	if p == nil || p.IsPostInvoke || p.TargetFile == "" {
+		return ""
+	}
+	if p.CommandLine != "" || capbac.IsMCPToolName(p.ToolName) || isReadOnlyTool(p.ToolName) {
+		return ""
+	}
+	baseCwd := resolveHookWorkspaceDir(p, hermeticDir)
+	resolved := normalizeCanonicalPath(p.TargetFile, baseCwd)
+	if !isPostToolTargetInScope(resolved, hermeticDir) {
+		return ""
+	}
+	pitfallMsg := joinHookAdvisories(
+		joinHookAdvisories(
+			evaluateJITDirectoryPitfallAdvisory(p, hermeticDir),
+			evaluateFirstEditImpactAdvisory(p, hermeticDir),
+		),
+		evaluateMTPOPostToolAdvisory(resolved),
+	)
+	if syntaxMsg := validateStructuredFileInMemory(resolved); syntaxMsg != "" {
+		return joinHookAdvisories(syntaxMsg, pitfallMsg)
+	}
+	return joinHookAdvisories(evaluateFastRadarInMemory(resolved, baseCwd), pitfallMsg)
+}
+
+func isPostToolTargetInScope(resolved, hermeticDir string) bool {
+	if hermeticDir != "" {
+		canonRoot := normalizeCanonicalPath(hermeticDir, "/")
+		return resolved == canonRoot || strings.HasPrefix(resolved, canonRoot+"/")
+	}
+	return strings.Contains(resolved, "/worktrees/")
+}
+
+func validateStructuredFileInMemory(resolved string) string {
+	ext := strings.ToLower(filepath.Ext(resolved))
+	switch ext {
+	case ".go":
+		return validateGoSyntaxInMemory(resolved)
+	case ".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".rs":
+		return validatePolyglotSyntaxInMemory(resolved, ext)
+	case ".json", ".jsonl":
+		return validateJSONFileInMemory(resolved, ext)
+	default:
+		return ""
+	}
+}
+
+func validatePolyglotSyntaxInMemory(resolved, ext string) string {
+	data, err := os.ReadFile(resolved)
+	if err != nil {
+		return ""
+	}
+	base := filepath.Base(resolved)
+	var sErr error
+	switch ext {
+	case ".py":
+		sErr = treesitter.ValidatePythonSyntax(base, data)
+	case ".rs":
+		sErr = treesitter.ValidateBraceSyntax("rust", base, data)
+	case ".ts", ".tsx":
+		sErr = treesitter.ValidateBraceSyntax("typescript", base, data)
+	default:
+		sErr = treesitter.ValidateBraceSyntax("javascript", base, data)
+	}
+	if sErr != nil {
+		return fmt.Sprintf("🚨 [Nomos AST Radar] %s: %s", base, sErr.Error())
+	}
+	return ""
+}
+
+func validateJSONFileInMemory(resolved, ext string) string {
+	data, err := os.ReadFile(resolved)
+	if err != nil {
+		return ""
+	}
+	if ext == ".json" {
+		if !json.Valid(data) {
+			return fmt.Sprintf("🚨 [Nomos Syntax Guard] %s: invalid JSON syntax detected", filepath.Base(resolved))
+		}
+		return ""
+	}
+	lines := bytes.Split(data, []byte("\n"))
+	for i, line := range lines {
+		trimmed := bytes.TrimSpace(line)
+		if len(trimmed) == 0 {
+			continue
+		}
+		if !json.Valid(trimmed) {
+			return fmt.Sprintf("🚨 [Nomos Syntax Guard] %s:%d: invalid JSONL record syntax detected", filepath.Base(resolved), i+1)
+		}
+	}
+	return ""
+}
+
+func evaluateFastRadarInMemory(resolved, baseCwd string) string {
+	repoRoot := baseCwd
+	if pr, err := workspace.FindRepoRoot(resolved); err == nil {
+		repoRoot = pr
+	}
+	res, err := verify.EvaluateFastFileRadar(repoRoot, resolved)
+	if err != nil || res == nil {
+		return ""
+	}
+	var lines []string
+	for _, b := range res.Breaches {
+		lines = append(lines, fmt.Sprintf("🚨 [Nomos Radar Breach] %s: %s", res.File, b))
+	}
+	for _, w := range res.Warnings {
+		tag := "[Nomos Radar >=80% Budget]"
+		if strings.Contains(w, "hot-scope") {
+			tag = "[Nomos Hot-Scope Radar >=65% Budget]"
+		}
+		lines = append(lines, fmt.Sprintf("⚠️  %s %s: %s", tag, res.File, w))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func evaluateMTPOPostToolAdvisory(resolved string) string {
+	repoRoot, wtRoot, taskKey, ok := extractWorktreeContextFromFile(resolved)
+	if !ok {
+		return ""
+	}
+	conflicts, err := mtpo.RecordFileMutation("", repoRoot, taskKey, wtRoot, resolved)
+	if err != nil || len(conflicts) == 0 {
+		return ""
+	}
+	return mtpo.FormatAdvisoryConflicts(conflicts)
+}
+
+func extractWorktreeContextFromFile(resolved string) (string, string, string, bool) {
+	slash := filepath.ToSlash(resolved)
+	idx := strings.Index(slash, "/worktrees/")
+	if idx <= 0 {
+		return "", "", "", false
+	}
+	repoRoot := slash[:idx]
+	rest := slash[idx+len("/worktrees/"):]
+	segEnd := strings.IndexByte(rest, '/')
+	if segEnd <= 0 {
+		return "", "", "", false
+	}
+	wtDirName := rest[:segEnd]
+	taskKey := extractTaskKeyFromDirName(wtDirName)
+	if taskKey == "" {
+		return "", "", "", false
+	}
+	wtRoot := filepath.Join(filepath.FromSlash(repoRoot), "worktrees", wtDirName)
+	return filepath.FromSlash(repoRoot), wtRoot, taskKey, true
+}

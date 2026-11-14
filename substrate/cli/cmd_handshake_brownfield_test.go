@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
 	"github.com/mgantlett/nomos/substrate/cli/selfupdate"
 	"os"
 	"path/filepath"
@@ -36,7 +37,7 @@ func TestPlainHandshakeBanner_BrownfieldTopology(t *testing.T) {
 		},
 	}
 
-	out := formatPlainHandshakeBanner(ev)
+	out := hookcmd.FormatPlainHandshakeBanner(ev)
 	for _, needle := range []string{
 		"BROWNFIELD (scope=diff, tdd=ratchet, cov=live)",
 		"javascript | test: npm test (node --test)",
@@ -71,7 +72,7 @@ func TestPlainHandshakeBanner_TurnZeroTelemetryInjection(t *testing.T) {
 		VerifiedPatterns: []string{"[Pattern in substrate/cli] symbols=[formatPlainHandshakeBanner]"},
 		NextActions:      []types.ActionAffordance{{Command: "nomos verify", Summary: "Evaluate 42 gates"}},
 	}
-	out := formatPlainHandshakeBanner(ev)
+	out := hookcmd.FormatPlainHandshakeBanner(ev)
 	for _, needle := range []string{"AST Impact", "Learned Pitfalls", "[Dead-End in substrate/cli]", "Verified Patterns", "nomos verify"} {
 		if !strings.Contains(out, needle) {
 			t.Fatalf("expected Turn-0 prefix telemetry %q in banner, got:\n%s", needle, out)
@@ -102,7 +103,7 @@ func TestPlainHandshakeBannerWithRoot_UpdateAndContractDrift(t *testing.T) {
 		GateCount:  42,
 		StrictMode: true,
 	}
-	out := formatPlainHandshakeBannerWithRoot(ev, repoDir, true)
+	out := hookcmd.FormatPlainHandshakeBannerWithRoot(ev, repoDir, true, RootCmdVersion)
 	if !strings.Contains(out, "Update Available") || !strings.Contains(out, "99.10.0") {
 		t.Fatalf("expected Update Available line in plain banner, got:\n%s", out)
 	}

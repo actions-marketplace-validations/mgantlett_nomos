@@ -5,6 +5,7 @@ package cli
 import (
 	"fmt"
 	"github.com/mgantlett/nomos/substrate/cli/commitmsg"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
 	"github.com/mgantlett/nomos/substrate/cli/tui"
 	"os"
 	"path/filepath"
@@ -148,7 +149,7 @@ func resolveTaskKeyForCommit(args []string, opts *commitmsg.CommitCmdOptions) (s
 		dir = cwd
 	}
 
-	if key := extractTaskKeyFromDirName(filepath.Base(dir)); key != "" {
+	if key := hookcmd.ExtractTaskKeyFromDirName(filepath.Base(dir)); key != "" {
 		return key, nil
 	}
 
@@ -164,22 +165,6 @@ func resolveTaskKeyForCommit(args []string, opts *commitmsg.CommitCmdOptions) (s
 	}
 
 	return "", types.NewNomosError(types.ErrCodeValidationFailed, "cannot resolve active task key; pass TASK_KEY explicitly or run inside a task worktree")
-}
-
-func extractTaskKeyFromDirName(base string) string {
-	parts := strings.Split(base, "-")
-	if len(parts) < 2 {
-		return ""
-	}
-	candKey := strings.ToUpper(parts[len(parts)-2] + "-" + parts[len(parts)-1])
-	if err := task.ValidateTaskKey(candKey); err == nil {
-		return candKey
-	}
-	candKeySingle := strings.ToUpper(parts[len(parts)-1])
-	if err := task.ValidateTaskKey(candKeySingle); err == nil {
-		return candKeySingle
-	}
-	return ""
 }
 
 func formatCommitMessage(taskKey string, opts *commitmsg.CommitCmdOptions) string {

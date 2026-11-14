@@ -5,6 +5,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
 	"github.com/mgantlett/nomos/substrate/cli/selfupdate"
 	"github.com/mgantlett/nomos/substrate/cli/tui"
 	"os"
@@ -70,8 +71,8 @@ Just-In-Time (JIT) Phase Invariant Envelopes under indirect control.`,
 }
 
 func renderHandshakeBanner(event *handshake.HandshakeEvent, installed bool, hookRoot string) {
-	if resolveAdvisoryStyle("", "NOMOS_ADVISORY_STYLE") == advisoryStyleTerse {
-		renderCompactHandshakeBanner(event)
+	if hookcmd.ResolveAdvisoryStyle("", "NOMOS_ADVISORY_STYLE") == hookcmd.AdvisoryStyleTerse {
+		hookcmd.RenderCompactHandshakeBanner(event)
 		return
 	}
 	if event != nil && !event.StrictMode && event.BrownfieldTopology != nil {

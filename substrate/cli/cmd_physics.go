@@ -5,6 +5,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
 	"github.com/mgantlett/nomos/substrate/cli/tui"
 	"go/ast"
 	"go/parser"
@@ -114,7 +115,7 @@ func CollectWorkspacePhysics(repoRoot string) *PhysicsReport {
 }
 
 func buildWorktreeHull(wtPath, dirName string) WorktreeHull {
-	taskKey := extractTaskKeyFromDirName(dirName)
+	taskKey := hookcmd.ExtractTaskKeyFromDirName(dirName)
 	touched := impact.ListModifiedWorktreeFiles(wtPath, taskKey)
 	sort.Strings(touched)
 

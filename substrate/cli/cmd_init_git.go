@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/constants"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
 )
@@ -17,10 +18,10 @@ func collectGovernanceStagePaths(absDir string) []string {
 		constants.FileNomosBaselineJSON,
 		"AGENTS.md",
 		"CLAUDE.md",
-		agentsDirToken,
+		hookcmd.AgentsDirToken,
 		filepath.Join(claudeDirToken, settingsFileName),
 		filepath.Join(geminiDirToken, settingsFileName),
-		filepath.Join(cursorDirToken, hooksFileName),
+		filepath.Join(hookcmd.CursorDirToken, hookcmd.HooksFileName),
 		filepath.Join(openCodeDirToken, "plugins", "nomos.ts"),
 	}
 	existing := make([]string, 0, len(candidates))

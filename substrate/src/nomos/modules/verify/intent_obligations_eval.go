@@ -9,8 +9,35 @@ import (
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/config"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/task"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/intentlint"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
+
+// VerifyExecutableObligations checks that TC-* vectors declared in Markdown tables
+// across specPaths appear in repository verification suites.
+// @intent nomos_intent_traceability_spec.md #ContractsConfig
+func VerifyExecutableObligations(root string, specPaths []string) []string {
+	return intentlint.VerifyExecutableObligations(root, specPaths)
+}
+
+// VerifySpecTypeSignatures checks Go and polyglot contract types in fenced specification code blocks
+// against compiled Go AST and polyglot source declarations.
+// @intent nomos_intent_traceability_spec.md #ContractsConfig
+func VerifySpecTypeSignatures(root, targetDir string, specPaths []string) []string {
+	return intentlint.VerifySpecTypeSignatures(root, targetDir, specPaths)
+}
+
+// ResolveActiveWorktreeSpecRoots scopes specification paths when running inside an isolated worktree.
+// @intent nomos_intent_traceability_spec.md #ContractsConfig
+func ResolveActiveWorktreeSpecRoots(scanRoot string, specRoots []string) []string {
+	return intentlint.ResolveActiveWorktreeSpecRoots(scanRoot, specRoots)
+}
+
+// ResolveTaskContractSpecRoots returns the contract specification files applicable to taskKey.
+// @intent nomos_intent_traceability_spec.md #ContractsConfig
+func ResolveTaskContractSpecRoots(scanRoot, taskKey string, specRoots []string) []string {
+	return intentlint.ResolveTaskContractSpecRoots(scanRoot, taskKey, specRoots)
+}
 
 // evaluateConfiguredObligations evaluates architecture boundaries and specification contracts
 // declared in nomos.yaml for the active repository or task worktree.
@@ -35,8 +62,8 @@ func evaluateContractObligationChecks(gateName string, ctx *vscope.VerifyContext
 		return nil
 	}
 	activeTaskID, scanRoot := resolveContractScanScope(ctx, root)
-	siblingDelta := collectActiveSiblingTwinDeltas(scanRoot, activeTaskID)
-	deferredSpecs := collectActiveSiblingTwinSpecs(scanRoot, activeTaskID)
+	siblingDelta := intentlint.CollectActiveSiblingTwinDeltas(scanRoot, activeTaskID)
+	deferredSpecs := intentlint.CollectActiveSiblingTwinSpecs(scanRoot, activeTaskID)
 	if contracts.StrictTypes {
 		if sigRes := checkContractTypeParityWithDelta(gateName, scanRoot, targetDir, contracts.SpecRoots, siblingDelta); sigRes != nil {
 			return sigRes
@@ -61,7 +88,7 @@ func evaluateContractObligationChecks(gateName string, ctx *vscope.VerifyContext
 // resolveContractScanScope determines the active SUB-* task key and filesystem scan root.
 func resolveContractScanScope(ctx *vscope.VerifyContext, root string) (string, string) {
 	if ctx == nil {
-		return extractWorktreeSubTaskKey(root), root
+		return intentlint.ExtractWorktreeSubTaskKey(root), root
 	}
 	scanRoot := root
 	if ctx.WorktreePath != "" {
@@ -69,13 +96,13 @@ func resolveContractScanScope(ctx *vscope.VerifyContext, root string) (string, s
 	}
 	taskID := strings.TrimSpace(ctx.TaskID)
 	if taskID == "" {
-		taskID = extractWorktreeSubTaskKey(scanRoot)
+		taskID = intentlint.ExtractWorktreeSubTaskKey(scanRoot)
 	}
 	return taskID, scanRoot
 }
 
 func checkContractTypeParityWithDelta(gateName, root, targetDir string, specRoots []string, delta *impact.SiblingDelta) *vscope.GateResult {
-	sigIssues := verifySpecTypeSignaturesWithDelta(root, targetDir, specRoots, delta)
+	sigIssues := intentlint.VerifySpecTypeSignaturesWithDelta(root, targetDir, specRoots, delta)
 	if len(sigIssues) == 0 {
 		return nil
 	}
@@ -88,7 +115,7 @@ func checkContractTypeParityWithDelta(gateName, root, targetDir string, specRoot
 }
 
 func checkNormativeRegistrySurjection(gateName, root string, specRoots []string) *vscope.GateResult {
-	surjIssues := VerifyNormativeRegistrySurjection(root, specRoots)
+	surjIssues := intentlint.VerifyNormativeRegistrySurjection(root, specRoots)
 	if len(surjIssues) == 0 {
 		return nil
 	}
@@ -101,7 +128,7 @@ func checkNormativeRegistrySurjection(gateName, root string, specRoots []string)
 }
 
 func checkExecutableObligationsWithDelta(gateName, root string, specRoots []string, delta *impact.SiblingDelta) *vscope.GateResult {
-	oblIssues := verifyExecutableObligationsWithDelta(root, specRoots, delta)
+	oblIssues := intentlint.VerifyExecutableObligationsWithDelta(root, specRoots, delta)
 	if len(oblIssues) > 0 {
 		return &vscope.GateResult{
 			GateName: gateName, ProbeID: probeIDIntentTraceability, Law: 4, Ring: RingSyntactic,
@@ -110,7 +137,7 @@ func checkExecutableObligationsWithDelta(gateName, root string, specRoots []stri
 			Remedy:  "bind each TC-* vector in a unit test via '// @verifies <TC-ID>' (or '# @verifies <TC-ID>') (Law 2 & Law 4)",
 		}
 	}
-	orphanIssues := VerifyNoOrphanedTestObligations(root, specRoots)
+	orphanIssues := intentlint.VerifyNoOrphanedTestObligations(root, specRoots)
 	if len(orphanIssues) > 0 {
 		return &vscope.GateResult{
 			GateName: gateName, ProbeID: probeIDIntentTraceability, Law: 4, Ring: RingSyntactic,

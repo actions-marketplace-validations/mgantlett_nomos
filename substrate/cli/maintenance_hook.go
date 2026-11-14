@@ -4,6 +4,7 @@ package cli
 
 import (
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
 	"github.com/mgantlett/nomos/substrate/cli/taskui"
 	"github.com/mgantlett/nomos/substrate/cli/tui"
 	"time"
@@ -50,7 +51,7 @@ func distillAndMaintainOnSyncContent(repoRoot, wtPath, key, wtContent string, to
 	if distilled, dErr := mem.DistillTaskLearnings(repoRoot, key, wtContent, touchedFiles); dErr == nil && distilled > 0 {
 		printlnDistilledCount(distilled)
 	}
-	if tr := loadHookSessionTrace(wtPath); tr != nil && len(tr.MutatedFiles) > 0 {
+	if tr := hookcmd.LoadHookSessionTrace(wtPath); tr != nil && len(tr.MutatedFiles) > 0 {
 		if deadEnds, deErr := mem.RecordRolledBackDeadEnds(repoRoot, key, tr.MutatedFiles, touchedFiles, wtContent); deErr == nil && deadEnds > 0 {
 			fmt.Printf("🧠 Nomos Learn: recorded %d rolled-back dead-end(s) into local Mneme\n", deadEnds)
 		}

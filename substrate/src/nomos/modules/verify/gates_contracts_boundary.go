@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/intentlint"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"go/ast"
 	"go/parser"
@@ -320,7 +321,7 @@ func findCodeEnvVars(root string) map[string]bool {
 		}
 		if !strings.HasSuffix(path, ".go") {
 			if vscope.IsSupportedPolyglotSourceFile(path) {
-				extractPolyglotEnvVarsFromFile(path, envVars)
+				intentlint.ExtractPolyglotEnvVarsFromFile(path, envVars)
 			}
 			return nil
 		}

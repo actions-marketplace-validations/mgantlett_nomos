@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/mgantlett/nomos/substrate/cli/commitmsg"
 	"github.com/mgantlett/nomos/substrate/cli/diag"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
 	"github.com/mgantlett/nomos/substrate/cli/taskui"
 	"github.com/mgantlett/nomos/substrate/cli/tui"
 	"os"
@@ -115,7 +116,7 @@ func completeSyncedTaskMetadata(mgr *workspace.Manager, store task.TaskStore, t 
 	recordReleaseReceipt(mgr.RepoRoot, wtPath, t.Key, rawWalkthrough, now, report, specDigests)
 	taskui.RevokeActiveLease(t.Key)
 	distillAndMaintainOnSyncContent(mgr.RepoRoot, wtPath, t.Key, rawWalkthrough, touchedFiles)
-	clearHookSessionTrace(wtPath)
+	hookcmd.ClearHookSessionTrace(wtPath)
 	cleanupAndAnnounceSyncedTask(mgr, t.Key)
 	return nil
 }
@@ -182,59 +183,6 @@ func canAutoSealIntentSpecDigests(repoRoot, twinKey string, contractsActive bool
 	return len(verify.VerifyExecutableObligations(repoRoot, contractRoots)) == 0
 }
 
-func rebaseOntoTrunkIfDiverged(repoRoot, wtPath, branch string) (bool, error) {
-	fi, err := os.Stat(wtPath)
-	if err != nil || !fi.IsDir() {
-		return false, nil
-	}
-	trunk := detectDefaultBranch(repoRoot)
-	ancCmd := workspace.SafeGitCommand(repoRoot, "merge-base", "--is-ancestor", trunk, branch)
-	if ancCmd.Run() == nil {
-		return false, nil
-	}
-	rebCmd := workspace.SafeGitCommand(wtPath, "rebase", trunk)
-	rebCmd.Env = append(rebCmd.Env, "NOMOS_COMMIT_IN_PROGRESS=1")
-	if out, rebErr := rebCmd.CombinedOutput(); rebErr != nil {
-		if abErr := workspace.SafeGitCommand(wtPath, "rebase", "--abort").Run(); abErr != nil {
-			// best-effort clean abort
-		}
-		return false, types.NewNomosError(types.ErrCodeBoundary,
-			"concurrent trunk conflict rebasing %s onto %s (rebase aborted cleanly): %s",
-			branch, trunk, strings.TrimSpace(string(out)))
-	}
-	return true, nil
-}
-
-func fastForwardTrunkMerge(repoRoot, branch string) error {
-	healAccidentalBareConfig(repoRoot)
-	unlockTrunk(repoRoot)
-	mergeCmd := workspace.SafeGitCommand(repoRoot, "merge", "--ff-only", branch)
-	if out, err := mergeCmd.CombinedOutput(); err != nil {
-		lockTrunk(repoRoot)
-		return types.NewNomosError(types.ErrCodeBoundary, "fast-forward merge failed: %s", string(out))
-	}
-	lockTrunk(repoRoot)
-	return nil
-}
-
-func healAccidentalBareConfig(repoRoot string) {
-	if repoRoot == "" {
-		return
-	}
-	gitDir := filepath.Join(repoRoot, ".git")
-	fi, err := os.Stat(gitDir)
-	if err != nil || !fi.IsDir() {
-		return
-	}
-	out, cfgErr := workspace.SafeGitCommand(repoRoot, "config", "--bool", "core.bare").Output()
-	if cfgErr != nil || strings.TrimSpace(string(out)) != "true" {
-		return
-	}
-	if setErr := workspace.SafeGitCommand(repoRoot, "config", "--bool", "core.bare", "false").Run(); setErr != nil {
-		// best-effort bare flag healing
-	}
-}
-
 func recordReleaseReceipt(repoRoot, wtPath, key, rawWalkthrough, now string, report *verify.PipelineReport, specDigests map[string]string) {
 	revCmd := workspace.SafeGitCommand(repoRoot, "rev-parse", "HEAD")
 	revOut, err := revCmd.Output()
@@ -277,17 +225,6 @@ func recordReleaseReceipt(repoRoot, wtPath, key, rawWalkthrough, now string, rep
 		tui.UiMutedStyle.Render("(refs/notes/nomos/releases)"))
 }
 
-func readWalkthroughContent(path string) string {
-	if path == "" {
-		return ""
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	return string(data)
-}
-
 func resolveCapBACTokenID(key string) string {
 	tokenID := "cap-" + key + "-sync"
 	db, err := storage.OpenDB("")
@@ -295,21 +232,11 @@ func resolveCapBACTokenID(key string) string {
 		if lID, _, _, _, lErr := storage.GetActiveLease(db, key); lErr == nil && lID != "" {
 			tokenID = lID
 		}
-		_ = db.Close()
+		if cErr := db.Close(); cErr != nil {
+			// best-effort db close
+		}
 	}
 	return tokenID
-}
-
-func unlockTrunk(root string) {
-	if err := workspace.UnlockTrunk(root); err != nil {
-		// ignore non-fatal trunk permission errors
-	}
-}
-
-func lockTrunk(root string) {
-	if err := workspace.LockTrunk(root); err != nil {
-		// ignore non-fatal trunk permission errors
-	}
 }
 
 func autoCommitDirtyWorktree(wtPath, key string, rec *task.TaskRecord, walkthroughPath, rawWalkthrough string) error {
@@ -374,7 +301,7 @@ func resolveTaskSyncSessionID(repoRoot, key string) string {
 }
 
 func buildReleaseHookTraceSnapshot(wtPath string) *task.ReleaseHookTrace {
-	tr := loadHookSessionTrace(wtPath)
+	tr := hookcmd.LoadHookSessionTrace(wtPath)
 	if tr == nil {
 		return nil
 	}

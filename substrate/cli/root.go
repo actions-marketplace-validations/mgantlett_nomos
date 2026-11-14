@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/mgantlett/nomos/substrate/cli/diag"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
 	"github.com/mgantlett/nomos/substrate/cli/inspectcmd"
 	"github.com/mgantlett/nomos/substrate/cli/selfupdate"
 	"github.com/mgantlett/nomos/substrate/cli/tui"
@@ -111,7 +112,7 @@ func registerSubcommands(root *cobra.Command) {
 	addCommandWithGroup(root, NewPhysicsCmd(), "quality")
 
 	addCommandWithGroup(root, NewHandshakeCmd(), "agent")
-	addCommandWithGroup(root, NewHookCmd(), "agent")
+	addCommandWithGroup(root, hookcmd.NewHookCmd(RootCmdVersion, newHookInstallCmd()), "agent")
 	addCommandWithGroup(root, inspectcmd.NewDirectiveCmd(), "agent")
 	addCommandWithGroup(root, inspectcmd.NewCapabilitiesCmd(), "agent")
 	addCommandWithGroup(root, inspectcmd.NewMemCmd(), "agent")

@@ -5,6 +5,7 @@ package cli
 import (
 	"embed"
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
 	"github.com/mgantlett/nomos/substrate/cli/selfupdate"
 	"os"
 	"path/filepath"
@@ -266,7 +267,7 @@ func pruneLegacyWorkflows(dir string) {
 }
 
 func scaffoldAmbientHooks(dir string) error {
-	agentsDir := filepath.Join(dir, agentsDirToken)
+	agentsDir := filepath.Join(dir, hookcmd.AgentsDirToken)
 	if err := writeAmbientHookBundle(agentsDir); err != nil {
 		return err
 	}
@@ -278,8 +279,8 @@ func scaffoldAmbientHooks(dir string) error {
 	if gErr := writeMergedJSONManifest(geminiSettingsPath, DefaultGeminiSettingsHooksJSON()); gErr != nil {
 		return gErr
 	}
-	cursorHooksPath := filepath.Join(dir, cursorDirToken, hooksFileName)
-	if curErr := writeMergedJSONManifest(cursorHooksPath, DefaultCursorHooksJSON()); curErr != nil {
+	cursorHooksPath := filepath.Join(dir, hookcmd.CursorDirToken, hookcmd.HooksFileName)
+	if curErr := writeMergedJSONManifest(cursorHooksPath, hookcmd.DefaultCursorHooksJSON()); curErr != nil {
 		return curErr
 	}
 	return selfupdate.ScaffoldOpenCodePlugin(dir)

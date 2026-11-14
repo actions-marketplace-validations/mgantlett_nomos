@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/mgantlett/nomos/substrate/cli"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
 	"github.com/mgantlett/nomos/substrate/cli/tui"
 )
 
@@ -31,9 +32,9 @@ func executeHookCmd(t *testing.T, args []string, payload map[string]any) string 
 	return strings.TrimSpace(outBuf.String())
 }
 
-func parseDecision(t *testing.T, raw string) cli.HookDecision {
+func parseDecision(t *testing.T, raw string) hookcmd.HookDecision {
 	t.Helper()
-	var dec cli.HookDecision
+	var dec hookcmd.HookDecision
 	if err := json.Unmarshal([]byte(raw), &dec); err != nil {
 		t.Fatalf("invalid HookDecision JSON %q: %v", raw, err)
 	}

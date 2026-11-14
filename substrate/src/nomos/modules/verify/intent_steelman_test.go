@@ -1,11 +1,12 @@
 package verify
 
 import (
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
 
 const canonicalStrictSpecFixture = `---
@@ -62,7 +63,7 @@ type SampleContract struct {
 
 ## 5. Cross-Plane Traceability & DoD Verification
 
-1. ` + "`substrate/src/nomos/modules/verify/intent_steelman.go`" + ` enforces ` + "`Cell 4.1 (intent_steelman)`" + `.
+1. ` + "`substrate/src/nomos/modules/verify/intentlint/intent_steelman.go`" + ` enforces ` + "`Cell 4.1 (intent_steelman)`" + `.
 `
 
 const strictNomosConfigFixture = `project: test-strict
@@ -74,109 +75,6 @@ governance:
       contracts:
         enabled: true
 `
-
-// TestIntentSteelmanStrictFrontmatterAndNCTE verifies strict Intent frontmatter and NCTE-100 rules.
-// @intent intent.md
-// @intent go_ssot_and_json_schema_spec.md
-// @intent mneme_memory_spec.md
-// @intent nomos_controlled_technical_english_spec.md
-// @intent nomos_hermetic_worktree_spec.md
-// @intent nomos_intent_traceability_spec.md
-// @intent software_physics_engine_spec.md
-// @intent task_lifecycle_cli_spec.md
-// @intent tree_sitter_ast_gate_spec.md
-// @verifies TC-NCTE-09 TC-NCTE-10
-func TestIntentSteelmanStrictFrontmatterAndNCTE(t *testing.T) {
-	cases := []struct {
-		name      string
-		relPath   string
-		content   string
-		wantError string
-	}{
-		{
-			name:    "valid_flat_canonical_spec_passes",
-			relPath: "architecture/specs/sample_spec.md",
-			content: canonicalStrictSpecFixture,
-		},
-		{
-			name:    "valid_root_intent_manifest_passes",
-			relPath: "intent.md",
-			content: canonicalStrictSpecFixture,
-		},
-		{
-			name:      "rejects_handbook_document_in_open_core",
-			relPath:   "architecture/handbook/01-guide.md",
-			content:   canonicalStrictSpecFixture,
-			wantError: "handbook",
-		},
-		{
-			name:      "rejects_disallowed_frontmatter_trigger_and_tags",
-			relPath:   "architecture/specs/extra_keys_spec.md",
-			content:   strings.Replace(canonicalStrictSpecFixture, "plane: intent\n", "plane: intent\ntrigger: always_on\ntags:\n  - legacy\n", 1),
-			wantError: "disallowed YAML frontmatter key(s)",
-		},
-		{
-			name:      "rejects_non_spec_doc_type_in_strict_mode",
-			relPath:   "architecture/specs/wrong_type_spec.md",
-			content:   strings.Replace(canonicalStrictSpecFixture, "type: spec", "type: research", 1),
-			wantError: "requires 'type: spec'",
-		},
-		{
-			name:      "rejects_deprecated_lineage_and_last_updated_keys",
-			relPath:   "architecture/specs/deprecated_lineage_spec.md",
-			content:   strings.Replace(canonicalStrictSpecFixture, "plane: intent\n", "last_updated: \"2026-11-12\"\nlineage:\n  - INT-932\nplane: intent\n", 1),
-			wantError: "disallowed YAML frontmatter key(s) [last_updated, lineage]",
-		},
-		{
-			name:      "rejects_unicode_em_dash",
-			relPath:   "architecture/specs/dash_spec.md",
-			content:   canonicalStrictSpecFixture + "\nThis line contains an em-dash \u2014 in prose.\n",
-			wantError: "Unicode em-dash or en-dash",
-		},
-		{
-			name:      "rejects_missing_ssot_repository",
-			relPath:   "architecture/specs/no_repo_spec.md",
-			content:   strings.Replace(canonicalStrictSpecFixture, "ssot_repository: nomos\n", "", 1),
-			wantError: "ssot_repository",
-		},
-		{
-			name:      "rejects_deprecated_version_key",
-			relPath:   "architecture/specs/deprecated_ver_spec.md",
-			content:   strings.Replace(canonicalStrictSpecFixture, "type: spec\n", "type: spec\nversion: \"4.8.0\"\n", 1),
-			wantError: "disallowed YAML frontmatter key(s) [version]",
-		},
-		{
-			name:      "rejects_ncte_ambiguous_modal",
-			relPath:   "architecture/specs/modal_spec.md",
-			content:   canonicalStrictSpecFixture + "\nOperators should configure thresholds carefully.\n",
-			wantError: "ERR_NCTE_AMBIGUOUS_MODAL",
-		},
-	}
-
-	opts := intentSteelmanOptions{RequireFrontmatter: true, StrictStandard: true}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			root := t.TempDir()
-			full := filepath.Join(root, "intent", filepath.FromSlash(tc.relPath))
-			if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
-				t.Fatalf("mkdir: %v", err)
-			}
-			if err := os.WriteFile(full, []byte(tc.content), 0644); err != nil {
-				t.Fatalf("write: %v", err)
-			}
-			_, issues := validateIntentDocumentsWithOptions(filepath.Join(root, "intent"), opts)
-			if tc.wantError == "" && len(issues) > 0 {
-				t.Fatalf("expected clean pass, got issues: %v", issues)
-			}
-			if tc.wantError != "" {
-				joined := strings.Join(issues, "; ")
-				if !strings.Contains(joined, tc.wantError) {
-					t.Fatalf("expected error containing %q, got: %v", tc.wantError, issues)
-				}
-			}
-		})
-	}
-}
 
 func TestIntentSteelmanGateEndToEndStrictMode(t *testing.T) {
 	tempDir := t.TempDir()
@@ -209,22 +107,6 @@ func TestIntentSteelmanGateEndToEndStrictMode(t *testing.T) {
 	}
 	if resFail.Passed || !strings.Contains(resFail.Message, "ERR_NCTE_PASSIVE_VOICE") {
 		t.Fatalf("expected strict IntentSteelmanGate failure on passive voice, got: %+v", resFail)
-	}
-}
-
-func TestRepositoryIntentCorpusPassesStrictSteelman(t *testing.T) {
-	repoIntentDir := filepath.Join("..", "..", "..", "..", "..", "intent")
-	if _, err := os.Stat(repoIntentDir); os.IsNotExist(err) {
-		t.Skip("repository intent directory not present at relative path")
-	}
-	opts := intentSteelmanOptions{RequireFrontmatter: true, StrictStandard: true}
-	count, issues := validateIntentDocumentsWithOptions(repoIntentDir, opts)
-	if count == 0 {
-		t.Fatalf("expected non-zero Intent documents in repository")
-	}
-	if len(issues) > 0 {
-		t.Fatalf("expected 0 strict Steel-Man/NCTE-100 issues across %d Intent docs, got:\n%s",
-			count, strings.Join(issues, "\n"))
 	}
 }
 
@@ -298,7 +180,7 @@ func TestIntentSteelmanGateScopedSpecRoots(t *testing.T) {
 func assertScopedSpecRootsCase(t *testing.T, g *IntentSteelmanGate, project, specRoots, specRel, specBody string, wantPass bool, wantSub string) {
 	t.Helper()
 	root := t.TempDir()
-	cfgYAML := "project: " + project + "\ndefault_branch: main\ngovernance:\n  quality_gates:\n    strict_mode: true\n    contracts:\n      contracts:\n        enabled: true\n        spec_roots: " + specRoots + "\n"
+	cfgYAML := "project: " + project + "\ndefault_branch: main\ngovernance:\n  quality_gates:\n    strict_mode: true\n    contracts:\n      contracts:        \n        enabled: true\n        spec_roots: " + specRoots + "\n"
 	if err := os.WriteFile(filepath.Join(root, "nomos.yaml"), []byte(cfgYAML), 0644); err != nil {
 		t.Fatalf("write nomos.yaml: %v", err)
 	}

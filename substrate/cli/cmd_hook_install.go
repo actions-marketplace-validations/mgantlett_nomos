@@ -5,6 +5,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
 	"github.com/mgantlett/nomos/substrate/cli/selfupdate"
 	"github.com/mgantlett/nomos/substrate/cli/tui"
 	"os"
@@ -151,8 +152,8 @@ func installCoreHookProviders(userScope bool, baseDir string, sel selectedHookPr
 		installed = append(installed, p)
 	}
 	if sel.cursor {
-		p := resolveCursorManifestPath(userScope, baseDir)
-		if err := writeMergedJSONManifest(p, DefaultCursorHooksJSON()); err != nil {
+		p := hookcmd.ResolveCursorManifestPath(userScope, baseDir)
+		if err := writeMergedJSONManifest(p, hookcmd.DefaultCursorHooksJSON()); err != nil {
 			return nil, err
 		}
 		installed = append(installed, p)
@@ -161,14 +162,14 @@ func installCoreHookProviders(userScope bool, baseDir string, sel selectedHookPr
 }
 
 func installAntigravityHooks(userScope bool, baseDir string) (string, error) {
-	rootDir := filepath.Join(baseDir, agentsDirToken)
+	rootDir := filepath.Join(baseDir, hookcmd.AgentsDirToken)
 	if userScope {
 		rootDir = filepath.Join(baseDir, geminiDirToken, "config")
 	}
 	if err := writeAmbientHookBundle(rootDir); err != nil {
 		return "", err
 	}
-	return filepath.Join(rootDir, hooksFileName), nil
+	return filepath.Join(rootDir, hookcmd.HooksFileName), nil
 }
 
 func resolveHookInstallBase(userScope bool, targetDir string) (string, string, error) {
@@ -233,20 +234,28 @@ func writeMergedJSONManifest(targetPath string, templateBytes []byte) error {
 }
 
 func writeMergedOpenCodePlugin(targetPath string) error {
-	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+	absTarget, aErr := filepath.Abs(filepath.Clean(targetPath))
+	if aErr != nil {
+		return aErr
+	}
+	absDir := filepath.Dir(absTarget)
+	if rel, relErr := filepath.Rel(absDir, absTarget); relErr != nil || strings.HasPrefix(rel, "..") {
+		return fmt.Errorf("invalid plugin target path %q", targetPath)
+	}
+	if err := os.MkdirAll(absDir, 0755); err != nil {
 		return err
 	}
 	tmplBytes, err := selfupdate.DefaultOpenCodePluginTS()
 	if err != nil {
 		return err
 	}
-	existingBytes, rErr := os.ReadFile(targetPath)
+	existingBytes, rErr := os.ReadFile(absTarget)
 	if rErr != nil {
 		if os.IsNotExist(rErr) {
-			return os.WriteFile(targetPath, tmplBytes, 0644)
+			return os.WriteFile(absTarget, tmplBytes, 0644)
 		}
 		return rErr
 	}
 	merged := selfupdate.MergeOpenCodePluginContent(existingBytes, tmplBytes)
-	return os.WriteFile(targetPath, merged, 0644)
+	return os.WriteFile(absTarget, merged, 0644)
 }

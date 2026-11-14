@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/intentlint"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
 
@@ -58,10 +59,10 @@ func TestSelfDogfood_NomosBijectiveAndSurjectiveParity(t *testing.T) {
 	if sigIssues := VerifySpecTypeSignatures(repoRoot, filepath.Join(repoRoot, "substrate"), specRoots); len(sigIssues) != 0 {
 		t.Fatalf("bijective struct parity drift on nomos: %v", sigIssues)
 	}
-	if orphans := VerifyNoOrphanedTestObligations(repoRoot, specRoots); len(orphans) != 0 {
+	if orphans := intentlint.VerifyNoOrphanedTestObligations(repoRoot, specRoots); len(orphans) != 0 {
 		t.Fatalf("orphaned @verifies TC-* vectors on nomos: %v", orphans)
 	}
-	if surj := VerifyNormativeRegistrySurjection(repoRoot, specRoots); len(surj) != 0 {
+	if surj := intentlint.VerifyNormativeRegistrySurjection(repoRoot, specRoots); len(surj) != 0 {
 		t.Fatalf("normative registry surjection gaps on nomos: %v", surj)
 	}
 }
