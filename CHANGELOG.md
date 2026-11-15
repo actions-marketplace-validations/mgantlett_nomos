@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v4.20.0] - 2026-11-15
+
+> Upgrade InferCleanArchitectureBoundaries to Git-index file reuse and TS/Svelte alias layers; Fix x86_64 SHA-256 digest in packaging/aur/PKGBUILD; Extract cli/hookcmd and verify/intentgate subpackages and split >385 LOC ceiling hotspots; Increase hero SVG typography scale by 36% for GitHub 880px column width (Apache 2.0)
+
+### Intent & Specifications (`intent/`)
+- **Increase hero SVG typography scale by 36% for GitHub 880px column width (`INT-2042`)**: Enlarge hero SVG typography by 36% for GitHub 880px README width.
+
+### CLI, Distribution & Hooks (`nomos cli`)
+- **Extract cli/hookcmd and verify/intentgate subpackages and split >385 LOC ceiling hotspots (`INT-2046`, `SUB-3059`)**: Extract cli/hookcmd and verify/intentlint helpers and split proof and task-sync hotspots.
+- **Unify nomos task status into nomos status, streamline EDIT HATEOAS, and fix polyglot --mutate-diff help (`INT-2044`, `SUB-3057`)**: Top-level 'nomos status' (--json and TUI) surfaces active phase, bound task key, CapBAC lease budget, HATEOAS Next Actions, and wavefront while 'nomos task status' is removed under Law 6.
+
+### Verification & Quality Gates (`nomos verify`)
+- **Upgrade InferCleanArchitectureBoundaries to Git-index file reuse and TS/Svelte alias layers (`INT-2045`, `SUB-3058`)**: InferCleanArchitectureBoundaries reuses Git-tracked source files (skipping .gitignore build trees like .svelte-kit and cutting xray latency).
+
+### Release & Packaging
+- **Fix x86_64 SHA-256 digest in packaging/aur/PKGBUILD (`SUB-3072`)**: Set exact v4.19.0 x86_64 SHA-256 digest in PKGBUILD.
+- **Sync packaging/aur/PKGBUILD SHA-256 digests with published v4.19.0 release (`SUB-3070`)**: Sync PKGBUILD Linux SHA-256 digests with published v4.19.0 release.
+
+---
+
 ## [v4.19.0] - 2026-11-14
 
 > Zero-Init Brownfield Debt Scanner (`nomos xray`) & Day-0 Ratchet Baseline (`nomos init --baseline`), Zero-Trust PR Proof & Diff-Scoped AST Mutation Testing (`nomos verify --pr --mutate-diff` + GitHub Action), Multi-Worktree AST Write-Time Collision Radar (`MTPO`), Plus Canonical Lipgloss Terminal Rendering (Apache 2.0)
