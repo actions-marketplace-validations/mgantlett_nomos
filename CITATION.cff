@@ -8,6 +8,7 @@ authors:
     affiliation: SophiaLabs
 repository-code: "https://github.com/mgantlett/nomos"
 url: "https://sophialabs.ca"
+doi: "10.5281/zenodo.24240539"
 abstract: >-
   Nomos is an open-source static Go execution substrate that governs autonomous AI coding agents
   between local workspaces and production Git branches via read-only main locks, hermetic Git
