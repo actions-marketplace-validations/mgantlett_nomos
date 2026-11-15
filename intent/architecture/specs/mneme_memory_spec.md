@@ -111,9 +111,10 @@ type GateTrapEntry struct {
 	Timestamp string `json:"timestamp"`
 }
 
-// PitfallHygieneReport summarizes automated pitfall scope pruning and cross-scope promotion (#PitfallHygieneReport).
+// PitfallHygieneReport summarizes automated pitfall and pattern scope pruning and cross-scope promotion (#PitfallHygieneReport).
 type PitfallHygieneReport struct {
 	DeadScopesTombstoned    int `json:"dead_scopes_tombstoned"`
+	DeadPatternsTombstoned  int `json:"dead_patterns_tombstoned"`
 	ExpiredTestsTombstoned  int `json:"expired_tests_tombstoned"`
 	CrossScopeHabitsUpdated int `json:"cross_scope_habits_updated"`
 }
@@ -199,6 +200,7 @@ $$\text{Score} = (0.75 \times \text{CosineSimilarity} + 0.25 \times \text{Lexica
 - **Closed-Loop Hot-Scope AST Reflexes (`ResolveHotScopeReflex`)**: When built-in AST pitfalls in `relDir` reach recurrence $\ge 3$ with head `access_count < 5`, `ResolveHotScopeReflex` activates sensitized `EvaluateFastFileRadar` checks. Sensitized scopes tighten `V(G)` and `LOC` warnings from `80%` to `65%` and run inline `arity`, `unchecked_error_hygiene`, and `anti_shim` micro-probes. Reaching head `access_count >= 5` consecutive clean recalls cools the scope back to baseline `80%`.
 - **Symbol-Delta Pitfall Distillation (`DistillTaskLearnings`)**: When a buffered gate failure cites a repository file, 2PC sync parses verified post-fix AST symbols. Distillation prepends `Refactored <file> [<symbols>]` ahead of walkthrough prose.
 - **Unscoped One-Off Pitfall Cooling (`RecallRepoPitfalls`)**: During unscoped handshakes (`targetScope == "workspace"`), single-occurrence pitfalls (`recurrence == 1`) older than 14 days cool out of `LearnedPitfalls`. Pitfalls remain active whenever `modifiedFiles` matches their directory scope or topic recurrence reaches $\ge 2$.
+- **Dual-Gate Filesystem Grounding (`SweepRepoPitfallHygiene`)**: Periodic maintenance and 2PC `nomos task sync` tombstone `pitfall:` and `pattern:` records when target scopes or all `files=[...]` disappear. Read-time `os.Stat` filtering in `RecallRepoPatterns` and `RecallRepoPitfalls` suppresses missing scopes immediately before the next sweep.
 - **JIT Post-Edit Pitfall Recall & Trunk Pacing (`nomos hook post-tool`)**: First worktree mutation in `relDir` recalls matching directory pitfalls once via `RecallRepoPitfallsForTask` and records `relDir` in session trace. Trunk sessions (`wtRoot == ""`, `SessionID != ""`) track consecutive exploratory reads per session and emit pacing advisories at configured thresholds.
 
 ---
@@ -232,9 +234,11 @@ $$\text{Score} = (0.75 \times \text{CosineSimilarity} + 0.25 \times \text{Lexica
   - `-n, --limit <int>`: Max results (default: 20).
   - `--json`: Structured JSON output.
 
-### 5.4 `nomos mem dismiss <id> [id...]`
-- Transitions active or superseded records to `tombstoned` (`Store.Dismiss`) after `nomos.yaml` codifies a `pitfall` or obsoletes an advisory item. Dismissal preserves `mneme.db` audit history under the Database Encapsulation Invariant without raw SQLite mutations.
+### 5.4 `nomos mem dismiss [id...] [--stale]`
+- Transitions active or superseded records to `tombstoned` (`Store.Dismiss`) by numeric ID or via `--stale` scope sweeps. Dismissal preserves `mneme.db` audit history under the Database Encapsulation Invariant without raw SQLite mutations.
 - Flags:
+  - `--stale`: Tombstone orphaned `pitfall:` and `pattern:` filesystem scopes in the active or `--project` repository, emitting itemized receipts.
+  - `-p, --project <repo>`: Optional repository path or identifier override when paired with `--stale`.
   - `--json`: Structured JSON output.
 
 ---
@@ -260,7 +264,7 @@ $$\text{Score} = (0.75 \times \text{CosineSimilarity} + 0.25 \times \text{Lexica
 | `TC-MEM-15` | Subword hashing & dimension fallback | `GenerateDeterministicLocalVector` + `CombinedScore` across `camelCase`, stop-words, and mixed dims | Produces independent halves (`v[:32] != v[32:]`), rejects stop-word noise, and scores mixed dims. |
 | `TC-LRN-01` | Gate trap buffering | Failing DoD gate evaluated during active task (`GateTrapEntry`) | Buffers gate name, scope, and failure message for `LEARN` phase distillation. |
 | `TC-LRN-02` | Trap-to-fix distillation | Buffered `GateTrapEntry` resolved before 2PC `nomos task sync` | Mints statutory `kind="pitfall"` pairing trap and verified fix. |
-| `TC-LRN-03` | Dead-scope pitfall hygiene | `PitfallHygieneReport` audit when target directory no longer exists | Tombstones dead-scope pitfalls automatically. |
+| `TC-LRN-03` | Dead-scope pitfall & pattern hygiene | `PitfallHygieneReport` audit when target directory or `files=[...]` disappear | Tombstones dead pitfalls and patterns (`DeadScopesTombstoned`, `DeadPatternsTombstoned`). |
 | `TC-LRN-04` | Cross-scope habit promotion | Identical pitfall recurring across $\ge 3$ distinct package scopes | Promotes pitfall scope to repository-wide orientation. |
 | `TC-LRN-05` | Duplicate memory superseding | `MaintainReport` deduplication pass on identical topic and content | Marks older duplicate `superseded` and preserves newest record. |
 | `TC-LRN-06` | `mneme.db` WAL checkpoint | Periodic maintenance pass over `mneme.db` (`MaintainReport`) | Checkpoints WAL and reclaims fragmented pages cleanly. |
@@ -268,12 +272,13 @@ $$\text{Score} = (0.75 \times \text{CosineSimilarity} + 0.25 \times \text{Lexica
 | `TC-MEM-16` | Hot-scope AST reflex sensitization | Built-in AST pitfall reaches `recurrence >= 3` and `access_count < 5` | `ResolveHotScopeReflex` activates `65%` warnings plus `arity`, `unchecked_error_hygiene`, and `anti_shim` probes. |
 | `TC-MEM-17` | Clean-streak homeostatic cooling | Head pitfall reaches `access_count >= 5` consecutive clean recalls | Cools `ResolveHotScopeReflex` to `nil` and suppresses `graduation_candidates` nagging. |
 | `TC-MEM-18` | Built-in AST banner suppression | Built-in AST pitfall recurs `>= 2` times during handshake | Excluded from `nomos.yaml` graduation banners; policy pitfalls remain surfaced. |
+| `TC-MEM-19` | Dual-gate suppression & `dismiss --stale` | Deleted pattern scope recalled before sync, then `nomos mem dismiss --stale` | Suppressed immediately via `os.Stat` and tombstoned with receipts on `--stale`. |
 
 ---
 
 ## 7. Cross-Plane Traceability & DoD Verification
 
-- **Intent Lineage**: `INT-735`, `INT-855`, `INT-899`, `INT-926`, `INT-927`, `INT-1944`, `INT-1956`, `INT-1962`, `INT-1984`.
-- **Substrate SSoT**: `SUB-1213`, `SUB-1524`, `SUB-1680`, `SUB-2157`, `SUB-2203`, `SUB-2211`, `SUB-2279` (`substrate/src/nomos/modules/mem/memory.go`, `substrate/src/nomos/modules/mem/vector.go`, `substrate/src/nomos/modules/mem/search.go`, `substrate/src/nomos/modules/mem/learn.go`, `substrate/src/nomos/modules/mem/learn_reinforce.go`, `substrate/src/nomos/modules/mem/learn_scope.go`, `substrate/src/nomos/modules/mem/patterns.go`, `substrate/src/nomos/modules/mem/patterns_recall.go`, `substrate/src/nomos/modules/mem/maintain.go`, `substrate/src/nomos/modules/verify/fast_radar.go`, `substrate/cli/cmd_hook_post.go`, `substrate/cli/cmd_hook_pacing.go`, `substrate/cli/cmd_hook_trace.go`).
+- **Intent Lineage**: `INT-735`, `INT-855`, `INT-899`, `INT-926`, `INT-927`, `INT-1944`, `INT-1956`, `INT-1962`, `INT-1984`, `INT-2055`.
+- **Substrate SSoT**: `SUB-1213`, `SUB-1524`, `SUB-1680`, `SUB-2157`, `SUB-2203`, `SUB-2211`, `SUB-2279`, `SUB-3099` (`substrate/src/nomos/modules/mem/*.go`, `substrate/src/nomos/modules/verify/fast_radar.go`, `substrate/cli/maintenance_hook.go`, `substrate/cli/inspectcmd/cmd_mem_dismiss.go`).
 - **Canonical 7x3 Matrix Coordinates**: `Cell 1.1 (boundary)`, `Cell 4.1 (intent_traceability)`, `Cell 6.2 (zero_alias)`.
 - **Deterministic Verification**: `nomos verify` executes unit tests across `substrate/src/nomos/modules/mem/` and validates Database Encapsulation and CLI zero-alias invariants with exit code `0`.
