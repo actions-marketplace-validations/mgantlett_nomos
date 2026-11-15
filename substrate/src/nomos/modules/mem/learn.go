@@ -208,7 +208,7 @@ func recallRepoPitfallsWithTask(repoRoot, taskKey string, touchedFiles []string,
 
 	repoID := strings.ToLower(filepath.Base(filepath.Clean(repoRoot)))
 	targetScope := DeriveDirectoryScope(repoRoot, touchedFiles)
-	candidates := filterEligibleRepoPitfalls(all, repoID, targetScope, time.Now().UTC())
+	candidates := filterEligibleRepoPitfalls(all, repoRoot, taskKey, repoID, targetScope, time.Now().UTC())
 	if len(candidates) == 0 {
 		return nil
 	}

@@ -4,10 +4,12 @@ package cli
 
 import (
 	"fmt"
+	"path/filepath"
+	"time"
+
 	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
 	"github.com/mgantlett/nomos/substrate/cli/taskui"
 	"github.com/mgantlett/nomos/substrate/cli/tui"
-	"time"
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/config"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/storage"
@@ -33,6 +35,10 @@ func runAutomaticSubstrateMaintenance(repoRoot string, force bool) {
 	}
 	store, err := mem.NewStore(config.ResolveMnemeDBPath())
 	if err == nil {
+		if repoRoot != "" {
+			cleanRoot := filepath.Clean(repoRoot)
+			mem.SweepRepoPitfallHygiene(store, cleanRoot, filepath.Base(cleanRoot), time.Now().UTC())
+		}
 		if _, mErr := store.Maintain(mem.MaintainOptions{}); mErr != nil {
 			// best-effort Mneme compaction
 		}

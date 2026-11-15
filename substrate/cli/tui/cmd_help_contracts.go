@@ -115,10 +115,11 @@ and verified patterns filtered by repository, task key, memory kind, or topic.`
   nomos mem list --kind pattern --limit 10
   nomos mem list --all --json`
 
-	HelpMemDismissLong = `Transition one or more Nomos Mneme memory records to tombstoned status once a
-recurring pitfall has been promoted into nomos.yaml or a record is obsolete.`
+	HelpMemDismissLong = `Transition one or more Nomos Mneme memory records to tombstoned status by numeric ID
+or sweep orphaned directory and deleted-file pitfalls/patterns via --stale.`
 	HelpMemDismissExample = `  nomos mem dismiss 42
-  nomos mem dismiss 42 43 --json`
+  nomos mem dismiss 42 43 --json
+  nomos mem dismiss --stale`
 
 	HelpSessionExample = `  nomos session list
   nomos session show

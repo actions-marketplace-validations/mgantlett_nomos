@@ -216,10 +216,14 @@ func extractGoFuncAndTypeNames(absPath string, data []byte) []string {
 	return names
 }
 
-func filterEligibleRepoPitfalls(all []*Memory, repoID, targetScope string, now time.Time) []*Memory {
+func filterEligibleRepoPitfalls(all []*Memory, repoRoot, taskKey, repoID, targetScope string, now time.Time) []*Memory {
 	topicDepths := countPitfallTopicChain(all, repoID)
+	roots := resolveLiveRecallRoots(repoRoot, taskKey)
 	var candidates []*Memory
 	for _, m := range all {
+		if isStaleRepoPitfallScopeForRoots(roots, m) {
+			continue
+		}
 		if isPitfallEligibleForScope(m, repoID, targetScope, topicDepths[strings.ToLower(m.Topic)], now) {
 			candidates = append(candidates, m)
 		}

@@ -58,7 +58,7 @@ func recallRepoPatternsWithTask(repoRoot, taskKey, queryHint string, touchedFile
 		return nil
 	}
 	repoID := strings.ToLower(filepath.Base(filepath.Clean(repoRoot)))
-	candidates := filterActiveRepoPatterns(all, repoID)
+	candidates := filterActiveRepoPatterns(all, repoRoot, taskKey, repoID)
 	if len(candidates) == 0 {
 		return nil
 	}
@@ -71,12 +71,17 @@ func recallRepoPatternsWithTask(repoRoot, taskKey, queryHint string, touchedFile
 	return collectRecalledContents(store, repoRoot, taskKey, targetScope, candidates, recordAccess)
 }
 
-func filterActiveRepoPatterns(all []*Memory, repoID string) []*Memory {
+func filterActiveRepoPatterns(all []*Memory, repoRoot, taskKey, repoID string) []*Memory {
+	roots := resolveLiveRecallRoots(repoRoot, taskKey)
 	var candidates []*Memory
 	for _, m := range all {
-		if m.Kind == KindPattern && m.Status == StatusActive && strings.ToLower(strings.TrimSpace(m.RepoID)) == repoID {
-			candidates = append(candidates, m)
+		if m.Kind != KindPattern || m.Status != StatusActive || strings.ToLower(strings.TrimSpace(m.RepoID)) != repoID {
+			continue
 		}
+		if isStaleRepoPatternForRoots(roots, m) {
+			continue
+		}
+		candidates = append(candidates, m)
 	}
 	if len(candidates) > 0 {
 		return candidates

@@ -16,32 +16,19 @@ const (
 	crossScopeConsolidationMinDir = 3
 )
 
-// PitfallHygieneReport summarizes automated pitfall cleanup and cross-folder synthesis actions.
+// PitfallHygieneReport summarizes automated pitfall and pattern scope pruning and cross-scope promotion (#PitfallHygieneReport).
 type PitfallHygieneReport struct {
 	DeadScopesTombstoned    int `json:"dead_scopes_tombstoned"`
+	DeadPatternsTombstoned  int `json:"dead_patterns_tombstoned"`
 	ExpiredTestsTombstoned  int `json:"expired_tests_tombstoned"`
 	CrossScopeHabitsUpdated int `json:"cross_scope_habits_updated"`
 }
 
-// SweepRepoPitfallHygiene tombstones pitfalls pointing at deleted repo directories,
+// SweepRepoPitfallHygiene tombstones pitfalls and patterns pointing at deleted repo directories or files,
 // expires stale one-off unit test failure traces, and synthesizes repo-wide habit
 // patterns when a single gate trips across >= 3 directories (@intent: #Memory).
 func SweepRepoPitfallHygiene(store *Store, repoRoot, repoID string, now time.Time) PitfallHygieneReport {
-	var rep PitfallHygieneReport
-	if store == nil || strings.TrimSpace(repoID) == "" {
-		return rep
-	}
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-	all, err := store.ListAll()
-	if err != nil {
-		return rep
-	}
-	checkDiskPaths := isAuthoritativeRepoRoot(repoRoot)
-	normRepo := strings.ToLower(strings.TrimSpace(repoID))
-	surviving := sweepStalePitfalls(store, all, repoRoot, normRepo, checkDiskPaths, now, &rep)
-	rep.CrossScopeHabitsUpdated = consolidateCrossScopeGateHabits(store, surviving, repoID, normRepo)
+	_, rep := SweepStaleRepoMemories(store, repoRoot, repoID, now)
 	return rep
 }
 
@@ -70,35 +57,38 @@ func isEphemeralTestAssertionContent(content string) bool {
 	return strings.Contains(lower, "trap:") && strings.Contains(lower, "not ok ")
 }
 
-// sweepStalePitfalls tombstones dead-directory and expired unit-test pitfalls, returning active survivors.
-func sweepStalePitfalls(
+// sweepStalePitfallsWithReceipts tombstones dead-directory pitfalls/dead-ends and expired unit-test pitfalls.
+func sweepStalePitfallsWithReceipts(
 	store *Store,
 	all []*Memory,
 	repoRoot, normRepo string,
 	checkDiskPaths bool,
 	now time.Time,
 	rep *PitfallHygieneReport,
-) []*Memory {
+) ([]*Memory, []*Memory) {
 	var surviving []*Memory
+	var dismissed []*Memory
 	for _, m := range all {
 		if !isActiveRepoPitfall(m, normRepo) {
 			continue
 		}
-		if checkDiskPaths && isMissingRepoScopeDir(repoRoot, extractScopeFromPitfallTopic(m.Topic)) {
-			if _, err := store.Dismiss(m.ID); err == nil {
+		if checkDiskPaths && isStaleRepoPitfallScope(repoRoot, m) {
+			if rec, err := store.Dismiss(m.ID); err == nil && rec != nil {
 				rep.DeadScopesTombstoned++
+				dismissed = append(dismissed, rec)
 				continue
 			}
 		}
 		if isExpiredEphemeralTestPitfall(m, now) {
-			if _, err := store.Dismiss(m.ID); err == nil {
+			if rec, err := store.Dismiss(m.ID); err == nil && rec != nil {
 				rep.ExpiredTestsTombstoned++
+				dismissed = append(dismissed, rec)
 				continue
 			}
 		}
 		surviving = append(surviving, m)
 	}
-	return surviving
+	return surviving, dismissed
 }
 
 // isMissingRepoScopeDir checks whether a relative directory scope has been removed from repoRoot.
