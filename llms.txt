@@ -1,0 +1,46 @@
+# Nomos Open-Core
+
+> Agents guess; Git cannot. Nomos is the open-source deterministic execution substrate and transactional Git worktree harness between AI coding agents and production repositories.
+
+- **License:** Apache-2.0
+- **Repository:** https://github.com/mgantlett/nomos
+- **Documentation:** https://sophialabs.ca/docs/introduction
+- **Full Documentation Corpus:** https://sophialabs.ca/llms-full.txt
+- **Engineering Handbook (12 Chapters):** https://sophialabs.ca/handbook
+- **Architecture Specifications (37):** https://sophialabs.ca/docs/specs
+- **Empirical Field Dispatches:** https://sophialabs.ca/dispatches
+
+## Quickstart & Day-0 Brownfield Onboarding
+
+```bash
+curl -fsSL https://sophialabs.ca/install | bash
+nomos xray .              # 5-second read-only AI Hangover Score & structural hotspot audit across 11 languages
+nomos init --baseline     # Freezes legacy brownfield debt in nomos.baseline.json and ratchets agent-touched diffs
+```
+
+Go module installation alternative:
+
+```bash
+go install github.com/mgantlett/nomos/substrate/cmd/nomos@latest
+```
+
+## Core Capabilities (100% Local Static Go Binary)
+
+- **Hermetic Git Worktrees & Read-Only `main`:** Blocks direct agent commits on `main`; provisions isolated `worktrees/<repo>-<task>` sandboxes across `IDLE -> PLAN -> EDIT -> REVIEW -> SYNC -> LEARN`.
+- **42 Polyglot Anti-Reward-Hacking AST Quality Gates (`nomos verify`):** Evaluates 42 compiled Go, Tree-sitter `.scm`, and WASM gates across 11 languages (Go, TypeScript/Svelte, Python, Rust, Ruby, C/C++, Java, Kotlin, C#) in ~460ms with zero LLM judge tokens.
+- **Diff-Scoped Mutation Proofs (`nomos verify --pr --mutate-diff`):** Mutates newly added conditionals and return values across Go, TypeScript/JS, and Python to reject tautological unit tests before merge.
+- **Multi-Worktree AST Collision Radar (`MTPO` / `nomos physics`):** Tracks exported AST symbol hulls across concurrent sibling worktrees to detect write-time symbol collisions before merge conflicts arise.
+- **Two-Phase Commit Provenance & Pure-Go Episodic Memory (`nomos mem`):** Seals cryptographic SHA-256 release receipts in `refs/notes/nomos/releases` and persists verified `pitfall` and `pattern` lessons in pure-Go SQLite WAL (`mneme.db`).
+
+## Canonical CLI Surface
+
+- `nomos xray [path]` - Read-only structural complexity, clone, monolith, stub, and CWE sink diagnostic.
+- `nomos init [--baseline]` - Scaffolds `nomos.yaml`, agent steering rules, and optional brownfield debt baseline.
+- `nomos handshake` - Initializes session state, verifies CapBAC capability leases, installs Git hooks, and emits HATEOAS Next Actions.
+- `nomos status` - Displays workspace phase, active worktrees, and ready task wavefront.
+- `nomos task chore "<title>"` - Provisions an isolated task worktree in `EDIT` phase in one turn.
+- `nomos task start <KEY> --edit` - Enters `EDIT` phase inside an isolated worktree for a planned `INT-*` or `SUB-*` task.
+- `nomos verify [--pr --mutate-diff] [--impact]` - Runs all 42 Definition of Done quality gates, optional mutation proofs, and 1-hop AST blast radius.
+- `nomos task sync <KEY> -m "<summary>"` - Executes atomic 2PC verification, fast-forward merge to `main`, Git Notes receipt, and worktree cleanup.
+- `nomos mem recall "<query>" [-A]` - Searches local or cross-repository verified episodic lessons.
+- `nomos capabilities [id]` / `nomos directive [name]` - Inspects active quality gates, hooks, and embedded phase playbooks.

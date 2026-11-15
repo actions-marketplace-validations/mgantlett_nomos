@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+title: "Nomos: Deterministic Execution Substrate and Transactional Git Worktree Harness for AI Coding Agents"
+message: "If you use Nomos or its empirical verification benchmarks in your research or engineering systems, please cite it using the metadata below."
+type: software
+authors:
+  - family-names: Gantlett
+    given-names: Mark
+    affiliation: SophiaLabs
+repository-code: "https://github.com/mgantlett/nomos"
+url: "https://sophialabs.ca"
+abstract: >-
+  Nomos is an open-source static Go execution substrate that governs autonomous AI coding agents
+  between local workspaces and production Git branches via read-only main locks, hermetic Git
+  worktrees, 42 polyglot AST quality gates across 11 languages, diff-scoped mutation testing,
+  CapBAC capability leases, Two-Phase Commit Git Notes provenance, and pure-Go SQLite episodic memory.
+keywords:
+  - ai-coding-agents
+  - ast-verification
+  - software-engineering-governance
+  - git-worktree
+  - mutation-testing
+  - capability-security
+  - brownfield-refactoring
+license: Apache-2.0
