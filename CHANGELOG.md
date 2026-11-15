@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v4.20.1] - 2026-11-15
+
+> Remove `packaging/mcp/server.json` since Nomos is strictly CLI and hooks; Add root llms.txt, CITATION.cff, and MCP registry `server.json` manifests (Apache 2.0)
+
+### Release & Packaging
+- **Remove `packaging/mcp/server.json` since Nomos is strictly CLI and hooks (`SUB-3092`)**: Remove `packaging/mcp/server.json` since Nomos Open-Core is strictly a CLI and ambient hook substrate.
+- **Add root llms.txt, CITATION.cff, and MCP registry `server.json` manifests (`SUB-3089`)**: Add root llms.txt, CITATION.cff, and MCP registry `server.json` manifests.
+
+---
+
 ## [v4.20.0] - 2026-11-15
 
 > Upgrade InferCleanArchitectureBoundaries to Git-index file reuse and TS/Svelte alias layers; Fix x86_64 SHA-256 digest in packaging/aur/PKGBUILD; Extract cli/hookcmd and verify/intentgate subpackages and split >385 LOC ceiling hotspots; Increase hero SVG typography scale by 36% for GitHub 880px column width (Apache 2.0)
