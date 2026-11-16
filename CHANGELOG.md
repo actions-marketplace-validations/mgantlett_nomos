@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v4.21.0] - 2026-11-16
+
+> Resolve repo root and git HEAD in pure Go for sub-millisecond PreToolUse; Frictionless Branch Guard nomos init, stealth --local mode, and 2-tier --help-agent; Branch Guard progressive onboarding and frictionless nomos init; Dual-gate pattern filesystem grounding, periodic sweep, and nomos mem dismiss --stale (Apache 2.0)
+
+### CLI, Distribution & Hooks (`nomos cli`, `nomos init`)
+- **Implement frictionless Branch Guard nomos init, stealth --local mode, and 2-tier --help-agent (`INT-2083`, `SUB-3133`)**: Implement progressive Branch Guard nomos init, smart auto-baseline, stealth --local .git/info/exclude mode, --agents auto-detection, --worktrees/--strict overrides, and 2-tier nomos --help-agent.
+- **Add multi-language cross-PR contract hint in xray and missing external plugin remedy in root CLI (`INT-2071`, `SUB-3122`)**: RenderXrayTerminal appends zero-nag cross-PR contract/compliance affordance only when FilesScanned >= 50 and len(Languages) >= 2.
+
+### Configuration & Workspace (`nomos.yaml`, `nomos hook`, `nomos verify`)
+- **Implement Branch Guard progressive onboarding and frictionless nomos init (`INT-2082`, `SUB-3132`)**: Implement BoundaryConfig.IsolationMode SSoT and `nomos.schema.json` parity, Branch Guard PreToolUse/Stop/CommitSchemaGate/InstallHooks enforcement, branch-scoped trace and post-commit Mneme distillation in substrate/.
+
+### Task, Memory & Session (`nomos mem`, `nomos cli`)
+- **Implement dual-gate pattern filesystem grounding, periodic sweep, and nomos mem dismiss --stale (`INT-2055`, `SUB-3099`)**: Implemented dual-gate filesystem grounding for pattern: and pitfall: scopes and file blueprints across SweepStaleRepoMemories, RecallRepoPatterns, RecallRepoPitfalls, automatic maintenance, and nomos mem dismiss --stale.
+
+### Release & Packaging (`README.md`)
+- **Resolve repo root and git HEAD in pure Go for sub-millisecond PreToolUse (`SUB-3138`)**: Replace git rev-parse subprocess spawns on PreToolUse with pure-Go .git and .git/HEAD resolution, deduplicate candidate scopes, and satisfy <5ms PreToolUse SLA under full parallel verify load.
+- **Reframe top-of-funnel onboarding around progressive Branch Guard ramp (`SUB-3134`)**: Reframe hero and 60-second quickstart around nomos xray, Branch Guard default init (--local stealth), and optional --worktrees escalation while moving internal protocol deep-dives into expandable sections.
+- **Add Zenodo Concept DOI badge to `README.md` and CITATION.cff (`SUB-3097`)**: Added minted Zenodo Concept DOI (10.5281/zenodo.24240539) badge to `README.md` and doi field to CITATION.cff following v4.20.1 release.
+
+---
+
 ## [v4.20.1] - 2026-11-15
 
 > Remove `packaging/mcp/server.json` since Nomos is strictly CLI and hooks; Add root llms.txt, CITATION.cff, and MCP registry `server.json` manifests (Apache 2.0)
