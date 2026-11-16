@@ -326,15 +326,17 @@ type UpdateCheckCache struct {
 * **Cross-Phase Receipt Reuse**: Reuses valid `42/42` receipts (`TTL <= 5m`, matching working-tree OID and trunk `HEAD` SHA) across `nomos verify`, `pre-commit`, `nomos task review`, and `nomos task sync`.
 * **Fail-Closed Invalidation**: Purges or bypasses cached receipts on any file byte mutation, untracked file addition, trunk `HEAD` advance, `--all` scan, or `NOMOS_NO_VERIFY_CACHE=1`.
 
-### 4.15 Day-0 Brownfield Onboarding (`nomos init` & Lean Steering)
-* **Zero-Violation Boundary Inference**: `nomos init` runs `InferCleanArchitectureBoundaries` on brownfield repositories and writes verified `architecture_boundaries` rules into `nomos.yaml`.
-* **Progressive Template Reference**: `templates/nomos.yaml` documents `architecture_boundaries` and `contracts` (`strict_types`, `verify_obligations`) for binary-only downstream installations.
-* **Day-0 Mneme Seed & Canonical Hook Guard**: `nomos init` writes canonical `hooks.json` manifests and seeds `mneme.db` (`topic: "init-topology"`). It skips `NOMOS_INIT_IN_PROGRESS=1` commits when `HEAD` holds a release receipt and refuses `NOMOS_IN_TOOLCHAIN_GATE=1` runs.
-* **Lean `intent_twin_mode: off` Steering**: When `intent_twin_mode` is `off` and the wavefront is empty, `nomos handshake` steers `IDLE` directly to `nomos task chore` and `sync -m`.
+### 4.15 Day-0 Progressive Onboarding (`nomos init`, Modes & `--help-agent`)
+* **Default Branch Guard (`nomos init [--dir <PATH>]`)**: Scaffolds `isolation_mode: "branch"`, skips creating `worktrees/`, merges compact `templates/AGENTS_BRANCH.md`, and makes zero silent trunk commits.
+* **Smart Auto-Baselining & Strict Override (`--baseline`, `--strict`)**: Bare `nomos init` scans via `xray.ScanRepository` and writes `nomos.baseline.json` (`strict_mode: false`) when `HangoverScore > 0`. Passing `--strict` preserves `strict_mode: true` without creating a baseline manifest. Passing `--baseline` forces baseline creation regardless of score.
+* **Stealth Local Trial (`--local`)**: Skips `.gitignore` edits and registers untracked governance files inside `.git/info/exclude` (`# Nomos Local Stealth Trial`) so `git status` stays clean. Running `nomos init` without `--local` removes that exclude block cleanly.
+* **Agent Detection & Filtering (`--agents`)**: Auto-detects present agent configs or binaries (`claude`, `cursor`, `opencode`, `gemini`, `agy`) and falls back to all five when none appear. Passing `--agents <csv|all>` filters hook manifests strictly to named targets and emits `CLAUDE.md` only when `claude` is active or pre-existing.
+* **Hermetic Worktree Graduation (`--worktrees`)**: Scaffolds `isolation_mode: "worktree"`, provisions `worktrees/`, merges full `templates/AGENTS.md`, seeds `mneme.db`, and stages governance commits when `--local` is false.
+* **Two-Tier Root Help (`--help-agent`)**: Default `nomos --help` displays core developer commands (`init`, `status`, `task`, `verify`, `xray`, `mem`, `issue`, `update`, `version`) and a `--help-agent` footer. Passing `nomos --help-agent` unhides internal harness RPCs (`handshake`, `hook`, `directive`, `capabilities`, `physics`, `session`) with zero Cobra aliases under Law 6.
 
 ### 4.16 Zero-Init Brownfield X-Ray & Baseline Lock (`nomos xray` & `nomos init --baseline`)
 * **`nomos xray [dir] [--json] [--markdown] [--top <N>]`**: Scans any directory across 11 languages without writing files or mutating SQLite stores. Emits `HangoverScore` (`0-100`), `Grade`, clones, monoliths, stubs, skipped tests, and `XrayHotspot` outputs.
-* **`nomos init --baseline [--dir <PATH>]`**: Captures Day-0 `XrayReport` bounds before scaffolding and sets `strict_mode: false` on indebted repositories. Writes `nomos.baseline.json` (`XrayBaselineManifest`) and stages it alongside governance contracts.
+* **`nomos init --baseline [--dir <PATH>]`**: Captures Day-0 `XrayReport` bounds before scaffolding and sets `strict_mode: false` on indebted repositories. Writes `nomos.baseline.json` (`XrayBaselineManifest`) on disk alongside governance contracts.
 
 ### 4.17 Branch Guard Post-Commit Hook (`nomos hook post-commit`)
 * **`nomos hook post-commit`**: Executes automatically from `.git/hooks/post-commit` when `BoundaryConfig.IsolationMode` resolves to `branch`. On non-protected branches, reads the latest commit message and changed files, distills resolved `BRANCH-*` traps into `mneme.db`, and clears the branch trace. Under `branch` mode, `vscope.IsWorktreeContext` treats feature branches as diff-scoped verification targets. `CommitSchemaGate` also accepts standard commit subjects without worktree trailers.
@@ -395,6 +397,11 @@ type UpdateCheckCache struct {
 | `TC-INIT-01` | Law 4 & Law 7 (Day-0 Boundary & Mneme Seed) | `nomos init` on layered brownfield repo | Scaffolds zero-violation `architecture_boundaries` and seeds `mneme.db` idempotently |
 | `TC-INIT-02` | Law 1 (Cold-Start Recall & Lean Steering) | `nomos handshake` with `intent_twin_mode: off` and zero `pattern` records | Recalls Day-0 `architecture` memory and steers `IDLE` to `chore` |
 | `TC-INIT-03` | Law 4 & Law 7 (Auto-Calibrated Baseline Lock) | `nomos init --baseline` on legacy repository with pre-existing debt | Writes `nomos.baseline.json`, sets `strict_mode: false`, and freezes observed `BaselineEnvelope` |
+| `TC-INIT-04` | Law 3 & Law 7 (Default Branch Guard Init) | `nomos init` on brownfield repository | Scaffolds `isolation_mode: "branch"`, auto-baselines debt, skips `worktrees/`, avoids silent `main` commits |
+| `TC-INIT-05` | Law 3 (Stealth Local Trial & Promotion) | `nomos init --local` then `nomos init` | Uses `.git/info/exclude` with clean `git status`; non-local `init` cleans block |
+| `TC-INIT-06` | Law 6 (Agent Adapter Filtering) | `nomos init --agents claude` | Scaffolds selected agent hooks and compact `AGENTS_BRANCH.md` |
+| `TC-INIT-07` | Law 3 & Law 7 (Worktree & Strict Overrides) | `nomos init --worktrees` and `nomos init --strict` | `--worktrees` sets `isolation_mode: "worktree"`; `--strict` preserves `strict_mode: true` |
+| `TC-HELP-01` | Law 6 (Two-Tier Root Help) | `nomos --help` vs `nomos --help-agent` | Default help hides agent RPCs; `--help-agent` prints full catalog without aliases |
 | `TC-XRAY-03` | Law 2 & Law 3 (Read-Only CLI X-Ray) | `nomos xray --json` and `nomos xray --markdown` on uninitialized directory | Emits structured `XrayReport` and Markdown card with zero filesystem or ledger writes |
 | `TC-BG-07` | Law 1 & Law 2 (Post-Commit Mneme Distill) | `nomos hook post-commit` after `nomos verify` trap fix on `feat/auth` | Distills `BRANCH-*` trap-to-fix pitfall into `mneme.db` and clears branch trace |
 | `TC-REL-001` | Law 4 (SPDX Apache-2.0 License) | `LICENSE` audit in `legal_release_contract_test.go` | Verifies verbatim SPDX Apache-2.0 text and appendix |
