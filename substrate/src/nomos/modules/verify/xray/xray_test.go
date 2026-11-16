@@ -151,13 +151,15 @@ func TestScanRepository_DayZeroVerifyParitySensorsAndHashedBundles(t *testing.T)
 	magic.WriteString("\t}\n\treturn i\n}\n")
 	writeFixture("src/svc/handler.go", magic.String())
 	writeFixture("static/sovereign-sandbox/assets/gitGraphDiagram-WNU8YQGX-C4AM6nWs.js", "export function x() {\n  return 1;\n}\n")
+	writeFixture("vendors/nerdamer-prime/Algebra.js", "export function vendorJunk() { return 1; }\n")
+	writeFixture("third_party/zlib/inflate.c", "int inflate_stub(void) { return 0; }\n")
 
 	rep, err := xray.ScanRepository(root, xray.DefaultScanOptions())
 	if err != nil {
 		t.Fatalf("ScanRepository failed: %v", err)
 	}
 	if rep.FilesScanned != 1 {
-		t.Fatalf("expected hashed bundle chunk to be excluded (FilesScanned=1), got %d", rep.FilesScanned)
+		t.Fatalf("expected hashed bundle and vendored dirs to be excluded (FilesScanned=1), got %d", rep.FilesScanned)
 	}
 	if rep.HighArityFuncs != 1 || rep.DeepNestingFuncs != 1 || rep.UncheckedErrors != 1 || rep.SecretPathLeaks != 1 || rep.MagicStringGroups != 1 {
 		t.Fatalf("expected all 5 parity counters to equal 1, got %+v", rep)
@@ -167,6 +169,10 @@ func TestScanRepository_DayZeroVerifyParitySensorsAndHashedBundles(t *testing.T)
 	}
 	if len(rep.Hotspots) != 1 || rep.Hotspots[0].UncheckedErrors != 1 || rep.Hotspots[0].SecretLeaks != 1 {
 		t.Fatalf("unexpected hotspot payload: %+v", rep.Hotspots)
+	}
+	joinedReasons := strings.Join(rep.Hotspots[0].Reasons, ",")
+	if !strings.Contains(joinedReasons, "path_leaks=1") || strings.Contains(joinedReasons, "secret_leaks=") {
+		t.Fatalf("expected path_leaks=1 without secret_leaks= for host path literal, got reasons %v", rep.Hotspots[0].Reasons)
 	}
 }
 

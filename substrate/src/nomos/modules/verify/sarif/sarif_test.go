@@ -24,6 +24,14 @@ func TestFromXrayReport_ValidSarifLog(t *testing.T) {
 				Reasons:       []string{"file_loc=520>400", "secret_leaks=1"},
 			},
 			{
+				File:          "pkg/device/client.go",
+				Language:      "go",
+				LOC:           681,
+				MaxComplexity: 17,
+				SecretLeaks:   2,
+				Reasons:       []string{"file_loc=681>400", "path_leaks=2"},
+			},
+			{
 				File:     "pkg/core/clean.go",
 				Language: "go",
 				LOC:      40,
@@ -43,12 +51,16 @@ func TestFromXrayReport_ValidSarifLog(t *testing.T) {
 	if decoded["version"] != SarifVersion || decoded["$schema"] != SarifSchemaURI {
 		t.Fatalf("unexpected SARIF version/schema: %v / %v", decoded["version"], decoded["$schema"])
 	}
-	if len(log.Runs) != 1 || log.Runs[0].Tool.Driver.Name != "Nomos" || len(log.Runs[0].Results) != 1 {
-		t.Fatalf("expected 1 SarifRun and 1 finding for hotspot with reasons, got %+v", log)
+	if len(log.Runs) != 1 || log.Runs[0].Tool.Driver.Name != "Nomos" || len(log.Runs[0].Results) != 2 {
+		t.Fatalf("expected 1 SarifRun and 2 findings for hotspots with reasons, got %+v", log)
 	}
 	res := log.Runs[0].Results[0]
 	if res.Level != "error" || res.Locations[0].PhysicalLocation.ArtifactLocation.URI != "pkg/core/monolith.go" {
-		t.Fatalf("unexpected xray SARIF result: %+v", res)
+		t.Fatalf("unexpected xray SARIF result[0]: %+v", res)
+	}
+	pathRes := log.Runs[0].Results[1]
+	if pathRes.Level != "warning" || pathRes.Locations[0].PhysicalLocation.ArtifactLocation.URI != "pkg/device/client.go" {
+		t.Fatalf("expected path_leaks-only hotspot to emit warning level, got %+v", pathRes)
 	}
 }
 

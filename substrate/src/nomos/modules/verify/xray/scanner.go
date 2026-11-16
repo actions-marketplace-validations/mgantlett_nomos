@@ -30,6 +30,7 @@ var (
 	ignoredScanDirs = map[string]bool{
 		".git": true, ".hg": true, ".svn": true, ".tmp": true,
 		"worktrees": true, "node_modules": true, "vendor": true,
+		"vendors": true, "third_party": true, "third-party": true, "3rdparty": true,
 		".venv": true, "venv": true, "env": true, "dist": true,
 		"webdist": true, "build": true, "out": true, "target": true,
 		"__pycache__": true, ".tox": true, ".mypy_cache": true,
@@ -59,10 +60,12 @@ type fileEvalMetrics struct {
 	maxFnLOC   int
 	maxParams  int
 	maxNesting int
-	stubs      int
-	sinks      int
-	unchecked  int
-	secretLeak int
+	stubs        int
+	sinks        int
+	unchecked    int
+	secretLeak   int
+	secretTokens int
+	pathLeaks    int
 }
 
 // ScanRepository executes a read-only 11-language structural scan of targetDir without writing files or touching SQLite (@intent tree_sitter_ast_gate_spec.md #XrayReport).
@@ -252,7 +255,8 @@ func evaluateImplementationMetrics(relSlash, lang string, loc int, data []byte, 
 		relSlash, data, astdebt.MaxFunctionParams, astdebt.MaxFunctionNesting,
 	)
 	unchecked := verify.CountFileUncheckedErrors(relSlash, data)
-	secretLeaks := verify.CountFileSecretAndPathLeaks(relSlash, data)
+	secretTokens, pathLeaks := verify.SplitFileSecretAndPathLeaks(relSlash, data)
+	secretLeaks := secretTokens + pathLeaks
 
 	acc.report.EmptyStubs += stubs
 	acc.report.SecuritySinks += sinks
@@ -269,6 +273,7 @@ func evaluateImplementationMetrics(relSlash, lang string, loc int, data []byte, 
 		relSlash: relSlash, lang: lang, loc: loc, cds: cds,
 		maxComp: maxComp, maxFnLOC: maxFnLOC, maxParams: maxParams, maxNesting: maxNesting,
 		stubs: stubs, sinks: sinks, unchecked: unchecked, secretLeak: secretLeaks,
+		secretTokens: secretTokens, pathLeaks: pathLeaks,
 	}
 	updateBaselineEnvelope(&acc.report.BaselineEnvelope, fm)
 	acc.hotspotsByFile[relSlash] = buildHotspotCandidate(fm, acc.thresholds)

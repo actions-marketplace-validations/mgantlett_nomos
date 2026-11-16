@@ -67,7 +67,8 @@ func collectHotspotReasons(fm fileEvalMetrics, th treesitter.EngineThresholds) [
 	reasons = appendThresholdReason(reasons, "nesting", fm.maxNesting, astdebt.MaxFunctionNesting)
 	reasons = appendCountReason(reasons, "stubs", fm.stubs)
 	reasons = appendCountReason(reasons, "swallowed_errors", fm.unchecked)
-	reasons = appendCountReason(reasons, "secret_leaks", fm.secretLeak)
+	reasons = appendCountReason(reasons, "secret_leaks", fm.secretTokens)
+	reasons = appendCountReason(reasons, "path_leaks", fm.pathLeaks)
 	reasons = appendCountReason(reasons, "cwe_sinks", fm.sinks)
 	return reasons
 }

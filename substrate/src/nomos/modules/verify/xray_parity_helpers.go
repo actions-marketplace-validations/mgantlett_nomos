@@ -37,19 +37,26 @@ func CountFileUncheckedErrors(relSlash string, data []byte) int {
 	return len(astdebt.CheckPolyglotUncheckedErrors(ext, relSlash, data))
 }
 
+// SplitFileSecretAndPathLeaks returns separate counts of credential secret tokens and hardcoded host-path literals in a single source file (@intent tree_sitter_ast_gate_spec.md #XrayReport).
+func SplitFileSecretAndPathLeaks(relSlash string, data []byte) (int, int) {
+	if len(data) == 0 {
+		return 0, 0
+	}
+	secretTokens := 0
+	if !isIgnoredSecretFile(relSlash) && impact.MatchSecretTokenLabel(string(data)) != "" {
+		secretTokens = 1
+	}
+	pathLeaks := 0
+	if !strings.HasSuffix(relSlash, "gates_governance.go") {
+		pathLeaks = countHostPathLiteralsInBytes(relSlash, data, defaultForbiddenLiterals())
+	}
+	return secretTokens, pathLeaks
+}
+
 // CountFileSecretAndPathLeaks counts hardcoded secret tokens and workstation path literals in a single source file (@intent tree_sitter_ast_gate_spec.md #XrayReport).
 func CountFileSecretAndPathLeaks(relSlash string, data []byte) int {
-	if len(data) == 0 {
-		return 0
-	}
-	leaks := 0
-	if !isIgnoredSecretFile(relSlash) && impact.MatchSecretTokenLabel(string(data)) != "" {
-		leaks++
-	}
-	if !strings.HasSuffix(relSlash, "gates_governance.go") {
-		leaks += countHostPathLiteralsInBytes(relSlash, data, defaultForbiddenLiterals())
-	}
-	return leaks
+	secretTokens, pathLeaks := SplitFileSecretAndPathLeaks(relSlash, data)
+	return secretTokens + pathLeaks
 }
 
 func countHostPathLiteralsInBytes(relSlash string, data []byte, patterns []string) int {

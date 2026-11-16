@@ -106,10 +106,7 @@ func FromXrayReport(rep *xray.XrayReport, version string) *SarifLog {
 			if len(hs.Reasons) == 0 {
 				continue
 			}
-			level := "warning"
-			if hs.SecretLeaks > 0 {
-				level = "error"
-			}
+			level := xrayHotspotSarifLevel(hs)
 			msg := fmt.Sprintf("%s (%s, %d LOC, max V(G)=%d): %s", hs.File, hs.Language, hs.LOC, hs.MaxComplexity, strings.Join(hs.Reasons, ", "))
 			results = append(results, SarifResult{
 				RuleID:    "NOMOS-XRAY-HOTSPOT",
@@ -120,6 +117,22 @@ func FromXrayReport(rep *xray.XrayReport, version string) *SarifLog {
 		}
 	}
 	return buildSarifLog(version, rules, results)
+}
+
+func xrayHotspotSarifLevel(hs xray.XrayHotspot) string {
+	hasPathOnly := false
+	for _, r := range hs.Reasons {
+		if strings.HasPrefix(r, "secret_leaks=") || strings.HasPrefix(r, "cwe_sinks=") {
+			return "error"
+		}
+		if strings.HasPrefix(r, "path_leaks=") {
+			hasPathOnly = true
+		}
+	}
+	if hs.SecretLeaks > 0 && !hasPathOnly {
+		return "error"
+	}
+	return "warning"
 }
 
 // FromVerifyReport converts a PipelineReport into an OASIS SARIF 2.1.0 log (@intent task_lifecycle_cli_spec.md).
