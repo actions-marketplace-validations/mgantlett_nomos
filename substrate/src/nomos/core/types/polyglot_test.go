@@ -10,11 +10,13 @@ func TestSupportedLanguageValidation(t *testing.T) {
 			t.Errorf("expected %s to be recognized as supported language", lang)
 		}
 	}
-	if !IsValidLanguage("rust") {
-		t.Errorf("expected rust to be supported in expanded schema")
+	for _, lang := range []SupportedLanguage{"rust", "ruby", "java", "kotlin", "csharp"} {
+		if !IsValidLanguage(lang) {
+			t.Errorf("expected %s to be supported in expanded schema", lang)
+		}
 	}
-	if IsValidLanguage("ruby") {
-		t.Errorf("expected ruby to be unsupported in current schema")
+	if IsValidLanguage("cobol") {
+		t.Errorf("expected cobol to be unsupported in current schema")
 	}
 }
 
@@ -68,10 +70,18 @@ func TestSourceRootConfigValidation(t *testing.T) {
 			expectErr: true,
 		},
 		{
+			name: "valid csharp source root",
+			cfg: &SourceRootConfig{
+				Path:     "src/App.Domain",
+				Language: LanguageCSharp,
+			},
+			expectErr: false,
+		},
+		{
 			name: "unsupported language",
 			cfg: &SourceRootConfig{
 				Path:     "frontend",
-				Language: "ruby",
+				Language: "cobol",
 			},
 			expectErr: true,
 		},

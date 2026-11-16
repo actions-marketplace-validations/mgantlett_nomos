@@ -20,9 +20,13 @@ const (
 	LanguageMarkdown   SupportedLanguage = "markdown"
 	LanguageYAML       SupportedLanguage = "yaml"
 	LanguagePython     SupportedLanguage = "python"
+	LanguageRuby       SupportedLanguage = "ruby"
 	LanguageRust       SupportedLanguage = "rust"
 	LanguageC          SupportedLanguage = "c"
 	LanguageCPP        SupportedLanguage = "cpp"
+	LanguageJava       SupportedLanguage = "java"
+	LanguageKotlin     SupportedLanguage = "kotlin"
+	LanguageCSharp     SupportedLanguage = "csharp"
 	LanguageHTML       SupportedLanguage = "html"
 	LanguageCSS        SupportedLanguage = "css"
 )
@@ -36,9 +40,13 @@ var AllSupportedLanguages = []SupportedLanguage{
 	LanguageMarkdown,
 	LanguageYAML,
 	LanguagePython,
+	LanguageRuby,
 	LanguageRust,
 	LanguageC,
 	LanguageCPP,
+	LanguageJava,
+	LanguageKotlin,
+	LanguageCSharp,
 	LanguageHTML,
 	LanguageCSS,
 }

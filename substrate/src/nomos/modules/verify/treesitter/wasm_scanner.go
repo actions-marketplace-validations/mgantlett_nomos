@@ -72,6 +72,22 @@ func (e *WazeroTreeSitterEngine) ExecuteWasmVerify(ctx context.Context) error {
 	if ok, handled := e.scanDelimiterBalanceWasm("func broken() {"); !handled || ok {
 		return fmt.Errorf("expected treesitter wasm delimiter balance to reject unclosed brace")
 	}
+	for lang, wantID := range map[string]int{langJava: int(managedGrammarJavaID), langCSharp: int(managedGrammarCSharpID)} {
+		if mErr := e.verifyManagedDriverProbe(lang, wantID); mErr != nil {
+			return mErr
+		}
+	}
+	return nil
+}
+
+func (e *WazeroTreeSitterEngine) verifyManagedDriverProbe(lang string, wantID int) error {
+	gotID, gErr := e.ManagedGrammarID(lang)
+	if gErr != nil || gotID != wantID {
+		return fmt.Errorf("unexpected %s managed wasm grammar id: got %d want %d (err=%v)", lang, gotID, wantID, gErr)
+	}
+	if res, ok := e.callManagedByteScanner(lang, "scan_block_balance", "int[] a = new int[1];"); !ok || res != 1 {
+		return fmt.Errorf("expected %s managed wasm scanner to accept balanced input", lang)
+	}
 	return nil
 }
 

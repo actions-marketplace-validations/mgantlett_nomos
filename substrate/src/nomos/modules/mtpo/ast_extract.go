@@ -14,9 +14,11 @@ import (
 )
 
 var (
-	polyExportRe = regexp.MustCompile(`(?m)^\s*(?:export\s+(?:async\s+)?(?:function|class|interface|type|const)\s+|pub\s+(?:async\s+)?(?:fn|struct|enum|trait)\s+|def\s+)([A-Za-z_][A-Za-z0-9_]*)`)
-	polyImportRe = regexp.MustCompile(`(?m)^\s*(?:import\s+.*?from\s+['"]([^'"]+)['"]|from\s+([A-Za-z0-9_.]+)\s+import|use\s+([A-Za-z0-9_:]+))`)
-	polyCallRe   = regexp.MustCompile(`\b([A-Z][A-Za-z0-9_]{2,})\s*\(`)
+	polyExportRe    = regexp.MustCompile(`(?m)^\s*(?:export\s+(?:async\s+)?(?:function|class|interface|type|const)\s+|pub\s+(?:async\s+)?(?:fn|struct|enum|trait)\s+|def\s+)([A-Za-z_][A-Za-z0-9_]*)`)
+	polyImportRe    = regexp.MustCompile(`(?m)^\s*(?:import\s+.*?from\s+['"]([^'"]+)['"]|from\s+([A-Za-z0-9_.]+)\s+import|use\s+([A-Za-z0-9_:]+))`)
+	managedExportRe = regexp.MustCompile(`(?m)^\s*public\s+(?:(?:abstract|final|static|sealed|non-sealed|partial|readonly|virtual|override|async|new|synchronized)\s+)*(?:(?:class|interface|enum|record|struct|@interface)\s+([A-Za-z_][A-Za-z0-9_]*)|(?:[A-Za-z_][A-Za-z0-9_.<>,\[\]?]*\s+)+([A-Za-z_][A-Za-z0-9_]*)\s*(?:<[^>]+>)?\s*\()`)
+	managedImportRe = regexp.MustCompile(`(?m)^\s*(?:import\s+(?:static\s+)?([A-Za-z0-9_.*]+)|using\s+(?:static\s+)?([A-Za-z0-9_.]+))\s*;`)
+	polyCallRe      = regexp.MustCompile(`\b([A-Z][A-Za-z0-9_]{2,})\s*\(`)
 )
 
 // ExtractFileASTSets extracts exported declarations, referenced symbols, and package imports from fullPath.
@@ -119,21 +121,15 @@ func collectGoReferencedSymbols(node *ast.File, pkgName string, aliasPkg map[str
 }
 
 func extractPolyglotFileASTSets(relFile, text string) ([]string, []string, []string) {
+	ext := strings.ToLower(filepath.Ext(relFile))
 	modPrefix := strings.TrimSuffix(filepath.Base(relFile), filepath.Ext(relFile))
 	writeSet := make(map[string]bool)
 	readSet := make(map[string]bool)
 	importSet := make(map[string]bool)
-	for _, m := range polyExportRe.FindAllStringSubmatch(text, -1) {
-		if len(m) >= 2 {
-			writeSet[modPrefix+"."+m[1]] = true
-		}
-	}
-	for _, m := range polyImportRe.FindAllStringSubmatch(text, -1) {
-		for i := 1; i < len(m); i++ {
-			if m[i] != "" {
-				importSet[m[i]] = true
-			}
-		}
+	if ext == ".java" || ext == ".cs" {
+		collectManagedASTSets(modPrefix, text, writeSet, importSet)
+	} else {
+		collectScriptAndTSASTSets(modPrefix, text, writeSet, importSet)
 	}
 	for _, m := range polyCallRe.FindAllStringSubmatch(text, -1) {
 		if len(m) >= 2 && !writeSet[modPrefix+"."+m[1]] {
@@ -141,6 +137,38 @@ func extractPolyglotFileASTSets(relFile, text string) ([]string, []string, []str
 		}
 	}
 	return sortedKeys(writeSet), sortedKeys(readSet), sortedKeys(importSet)
+}
+
+func collectScriptAndTSASTSets(modPrefix, text string, writeSet, importSet map[string]bool) {
+	for _, m := range polyExportRe.FindAllStringSubmatch(text, -1) {
+		if len(m) >= 2 {
+			writeSet[modPrefix+"."+m[1]] = true
+		}
+	}
+	for _, m := range polyImportRe.FindAllStringSubmatch(text, -1) {
+		addFirstNonEmptyGroup(importSet, m)
+	}
+}
+
+func collectManagedASTSets(modPrefix, text string, writeSet, importSet map[string]bool) {
+	for _, m := range managedExportRe.FindAllStringSubmatch(text, -1) {
+		for i := 1; i < len(m); i++ {
+			if m[i] != "" {
+				writeSet[modPrefix+"."+m[i]] = true
+			}
+		}
+	}
+	for _, m := range managedImportRe.FindAllStringSubmatch(text, -1) {
+		addFirstNonEmptyGroup(importSet, m)
+	}
+}
+
+func addFirstNonEmptyGroup(dst map[string]bool, match []string) {
+	for i := 1; i < len(match); i++ {
+		if match[i] != "" {
+			dst[match[i]] = true
+		}
+	}
 }
 
 func sortedKeys(m map[string]bool) []string {

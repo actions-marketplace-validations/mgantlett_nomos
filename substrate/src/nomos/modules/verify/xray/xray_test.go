@@ -212,3 +212,41 @@ func TestScanRepository_HonorsGitIgnoreAndBuildNext(t *testing.T) {
 		t.Fatalf("expected only tracked clean.go (score 0, 1 file), got %+v", rep)
 	}
 }
+
+// TestScanRepository_JavaAndCSharpHotspotsAndStubs verifies TC-POLY-006.
+// @verifies TC-POLY-006
+func TestScanRepository_JavaAndCSharpHotspotsAndStubs(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "managed-xray")
+	writeManaged := func(rel, body string) {
+		full := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var javaComplex strings.Builder
+	javaComplex.WriteString("public class Router {\n\tpublic int route(int x) {\n")
+	for i := 0; i < 16; i++ {
+		javaComplex.WriteString("\t\tif (x > 0) { x++; }\n")
+	}
+	javaComplex.WriteString("\t\treturn x;\n\t}\n\tpublic String stubbed(int id) {\n\t\treturn null;\n\t}\n}\n")
+	writeManaged("src/main/java/Router.java", javaComplex.String())
+	writeManaged("src/test/java/RouterTest.java", "public class RouterTest {\n\t@Disabled\n\tpublic void testRoute() {}\n}\n")
+
+	writeManaged("src/Handlers/OrderHandler.cs", "public class OrderHandler {\n\tpublic bool Save(int id) {\n\t\treturn false;\n\t}\n\tpublic void Reset() => throw new NotImplementedException();\n}\n")
+	writeManaged("tests/OrderHandlerTests.cs", "public class OrderHandlerTests {\n\t[Fact(Skip = \"wip\")]\n\tpublic void TestSave() {}\n}\n")
+
+	rep, err := xray.ScanRepository(root, xray.DefaultScanOptions())
+	if err != nil {
+		t.Fatalf("ScanRepository failed: %v", err)
+	}
+	if rep.Languages["java"] != 2 || rep.Languages["csharp"] != 2 {
+		t.Fatalf("expected java:2 and csharp:2, got %v", rep.Languages)
+	}
+	if rep.OversizedFuncs < 1 || rep.EmptyStubs < 3 || rep.SkippedTests != 2 || len(rep.Hotspots) == 0 {
+		t.Fatalf("expected Java/C# hotspots, >=3 stubs, 2 skipped tests, got %+v", rep)
+	}
+}

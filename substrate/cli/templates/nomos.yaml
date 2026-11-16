@@ -45,7 +45,7 @@ governance:
     # --------------------------------------------------------------------------
     # Law 2, 4, 5, 6 & 7 (Deterministic AST & Runtime Quality Gates):
     # Machine-enforced across supported polyglot languages (Go, TS, JS, Svelte,
-    # Python, Rust, C, C++).
+    # Python, Ruby, Rust, C, C++, Java, Kotlin, C#).
     # --------------------------------------------------------------------------
     quality_gates:
         # When true (recommended), prevents AI agents from relaxing thresholds
@@ -77,7 +77,7 @@ governance:
         # coverage_mode: "live"
 
         # Automatically execute local polyglot syntax & test toolchains when present
-        # (Python py_compile/pytest, TypeScript tsc --noEmit, Rust cargo check).
+        # (Python py_compile/pytest, TypeScript tsc --noEmit, Ruby, Rust cargo check, JVM mvn/gradle, C# dotnet).
         polyglot_toolchains: true
 
         # Optional: Exclude generated, vendored, or third-party build paths

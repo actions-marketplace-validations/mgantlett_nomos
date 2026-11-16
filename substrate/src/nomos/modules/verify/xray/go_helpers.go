@@ -5,11 +5,14 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"regexp"
 	"strings"
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/treesitter"
 )
+
+var explicitCSharpStubRe = regexp.MustCompile(`=>\s*throw\s+new\s+NotImplementedException\b`)
 
 func countExplicitPolyglotStubs(lang string, data []byte) int {
 	switch lang {
@@ -24,6 +27,8 @@ func countExplicitPolyglotStubs(lang string, data []byte) int {
 		return len(explicitRustStubRe.FindAll(data, -1))
 	case "typescript", "svelte":
 		return len(explicitTSStubRe.FindAll(data, -1))
+	case "csharp":
+		return len(explicitCSharpStubRe.FindAll(data, -1))
 	default:
 		return 0
 	}

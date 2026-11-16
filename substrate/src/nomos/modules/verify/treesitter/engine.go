@@ -17,6 +17,8 @@ type WazeroTreeSitterEngine struct {
 	runtime    wazero.Runtime
 	compiled   wazero.CompiledModule
 	module     api.Module
+	javaMod    api.Module
+	csharpMod  api.Module
 	wasmMu     sync.Mutex
 	thresholds EngineThresholds
 }
@@ -101,10 +103,20 @@ func NewTreeSitterEngine(ctx context.Context) (*WazeroTreeSitterEngine, error) {
 		return nil, fmt.Errorf("failed instantiating treesitter wasm module: %w", err)
 	}
 
+	javaMod, csMod, mErr := instantiateManagedGrammarModules(ctx, rt)
+	if mErr != nil {
+		if cErr := rt.Close(ctx); cErr != nil {
+			return nil, fmt.Errorf("failed instantiating managed wasm drivers (%v): %w", cErr, mErr)
+		}
+		return nil, mErr
+	}
+
 	return &WazeroTreeSitterEngine{
 		runtime:    rt,
 		compiled:   compiled,
 		module:     mod,
+		javaMod:    javaMod,
+		csharpMod:  csMod,
 		thresholds: DefaultEngineThresholds(),
 	}, nil
 }
@@ -144,6 +156,11 @@ func (e *WazeroTreeSitterEngine) ParseAndEvaluate(ctx context.Context, filePath 
 	}
 	if rep, handled, err := evaluateNonFunctionLanguage(lang, filePath, content, totalLines); handled {
 		return rep, err
+	}
+	if lang == langJava || lang == langCSharp {
+		if sErr := validateManagedSyntaxWithEngine(e, lang, filePath, content); sErr != nil {
+			return nil, sErr
+		}
 	}
 	funcs, err := ExtractFunctions(lang, filePath, content)
 	if err != nil {

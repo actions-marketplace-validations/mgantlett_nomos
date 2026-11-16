@@ -9,8 +9,8 @@ var (
 	rustFuncRegex   = regexp.MustCompile(`(?m)^\s*(?:pub(?:\([^)]+\))?\s+)?(?:async\s+)?(?:unsafe\s+)?fn\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:<[^>]*>)?\s*\(`)
 	cFuncRegex      = regexp.MustCompile(`(?m)^\s*(?:[a-zA-Z_][a-zA-Z0-9_*\s]+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)\s*\{`)
 	kotlinFuncRegex = regexp.MustCompile(`(?m)^\s*(?:(?:public|private|protected|internal|override|suspend|inline|open)\s+)*fun\s+(?:<[^>]+>\s*)?([a-zA-Z_][a-zA-Z0-9_]*)\s*\(`)
-	javaMethodRegex = regexp.MustCompile(`(?m)^\s*(?:(?:public|private|protected|static|final|synchronized|abstract|default)\s+)+(?:<[^>]+>\s*)?[a-zA-Z_][a-zA-Z0-9_<>,\[\]\s?]*\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)\s*(?:throws\s+[a-zA-Z0-9_,\s]+)?\{`)
-	csharpMethodRe  = regexp.MustCompile(`(?m)^\s*(?:(?:public|private|protected|internal|static|virtual|override|async|sealed|new)\s+)+(?:[a-zA-Z_][a-zA-Z0-9_<>,\[\]?]*\s+)+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:<[^>]+>)?\s*\([^)]*\)\s*\{`)
+	javaMethodRegex = regexp.MustCompile(`(?m)^\s*(?:(?:public|private|protected|static|final|synchronized|abstract|default)\s+)+(?:<[^>]+>\s*)?[a-zA-Z_][a-zA-Z0-9_<>,\[\]\s?]*\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)\s*(?:throws\s+[a-zA-Z0-9_.,\s]+)?\{`)
+	csharpMethodRe  = regexp.MustCompile(`(?m)^\s*(?:(?:public|private|protected|internal|static|virtual|override|async|sealed|new)\s+)+(?:[a-zA-Z_][a-zA-Z0-9_.<>,\[\]?]*(?:\s*<[^>{}]+>)?\s+)+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:<[^>]+>)?\s*\([^)]*\)(?:\s+where\s+[^{]+)?\s*\{`)
 )
 
 type braceScanSpec struct {
@@ -22,7 +22,7 @@ type braceScanSpec struct {
 }
 
 func scanBraceLanguage(filePath string, content []byte, spec braceScanSpec) ([]FunctionMetric, error) {
-	if err := ValidateBraceSyntax(spec.langName, filePath, content); err != nil {
+	if err := validateBraceLanguageSyntax(spec.langName, filePath, content); err != nil {
 		return nil, err
 	}
 	origLines := strings.Split(string(content), "\n")
@@ -30,19 +30,36 @@ func scanBraceLanguage(filePath string, content []byte, spec braceScanSpec) ([]F
 	spans := collectBraceFuncSpans(cleanLines, spec.funcRegex)
 	metrics := make([]FunctionMetric, 0, len(spans))
 	for _, sp := range spans {
-		masked := maskNestedLines(cleanLines, sp.startIdx, sp.endIdx, spans)
-		origBody := origLines[sp.startIdx : sp.endIdx+1]
-		metrics = append(metrics, FunctionMetric{
-			File:       filePath,
-			Line:       sp.startIdx + 1,
-			Name:       sp.name,
-			Complexity: calculateBranchCount(masked, spec.branchToks),
-			LOC:        sp.endIdx - sp.startIdx + 1,
-			Documented: checkPrecedingDoc(origLines, sp.startIdx, spec.docPrefixes...),
-			EmptyBlock: isBraceEmpty(origBody, spec.shimMarkers...),
-		})
+		metrics = append(metrics, buildBraceFuncMetric(spec, filePath, origLines, cleanLines, spans, sp))
 	}
 	return metrics, nil
+}
+
+func validateBraceLanguageSyntax(langName, filePath string, content []byte) error {
+	if langName == langJava || langName == langCSharp {
+		return ValidateManagedWasmSyntax(langName, filePath, content)
+	}
+	return ValidateBraceSyntax(langName, filePath, content)
+}
+
+func buildBraceFuncMetric(spec braceScanSpec, filePath string, origLines, cleanLines []string, spans []funcSpan, sp funcSpan) FunctionMetric {
+	masked := maskNestedLines(cleanLines, sp.startIdx, sp.endIdx, spans)
+	origBody := origLines[sp.startIdx : sp.endIdx+1]
+	cleanBody := cleanLines[sp.startIdx : sp.endIdx+1]
+	header := strings.Join(cleanLines[sp.startIdx:sp.headerEnd+1], " ")
+	empty := isBraceEmpty(origBody, spec.shimMarkers...)
+	if !empty && (spec.langName == langJava || spec.langName == langCSharp) {
+		empty = isManagedConstantReturnStub(spec.langName, filePath, header, cleanBody, origBody)
+	}
+	return FunctionMetric{
+		File:       filePath,
+		Line:       sp.startIdx + 1,
+		Name:       sp.name,
+		Complexity: calculateBranchCount(masked, spec.branchToks),
+		LOC:        sp.endIdx - sp.startIdx + 1,
+		Documented: checkPrecedingDoc(origLines, sp.startIdx, spec.docPrefixes...),
+		EmptyBlock: empty,
+	}
 }
 
 func collectBraceFuncSpans(cleanLines []string, funcRegex *regexp.Regexp) []funcSpan {
@@ -85,7 +102,7 @@ func scanC(filePath string, content []byte) ([]FunctionMetric, error) {
 
 func scanJava(filePath string, content []byte) ([]FunctionMetric, error) {
 	return scanBraceLanguage(filePath, content, braceScanSpec{
-		langName:    "java",
+		langName:    langJava,
 		funcRegex:   javaMethodRegex,
 		docPrefixes: []string{"/**", "/*", "//"},
 		branchToks:  []string{"if (", "if(", "for (", "for(", "while (", "while(", "case ", "catch (", "catch(", "&&", "||", " ? "},
@@ -105,7 +122,7 @@ func scanKotlin(filePath string, content []byte) ([]FunctionMetric, error) {
 
 func scanCSharp(filePath string, content []byte) ([]FunctionMetric, error) {
 	return scanBraceLanguage(filePath, content, braceScanSpec{
-		langName:    "csharp",
+		langName:    langCSharp,
 		funcRegex:   csharpMethodRe,
 		docPrefixes: []string{"///", "/**", "/*", "//"},
 		branchToks:  []string{"if (", "if(", "for (", "for(", "foreach (", "foreach(", "while (", "while(", "case ", "catch (", "&&", "||", "??"},
@@ -148,16 +165,24 @@ func calculateBranchCount(bodyLines []string, tokens []string) int {
 }
 
 func checkPrecedingDoc(lines []string, startIdx int, docPrefixes ...string) bool {
-	if startIdx <= 0 {
+	idx := startIdx - 1
+	for idx >= 0 && isPrecedingAnnotationLine(strings.TrimSpace(lines[idx])) {
+		idx--
+	}
+	if idx < 0 {
 		return false
 	}
-	prev := strings.TrimSpace(lines[startIdx-1])
+	prev := strings.TrimSpace(lines[idx])
 	for _, p := range docPrefixes {
 		if strings.HasPrefix(prev, p) || strings.HasSuffix(prev, "*/") {
 			return true
 		}
 	}
 	return false
+}
+
+func isPrecedingAnnotationLine(trimmed string) bool {
+	return strings.HasPrefix(trimmed, "@") || (strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]"))
 }
 
 func isBraceEmpty(bodyLines []string, shims ...string) bool {
