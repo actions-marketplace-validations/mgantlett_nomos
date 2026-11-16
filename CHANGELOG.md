@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v4.22.0] - 2026-11-16
+
+> Add zero-dependency nomos mcp stdio server for read, orient, and verify affordances; Add Java and C# WASM Tree-sitter drivers to polyglot AST verification and brownfield xray; Pin NOMOS_INSTALL_DIR in init --ci workflows and preserve PR step summary; Ship nomos ci-init workflow generator and OASIS SARIF 2.1.0 output for xray and verify (Apache 2.0)
+
+### CLI, Distribution & Hooks (`nomos cli`)
+- **Add zero-dependency nomos mcp stdio server for read, orient, and verify affordances (`INT-2075`, `SUB-3124`)**: Implement zero-dependency read-only nomos mcp stdio JSON-RPC 2.0 server exposing handshake, status, `task_dag`, `mem_recall`, `verify_impact`, and xray under --help-agent.
+- **Ship nomos ci-init workflow generator and OASIS SARIF 2.1.0 output for xray and verify (`INT-2074`, `SUB-3123`)**: Implement 'nomos ci-init' deterministic CI workflow writer (`.github/workflows/nomos-verify.yml` and `.gitlab-ci.yml` snippet) and OASIS SARIF 2.1.0 serializer for 'nomos xray --sarif' and 'nomos verify --sarif' with unit tests.
+
+### Verification & Quality Gates (`nomos verify`)
+- **Add Java and C# WASM Tree-sitter drivers to polyglot AST verification and brownfield xray (`INT-2076`, `SUB-3125`)**: Embed wazero Java and C# WASM Tree-sitter grammar drivers, add parameterized constant-return anti-shim detection, wire public symbol export and xray stub scanning, and align SupportedLanguage and `nomos.yaml` templates.
+
+### Release & Packaging (`.github/workflows/ci.yaml`, `README.md`)
+- **Pin NOMOS_INSTALL_DIR in init --ci workflows and preserve PR step summary (`SUB-3154`)**: Pin NOMOS_INSTALL_DIR in init --ci workflows, add Marketplace branding, and preserve PR step summary.
+
+---
+
 ## [v4.21.1] - 2026-11-16
 
 > Exempt external Go modules without nomos/substrate (Apache 2.0)
