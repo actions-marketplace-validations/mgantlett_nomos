@@ -300,7 +300,7 @@ func collectCLICapabilities(cmd *cobra.Command) []CapabilityItem {
 	root := cmd.Root()
 	var items []CapabilityItem
 	for _, sub := range root.Commands() {
-		if sub.Hidden || sub.Name() == "help" || sub.Name() == "completion" {
+		if (sub.Hidden && sub.GroupID == "") || sub.Name() == "help" || sub.Name() == "completion" {
 			continue
 		}
 		items = append(items, CapabilityItem{

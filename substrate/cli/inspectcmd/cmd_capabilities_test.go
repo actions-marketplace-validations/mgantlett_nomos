@@ -39,6 +39,7 @@ func TestCapabilitiesCmd_Default(t *testing.T) {
 }
 
 func TestCapabilitiesCmd_JSON(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
 	root := cli.NewRootCmd()
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)
