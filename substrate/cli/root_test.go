@@ -66,6 +66,13 @@ func TestRootCmd_StatusExecutionAndRemovedTaskStatusAlias(t *testing.T) {
 	if err := removed.Execute(); err == nil {
 		t.Fatal("expected removed 'nomos task status' duplicate command to fail closed under Law 6")
 	}
+
+	missingPlugin := cli.NewRootCmd()
+	missingPlugin.SetArgs([]string{"uninstalled-ext"})
+	enriched := cli.EnrichMissingPluginError(missingPlugin.Execute())
+	if enriched == nil || !strings.Contains(enriched.Error(), "nomos-plugin-uninstalled-ext") {
+		t.Fatalf("expected missing external plugin remedy, got %v", enriched)
+	}
 }
 
 func TestRootCmd_HelpOutput(t *testing.T) {

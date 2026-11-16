@@ -31,6 +31,22 @@ func TestRenderXrayAndPRProofLipgloss(t *testing.T) {
 			t.Fatalf("expected %q in RenderXrayTerminal output:\n%s", want, xrayOut)
 		}
 	}
+	if strings.Contains(xrayOut, "https://sophialabs.ca/sovereign") {
+		t.Fatalf("expected <50-file repo to omit multi-language extension hint:\n%s", xrayOut)
+	}
+
+	polyglotOut := RenderXrayTerminal(&xray.XrayReport{
+		ProjectName:  "enterprise-monorepo",
+		FilesScanned: 84,
+		TotalLOC:     14200,
+		Languages:    map[string]int{"go": 50, "typescript": 34},
+		Grade:        "A",
+		NextCommand:  "nomos verify --all",
+		Initialized:  true,
+	})
+	if !strings.Contains(polyglotOut, "https://sophialabs.ca/sovereign") {
+		t.Fatalf("expected >=50-file multi-language repo to surface cross-PR contract/compliance hint:\n%s", polyglotOut)
+	}
 
 	mutRep := &prproof.DiffMutationReport{
 		BaseRef:         "HEAD~1",

@@ -1,4 +1,5 @@
 // Package tui implements canonical Lipgloss terminal renderers for Gen-2 xray, prproof, and MTPO diagnostics.
+// @intent task_lifecycle_cli_spec.md
 package tui
 
 import (
@@ -28,9 +29,16 @@ func RenderXrayTerminal(rep *xray.XrayReport) string {
 	if rep.Initialized {
 		nextSummary = "Evaluate all 42 deterministic Definition of Done gates across the repository"
 	}
-	RenderNextActions(&sb, []types.ActionAffordance{
+	actions := []types.ActionAffordance{
 		{Command: rep.NextCommand, Summary: nextSummary},
-	})
+	}
+	if rep.FilesScanned >= 50 && len(rep.Languages) >= 2 {
+		actions = append(actions, types.ActionAffordance{
+			Command: "https://sophialabs.ca/sovereign",
+			Summary: "Multi-language repository detected - inspect cross-PR contract hulls and signed compliance receipts",
+		})
+	}
+	RenderNextActions(&sb, actions)
 	return sb.String()
 }
 

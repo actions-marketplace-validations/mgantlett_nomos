@@ -1,10 +1,13 @@
 // Package cli implements Tier 1 agent adapters, software physics telemetry,
 // release readiness, upgrades, and CLI command dispatch contracts.
+// @intent task_lifecycle_cli_spec.md
 package cli
 
 import (
 	"errors"
 	"fmt"
+	"strings"
+
 	"github.com/mgantlett/nomos/substrate/cli/diag"
 	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
 	"github.com/mgantlett/nomos/substrate/cli/inspectcmd"
@@ -80,9 +83,30 @@ func Execute() (execErr error) {
 	}()
 
 	rootCmd := NewRootCmd()
-	execErr = rootCmd.Execute()
+	execErr = EnrichMissingPluginError(rootCmd.Execute())
 	recordRootExecutionAnomaly(repoRoot, execErr)
 	return execErr
+}
+
+// EnrichMissingPluginError attaches an external plugin remedy when an unknown root subcommand is invoked.
+func EnrichMissingPluginError(err error) error {
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	const prefix = `unknown command "`
+	if !strings.Contains(msg, prefix) || !strings.Contains(msg, `for "nomos"`) {
+		return err
+	}
+	start := strings.Index(msg, prefix) + len(prefix)
+	rest := msg[start:]
+	end := strings.IndexByte(rest, '"')
+	if end <= 0 {
+		return err
+	}
+	sub := rest[:end]
+	return types.NewNomosError(types.ErrCodeCore, "%s", msg).
+		WithRemedy(fmt.Sprintf("install external plugin 'nomos-plugin-%s' on PATH if required (extensions: https://sophialabs.ca/sovereign)", sub))
 }
 
 func recordRootExecutionAnomaly(repoRoot string, err error) {
