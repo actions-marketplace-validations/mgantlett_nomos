@@ -332,7 +332,7 @@ type UpdateCheckCache struct {
 * **Stealth Local Trial (`--local`)**: Skips `.gitignore` edits and registers untracked governance files inside `.git/info/exclude` (`# Nomos Local Stealth Trial`) so `git status` stays clean. Running `nomos init` without `--local` removes that exclude block cleanly.
 * **Agent Detection & Filtering (`--agents`)**: Auto-detects present agent configs or binaries (`claude`, `cursor`, `opencode`, `gemini`, `agy`) and falls back to all five when none appear. Passing `--agents <csv|all>` filters hook manifests strictly to named targets and emits `CLAUDE.md` only when `claude` is active or pre-existing.
 * **Hermetic Worktree Graduation (`--worktrees`)**: Scaffolds `isolation_mode: "worktree"`, provisions `worktrees/`, merges full `templates/AGENTS.md`, seeds `mneme.db`, and stages governance commits when `--local` is false.
-* **Two-Tier Root Help (`--help-agent`)**: Default `nomos --help` displays core developer commands (`init`, `status`, `task`, `verify`, `xray`, `mem`, `issue`, `update`, `version`) and a `--help-agent` footer. Passing `nomos --help-agent` unhides internal harness RPCs (`handshake`, `hook`, `directive`, `capabilities`, `physics`, `session`) with zero Cobra aliases under Law 6.
+* **Two-Tier Root Help (`--help-agent`)**: Default `nomos --help` displays core developer commands (`init`, `status`, `task`, `verify`, `xray`, `mem`, `issue`, `update`, `version`) and a `--help-agent` footer. Passing `nomos --help-agent` unhides internal harness RPCs (`handshake`, `hook`, `directive`, `capabilities`, `physics`, `session`, `mcp`) with zero Cobra aliases under Law 6.
 
 ### 4.16 Zero-Init Brownfield X-Ray & Baseline Lock (`nomos xray` & `nomos init --baseline`)
 * **`nomos xray [dir] [--json] [--markdown] [--top <N>]`**: Scans any directory across 11 languages without writing files or mutating SQLite stores. Emits `HangoverScore` (`0-100`), `Grade`, clones, monoliths, stubs, skipped tests, and `XrayHotspot` outputs.
@@ -344,6 +344,10 @@ type UpdateCheckCache struct {
 ### 4.18 Zero-Phone-Home CI Scaffolding & OASIS SARIF 2.1.0 (`nomos init --ci` & `--sarif`)
 * **`nomos init --ci [--dir <PATH>]`**: Generates deterministic `.github/workflows/nomos-verify.yml` and `.gitlab-ci.yml` `nomos-verify` workflows executing `nomos verify` and SARIF upload with zero network phone-home, printing a Markdown verification badge snippet. Rejects combining `--ci` with `--local` (`ERR_VALIDATION_FAILED`). Extends `nomos init` under Law 6 Canonical Singularity instead of adding a duplicate top-level command.
 * **`nomos xray [dir] --sarif` and `nomos verify [path] --sarif`**: Emits valid OASIS SARIF 2.1.0 JSON (`version: "2.1.0"`, `$schema: "https://json.schemastore.org/sarif-2.1.0.json"`, `#SarifLog`) ingestible by GitHub Code Scanning. Rejects combining `--sarif` with `--json`, `--markdown`, or `--pr` (`ERR_VALIDATION_FAILED`).
+
+### 4.19 Zero-Dependency MCP Stdio Server (`nomos mcp`)
+* **`nomos mcp`**: Hidden agent command revealed under `nomos --help-agent` serving MCP JSON-RPC 2.0 (`#MCPRequest`, `#MCPResponse`, `protocolVersion: "2024-11-05"`) over newline-delimited stdio without external runtimes.
+* **Read-Only Tool Boundaries**: Exposes strictly read-only orientation and verification tools (`nomos_handshake`, `nomos_status`, `nomos_task_dag`, `nomos_mem_recall`, `nomos_verify_impact`, `nomos_xray`). Rejects mutating requests under Law 1 and Law 3 CapBAC boundaries.
 
 ---
 
@@ -408,6 +412,7 @@ type UpdateCheckCache struct {
 | `TC-HELP-01` | Law 6 (Two-Tier Root Help) | `nomos --help` vs `nomos --help-agent` | Default help hides agent RPCs; `--help-agent` prints full catalog without aliases |
 | `TC-CI-01` | Law 5 & Law 6 (Offline CI Scaffolding) | `nomos init --ci` vs `nomos init --ci --local` | Writes offline GitHub and GitLab CI configs; rejects `--ci --local` |
 | `TC-SARIF-01` | Law 2 & Law 4 (OASIS SARIF 2.1.0 Output) | `nomos xray --sarif` and `nomos verify --sarif` | Emits valid SARIF 2.1.0 JSON with driver rules and locations |
+| `TC-MCP-01` | Law 1 & Law 6 (Read-Only MCP Server) | `nomos mcp` JSON-RPC 2.0 stdio | Serves `initialize`, `tools/list`, read tools; rejects mutating calls |
 | `TC-XRAY-03` | Law 2 & Law 3 (Read-Only CLI X-Ray) | `nomos xray --json` and `nomos xray --markdown` on uninitialized directory | Emits structured `XrayReport` and Markdown card with zero filesystem or ledger writes |
 | `TC-BG-07` | Law 1 & Law 2 (Post-Commit Mneme Distill) | `nomos hook post-commit` after `nomos verify` trap fix on `feat/auth` | Distills `BRANCH-*` trap-to-fix pitfall into `mneme.db` and clears branch trace |
 | `TC-REL-001` | Law 4 (SPDX Apache-2.0 License) | `LICENSE` audit in `legal_release_contract_test.go` | Verifies verbatim SPDX Apache-2.0 text and appendix |
@@ -434,5 +439,6 @@ type UpdateCheckCache struct {
 | Worktree lifecycle, 2PC sync & Git Notes receipts | `substrate/cli/cmd_task.go`, `substrate/cli/cmd_task_sync.go`, `substrate/src/nomos/modules/task/git_notes.go` | `Cell 3.2 (hermetic_worktree)`, `Cell 3.3 (release_receipt)` |
 | Ambient provider lifecycle hooks (`nomos hook`) | `substrate/cli/hookcmd/` | `Cell 1.2 (phase_discipline)`, `Cell 3.2 (hermetic_worktree)` |
 | OASIS SARIF 2.1.0 & offline CI workflow scaffolding (`#SarifLog`) | `substrate/src/nomos/modules/verify/sarif/sarif.go`, `substrate/cli/selfupdate/cmd_init_ci.go` | `Cell 2.1 (non_verbal_proof)`, `Cell 6.3 (canonical_singularity)` |
+| Zero-dependency read-only MCP stdio server (`#MCPRequest`, `#MCPResponse`) | `substrate/cli/mcpcmd/mcp.go`, `substrate/cli/mcpcmd/mcp_tools.go` | `Cell 1.3 (capbac_lease)`, `Cell 6.3 (canonical_singularity)` |
 
 Run `nomos verify` to execute all 42 Definition of Done quality gates and confirm exit code `0`.
