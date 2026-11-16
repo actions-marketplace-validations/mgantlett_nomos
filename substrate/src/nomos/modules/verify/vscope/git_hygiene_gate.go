@@ -31,6 +31,14 @@ func (g *GitSubprocessHygieneGate) Evaluate(ctx *VerifyContext) (*GateResult, er
 		root = "."
 	}
 
+	if isExternalNonNomosGoRepo(ctx, root) {
+		return &GateResult{
+			GateName: g.Name(),
+			Passed:   true,
+			Message:  "external Go module without github.com/mgantlett/nomos/substrate dependency (workspace.SafeGitCommand internal-only)",
+		}, nil
+	}
+
 	violations, err := collectGitSubprocessViolations(ctx, root)
 	if err != nil {
 		return nil, err
@@ -50,6 +58,34 @@ func (g *GitSubprocessHygieneGate) Evaluate(ctx *VerifyContext) (*GateResult, er
 		Passed:   true,
 		Message:  "zero un-sanitized git subprocess calls detected; all git executions routed through workspace.SafeGitCommand",
 	}, nil
+}
+
+func isExternalNonNomosGoRepo(ctx *VerifyContext, root string) bool {
+	const internalModule = "github.com/mgantlett/nomos/substrate"
+	sawGoMod := false
+	for _, goModPath := range collectGoModCandidates(ctx, root) {
+		raw, err := os.ReadFile(goModPath)
+		if err != nil {
+			continue
+		}
+		sawGoMod = true
+		if strings.Contains(string(raw), internalModule) {
+			return false
+		}
+	}
+	return sawGoMod
+}
+
+func collectGoModCandidates(ctx *VerifyContext, root string) []string {
+	dirs := []string{root}
+	if ctx != nil && ctx.RepoRoot != "" && ctx.RepoRoot != root {
+		dirs = append(dirs, ctx.RepoRoot)
+	}
+	var out []string
+	for _, dir := range dirs {
+		out = append(out, filepath.Join(dir, "go.mod"), filepath.Join(dir, "substrate", "go.mod"))
+	}
+	return out
 }
 
 func collectGitSubprocessViolations(ctx *VerifyContext, root string) ([]string, error) {
