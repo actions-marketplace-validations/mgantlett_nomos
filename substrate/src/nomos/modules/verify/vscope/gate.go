@@ -134,7 +134,24 @@ func IsWorktreeContext(ctx *VerifyContext, workDir string) bool {
 	if ctx != nil && ctx.TaskID != "" {
 		return true
 	}
-	return false
+	return IsBranchGuardFeatureWorkDir(ctx, workDir)
+}
+
+// IsBranchGuardFeatureWorkDir reports whether workDir runs in isolation_mode=branch on a non-protected branch (@intent nomos_hermetic_worktree_spec.md).
+func IsBranchGuardFeatureWorkDir(ctx *VerifyContext, workDir string) bool {
+	cfg := ResolveVerifyConfig(ctx)
+	if cfg == nil || cfg.Governance.Boundary.EffectiveIsolationMode() != config.IsolationModeBranch {
+		return false
+	}
+	out, err := workspace.SafeGitCommand(workDir, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	if err != nil {
+		return false
+	}
+	branch := strings.TrimSpace(string(out))
+	if branch == "" || branch == "HEAD" || workspace.IsProtectedBranch(branch) {
+		return false
+	}
+	return !strings.EqualFold(branch, strings.TrimSpace(cfg.DefaultBranch))
 }
 
 func collectScopePolyglotFiles(ctx *VerifyContext, workDir string, fileSet map[string]struct{}) {

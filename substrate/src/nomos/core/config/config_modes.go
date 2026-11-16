@@ -36,6 +36,11 @@ const (
 	CredentialReadModeStrict = "strict"
 	// CredentialReadModeTaintOnly permits credential reads on PreToolUse and records TaintCredentialSource to block outbound egress.
 	CredentialReadModeTaintOnly = "taint_only"
+
+	// IsolationModeWorktree isolates mutations inside transient task worktrees and Golden Commits (default when omitted).
+	IsolationModeWorktree = "worktree"
+	// IsolationModeBranch enforces Branch Guard (read-only default_branch with normal feature-branch commits).
+	IsolationModeBranch = "branch"
 )
 
 // EffectiveRatchetMode returns normalized ratchet_mode, defaulting to "standard" (@intent: #QualityGatesConfig).
@@ -163,6 +168,28 @@ func (b *BoundaryConfig) EffectiveCredentialReadMode() string {
 func IsValidCredentialReadMode(mode string) bool {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case "", CredentialReadModeHostDeny, CredentialReadModeStrict, CredentialReadModeTaintOnly:
+		return true
+	default:
+		return false
+	}
+}
+
+// EffectiveIsolationMode returns normalized isolation_mode, defaulting to "worktree" (@intent: #BoundaryConfig).
+func (b *BoundaryConfig) EffectiveIsolationMode() string {
+	if b == nil {
+		return IsolationModeWorktree
+	}
+	norm := strings.ToLower(strings.TrimSpace(b.IsolationMode))
+	if norm == "" {
+		return IsolationModeWorktree
+	}
+	return norm
+}
+
+// IsValidIsolationMode reports whether mode is a valid BoundaryConfig.IsolationMode setting (@intent: #BoundaryConfig).
+func IsValidIsolationMode(mode string) bool {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "", IsolationModeWorktree, IsolationModeBranch:
 		return true
 	default:
 		return false

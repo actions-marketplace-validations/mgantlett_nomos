@@ -78,6 +78,11 @@ nomos verify executes, and block container-sandbox exits with syntax or verifier
 	HelpHookStopExample = `  echo '{"hook_event_name":"Stop","cwd":"worktrees/repo-SUB-1"}' | nomos hook stop
   echo '{"hook_event_name":"AfterAgent","cwd":"/app"}' | nomos hook stop --container-sandbox`
 
+	HelpHookPostCommitLong = `Execute post-commit Branch Guard Mneme distillation on non-protected feature branches.
+Extracts verified trap-to-fix lessons and structural commit patterns into local mneme.db and clears branch trace state.`
+	HelpHookPostCommitExample = `  nomos hook post-commit
+  nomos hook post-commit --dir ./my-service`
+
 	HelpHookInstallLong = `Additively install or merge Nomos lifecycle hooks (SessionStart, PreToolUse,
 PostToolUse, and Stop/AfterAgent) across Claude Code, Gemini CLI, OpenCode, Cursor,
 and Antigravity into project-scoped or user-scoped manifests without clobbering existing hooks.`

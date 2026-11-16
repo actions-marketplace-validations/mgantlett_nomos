@@ -123,7 +123,10 @@ func normalizeVerifyTargetScope(targetDir string, baseline bool) (string, string
 		repoRoot = targetDir
 	}
 	if !baseline && !strings.Contains(filepath.ToSlash(targetDir), "/worktrees/") {
-		baseline = true
+		_, cfg, branch, isBranch := hookcmd.ResolveBranchGuardContext(targetDir)
+		if !isBranch || hookcmd.IsProtectedTrunkForConfig(branch, cfg) {
+			baseline = true
+		}
 	}
 	activeTask := ""
 	if !baseline {
@@ -135,7 +138,13 @@ func normalizeVerifyTargetScope(targetDir string, baseline bool) (string, string
 func handleFailedVerificationReport(repoRoot, targetDir, activeTask string, allFiles, baseline bool, report *verify.PipelineReport) error {
 	if !allFiles && !baseline {
 		hookcmd.MarkWorktreeVerificationFailed(targetDir)
-		recordFailedReportTraps(repoRoot, targetDir, activeTask, report)
+		trapKey := activeTask
+		if trapKey == "" {
+			if _, cfg, branch, isBranch := hookcmd.ResolveBranchGuardContext(targetDir); isBranch && !hookcmd.IsProtectedTrunkForConfig(branch, cfg) {
+				trapKey = "BRANCH-" + hookcmd.SanitizeBranchSlug(branch)
+			}
+		}
+		recordFailedReportTraps(repoRoot, targetDir, trapKey, report)
 	}
 	for _, res := range report.GateResults {
 		if !res.Passed && res.GateName == "Plane Separation Invariant" {

@@ -188,6 +188,12 @@ func evaluateWorktreeBoundary(rawTarget, resolved, baseCwd, toolName string) Hoo
 	if isPermittedWorktreePath(resolved, baseCwd) {
 		return HookDecision{Decision: hookDecisionAllow}
 	}
+	if repoRoot, cfg, branch, isBranch := ResolveBranchGuardContext(resolved); isBranch {
+		return evaluateBranchGuardMutation(rawTarget, resolved, repoRoot, branch, cfg)
+	}
+	if repoRoot, cfg, branch, isBranch := ResolveBranchGuardContext(baseCwd); isBranch && strings.HasPrefix(resolved, repoRoot+"/") {
+		return evaluateBranchGuardMutation(rawTarget, resolved, repoRoot, branch, cfg)
+	}
 	if toolName == "" {
 		toolName = "file_mutation"
 	}

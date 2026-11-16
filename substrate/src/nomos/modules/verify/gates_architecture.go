@@ -105,6 +105,12 @@ func (g *EcosystemDriftGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateRe
 			Passed: true, Message: "transient worktree detected; skipping trunk drift check",
 		}, nil
 	}
+	if vscope.IsBranchGuardFeatureWorkDir(ctx, root) {
+		return &vscope.GateResult{
+			GateName: g.Name(), ProbeID: "ecosystem_drift", Law: 3, Ring: RingDynamic,
+			Passed: true, Message: "feature branch in Branch Guard mode; skipping trunk drift check",
+		}, nil
+	}
 
 	cmd := workspace.SafeGitCommand(root, "status", "--porcelain")
 	out, err := cmd.CombinedOutput()

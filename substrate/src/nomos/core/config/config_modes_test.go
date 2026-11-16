@@ -65,5 +65,21 @@ func TestVerifyScopeAndTDDModeHelpers(t *testing.T) {
 	if err := ValidateConfig(cfg); err == nil {
 		t.Fatalf("expected ValidateConfig to reject invalid credential_read_mode")
 	}
+	cfg.Governance.Boundary.CredentialReadMode = ""
+
+	if got := nilBoundary.EffectiveIsolationMode(); got != IsolationModeWorktree {
+		t.Fatalf("expected nil BoundaryConfig isolation_mode=%s, got %s", IsolationModeWorktree, got)
+	}
+	cfg.Governance.Boundary.IsolationMode = " BRANCH "
+	if got := cfg.Governance.Boundary.EffectiveIsolationMode(); got != IsolationModeBranch {
+		t.Fatalf("expected normalized isolation_mode=branch, got %s", got)
+	}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Fatalf("expected branch isolation_mode to pass ValidateConfig: %v", err)
+	}
+	cfg.Governance.Boundary.IsolationMode = "invalid_isolation"
+	if err := ValidateConfig(cfg); err == nil {
+		t.Fatalf("expected ValidateConfig to reject invalid isolation_mode")
+	}
 }
 

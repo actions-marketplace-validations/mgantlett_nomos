@@ -53,6 +53,7 @@ Reads JSON hook payloads from stdin with zero external jq/bash/python dependenci
 		newHookPreToolCmd(&hermeticDir, &containerSandbox, &budgetSec, &advFlags),
 		newHookPostToolCmd(&hermeticDir, &containerSandbox, &budgetSec, &advFlags),
 		newHookStopCmd(&hermeticDir, &containerSandbox),
+		newHookPostCommitCmd(),
 	)
 	if installSubCmd != nil {
 		cmd.AddCommand(installSubCmd)

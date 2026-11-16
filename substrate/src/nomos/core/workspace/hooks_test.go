@@ -197,6 +197,22 @@ func TestCommitMsgHookScript_ZeroFHSSedFreePureNixOSCompatibility(t *testing.T) 
 	if err := InstallHooks(repoDir); err != nil {
 		t.Fatalf("InstallHooks failed: %v", err)
 	}
+	minBin := buildMinimalHookToolBin(t)
+	msgFile := filepath.Join(t.TempDir(), "COMMIT_EDITMSG")
+	valid := "[SUB-1847] fix(workspace): remove sed dependency from commit-msg\n\nEliminate external sed subprocess so Pure NixOS containers validate Golden Commits natively.\n\n___\n\nTask: SUB-1847\n"
+	if err := os.WriteFile(msgFile, []byte(valid), 0644); err != nil {
+		t.Fatalf("write msgFile: %v", err)
+	}
+	cmd := exec.Command(filepath.Join(minBin, "bash"), filepath.Join(repoDir, ".git", "hooks", "commit-msg"), msgFile)
+	cmd.Dir = repoDir
+	cmd.Env = []string{"PATH=" + minBin, "HOME=" + t.TempDir()}
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("commit-msg failed in sed/awk-free PATH: %v\n%s", err, string(out))
+	}
+}
+
+func buildMinimalHookToolBin(t *testing.T) string {
+	t.Helper()
 	minBin := t.TempDir()
 	for _, tool := range []string{"bash", "git", "head", "tail", "tr", "grep"} {
 		src, err := exec.LookPath(tool)
@@ -211,17 +227,7 @@ func TestCommitMsgHookScript_ZeroFHSSedFreePureNixOSCompatibility(t *testing.T) 
 			t.Fatalf("stage %s: %v", tool, wErr)
 		}
 	}
-	msgFile := filepath.Join(t.TempDir(), "COMMIT_EDITMSG")
-	valid := "[SUB-1847] fix(workspace): remove sed dependency from commit-msg\n\nEliminate external sed subprocess so Pure NixOS containers validate Golden Commits natively.\n\n___\n\nTask: SUB-1847\n"
-	if err := os.WriteFile(msgFile, []byte(valid), 0644); err != nil {
-		t.Fatalf("write msgFile: %v", err)
-	}
-	cmd := exec.Command(filepath.Join(minBin, "bash"), filepath.Join(repoDir, ".git", "hooks", "commit-msg"), msgFile)
-	cmd.Dir = repoDir
-	cmd.Env = []string{"PATH=" + minBin, "HOME=" + t.TempDir()}
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("commit-msg failed in sed/awk-free PATH: %v\n%s", err, string(out))
-	}
+	return minBin
 }
 
 func TestEnsureOriginNotesRefspecs_AdditivePushAndFetch(t *testing.T) {
@@ -251,5 +257,47 @@ func TestEnsureOriginNotesRefspecs_AdditivePushAndFetch(t *testing.T) {
 	fetchOut, fErr := SafeGitCommand(repoDir, "config", "--get-all", "remote.origin.fetch").Output()
 	if fErr != nil || !strings.Contains(string(fetchOut), "+refs/notes/nomos/*:refs/notes/nomos/*") {
 		t.Fatalf("expected notes fetch refspec in remote.origin.fetch, got %q (err=%v)", string(fetchOut), fErr)
+	}
+}
+
+// @verifies TC-BG-05
+func TestBranchGuardHooksAllowFeatureCommitAndBlockTrunk(t *testing.T) {
+	repoDir := InitHermeticGitRepo(t)
+	cfgYAML := "project: bg\ndefault_branch: main\ngovernance:\n  boundary:\n    enforce: true\n    isolation_mode: branch\n"
+	if err := os.WriteFile(filepath.Join(repoDir, "nomos.yaml"), []byte(cfgYAML), 0644); err != nil {
+		t.Fatalf("write nomos.yaml: %v", err)
+	}
+	if err := InstallHooks(repoDir); err != nil {
+		t.Fatalf("InstallHooks failed: %v", err)
+	}
+	postHook := filepath.Join(repoDir, ".git", "hooks", "post-commit")
+	if _, err := os.Stat(postHook); err != nil {
+		t.Fatalf("expected post-commit hook installed: %v", err)
+	}
+
+	preOut, preErr := SafeGitCommand(repoDir, "commit", "--allow-empty", "-m", "blocked on main").CombinedOutput()
+	if preErr == nil || !strings.Contains(string(preOut), "git switch -c feat/<slug>") {
+		t.Fatalf("TC-BG-05: expected trunk commit block with branch remedy, got err=%v out=%s", preErr, string(preOut))
+	}
+
+	if out, err := SafeGitCommand(repoDir, "checkout", "-b", "feat/payments").CombinedOutput(); err != nil {
+		t.Fatalf("checkout feat/payments: %v (%s)", err, string(out))
+	}
+	msgFile := filepath.Join(t.TempDir(), "COMMIT_EDITMSG")
+	if err := os.WriteFile(msgFile, []byte("ENG-42: support plain feature commit\n"), 0644); err != nil {
+		t.Fatalf("write msgFile: %v", err)
+	}
+	minBin := buildMinimalHookToolBin(t)
+	msgCmd := exec.Command(filepath.Join(minBin, "bash"), filepath.Join(repoDir, ".git", "hooks", "commit-msg"), msgFile)
+	msgCmd.Dir = repoDir
+	msgCmd.Env = []string{"PATH=" + minBin, "HOME=" + t.TempDir()}
+	if out, err := msgCmd.CombinedOutput(); err != nil {
+		t.Fatalf("TC-BG-05: commit-msg in branch mode rejected plain message: %v\n%s", err, string(out))
+	}
+	preCmd := exec.Command(filepath.Join(minBin, "bash"), filepath.Join(repoDir, ".git", "hooks", "pre-commit"))
+	preCmd.Dir = repoDir
+	preCmd.Env = []string{"PATH=" + minBin, "HOME=" + t.TempDir()}
+	if out, err := preCmd.CombinedOutput(); err != nil {
+		t.Fatalf("TC-BG-05: pre-commit in branch mode rejected feature commit: %v\n%s", err, string(out))
 	}
 }

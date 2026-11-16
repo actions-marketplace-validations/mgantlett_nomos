@@ -48,6 +48,9 @@ func checkRedirectTargetAgainstTrunk(rawTarget, cwd string) HookDecision {
 	if isPermittedWorktreePath(resolved, cwd) {
 		return HookDecision{Decision: hookDecisionAllow}
 	}
+	if repoRoot, cfg, branch, isBranch := ResolveBranchGuardContext(resolved); isBranch {
+		return evaluateBranchGuardMutation(rawTarget, resolved, repoRoot, branch, cfg)
+	}
 	parentDir := filepath.Dir(resolved)
 	repoRoot, err := workspace.FindRepoRoot(parentDir)
 	if err != nil || repoRoot == "" {

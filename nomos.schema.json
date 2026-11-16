@@ -78,6 +78,15 @@
               "type": "boolean",
               "default": true
             },
+            "isolation_mode": {
+              "description": "Workspace mutation isolation policy: worktree (hermetic task worktrees under worktrees/, default when omitted) or branch (Branch Guard blocking edits/commits on default_branch while allowing normal feature-branch commits).",
+              "type": "string",
+              "enum": [
+                "worktree",
+                "branch"
+              ],
+              "default": "worktree"
+            },
             "lock_dependencies": {
               "description": "Reject unapproved dependency graph mutations in worktrees.",
               "type": "boolean"

@@ -33,6 +33,7 @@ const (
 // BoundaryConfig declares architectural package and CLI command boundary protections.
 type BoundaryConfig struct {
 	Enforce              bool     `yaml:"enforce" json:"enforce"`
+	IsolationMode        string   `yaml:"isolation_mode,omitempty" json:"isolation_mode,omitempty"`
 	ProhibitedPackages   []string `yaml:"prohibited_packages,omitempty" json:"prohibited_packages,omitempty"`
 	ProhibitedCommands   []string `yaml:"prohibited_commands,omitempty" json:"prohibited_commands,omitempty"`
 	LockDependencies     bool     `yaml:"lock_dependencies,omitempty" json:"lock_dependencies,omitempty"`
@@ -371,6 +372,9 @@ func validateGovernanceModes(cfg *EcosystemConfig) error {
 	}
 	if !IsValidCredentialReadMode(cfg.Governance.Boundary.CredentialReadMode) {
 		return fmt.Errorf("credential_read_mode must be host_deny, strict, or taint_only, got %q", cfg.Governance.Boundary.CredentialReadMode)
+	}
+	if !IsValidIsolationMode(cfg.Governance.Boundary.IsolationMode) {
+		return fmt.Errorf("isolation_mode must be worktree or branch, got %q", cfg.Governance.Boundary.IsolationMode)
 	}
 	return nil
 }

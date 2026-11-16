@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/mgantlett/nomos/substrate/src/nomos/core/config"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
 )
 
@@ -60,14 +61,15 @@ func (g *CommitSchemaGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResu
 		}, nil
 	}
 
+	branchMode := isBranchIsolationConfig(ctx)
 	mode := resolveIntentTwinMode(ctx)
 	commits := collectBranchCommitsForSchemaAudit(root)
 	if len(commits) == 0 {
-		return evaluateSingleHeadCommitWithMode(g.Name(), root, mode)
+		return evaluateSingleHeadCommitWithIsolation(g.Name(), root, mode, branchMode)
 	}
 
 	for _, entry := range commits {
-		res, err := checkCommitComplianceInWorktree(g.Name(), root, entry.body, mode)
+		res, err := checkCommitComplianceWithIsolation(g.Name(), root, entry.body, mode, branchMode)
 		if err != nil || !res.Passed {
 			if res != nil && entry.shortSHA != "" {
 				res.Message = fmt.Sprintf("commit %s: %s", entry.shortSHA, res.Message)
@@ -79,15 +81,24 @@ func (g *CommitSchemaGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResu
 	return &vscope.GateResult{
 		GateName: g.Name(),
 		Passed:   true,
-		Message:  fmt.Sprintf("verified %d branch commit(s) against Golden Commit + Task trailer schema", len(commits)),
+		Message:  fmt.Sprintf("verified %d branch commit(s) against Commit Schema invariant", len(commits)),
 	}, nil
 }
 
+func isBranchIsolationConfig(ctx *vscope.VerifyContext) bool {
+	cfg := vscope.ResolveVerifyConfig(ctx)
+	return cfg != nil && cfg.Governance.Boundary.EffectiveIsolationMode() == config.IsolationModeBranch
+}
+
 func evaluateSingleHeadCommit(gateName, root string) (*vscope.GateResult, error) {
-	return evaluateSingleHeadCommitWithMode(gateName, root, "")
+	return evaluateSingleHeadCommitWithIsolation(gateName, root, "", false)
 }
 
 func evaluateSingleHeadCommitWithMode(gateName, root, mode string) (*vscope.GateResult, error) {
+	return evaluateSingleHeadCommitWithIsolation(gateName, root, mode, false)
+}
+
+func evaluateSingleHeadCommitWithIsolation(gateName, root, mode string, branchMode bool) (*vscope.GateResult, error) {
 	cmd := workspace.SafeGitCommand(root, "log", "-1", "--format=%B")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -97,7 +108,7 @@ func evaluateSingleHeadCommitWithMode(gateName, root, mode string) (*vscope.Gate
 	if commitMsg == "" {
 		return &vscope.GateResult{GateName: gateName, Passed: false, Message: "HEAD commit message is empty", Remedy: remedyAmendCommit}, nil
 	}
-	return checkCommitComplianceInWorktree(gateName, root, commitMsg, mode)
+	return checkCommitComplianceWithIsolation(gateName, root, commitMsg, mode, branchMode)
 }
 
 type auditedCommitEntry struct {
@@ -194,6 +205,10 @@ func checkCommitComplianceWithMode(gateName, commitMsg, mode string) (*vscope.Ga
 }
 
 func checkCommitComplianceInWorktree(gateName, worktreeDir, commitMsg, mode string) (*vscope.GateResult, error) {
+	return checkCommitComplianceWithIsolation(gateName, worktreeDir, commitMsg, mode, false)
+}
+
+func checkCommitComplianceWithIsolation(gateName, worktreeDir, commitMsg, mode string, branchMode bool) (*vscope.GateResult, error) {
 	trimmedMsg := strings.TrimSpace(commitMsg)
 	if trimmedMsg == "" {
 		return &vscope.GateResult{GateName: gateName, Passed: false, Message: "commit message is empty", Remedy: remedyAmendCommit}, nil
@@ -204,11 +219,14 @@ func checkCommitComplianceInWorktree(gateName, worktreeDir, commitMsg, mode stri
 	if isMergeCommit(firstLine) {
 		return &vscope.GateResult{GateName: gateName, Passed: true, Message: "merge commit is exempt from Golden Commit trailer invariant"}, nil
 	}
-	subjectKey, violation := validateSubjectLine(firstLine)
-	if violation != "" {
+	if violation := validateAntiShimAndAntiDump(trimmedMsg); violation != "" {
 		return &vscope.GateResult{GateName: gateName, Passed: false, Message: violation, Remedy: remedyAmendCommit}, nil
 	}
-	if violation := validateAntiShimAndAntiDump(trimmedMsg); violation != "" {
+	if branchMode {
+		return &vscope.GateResult{GateName: gateName, Passed: true, Message: "Branch Guard commit satisfies non-empty and anti-shim invariants"}, nil
+	}
+	subjectKey, violation := validateSubjectLine(firstLine)
+	if violation != "" {
 		return &vscope.GateResult{GateName: gateName, Passed: false, Message: violation, Remedy: remedyAmendCommit}, nil
 	}
 	if violation := validateBodyAndTrailers(lines[1:], subjectKey); violation != "" {

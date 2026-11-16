@@ -249,3 +249,35 @@ func TestCommitSchemaGate_DetectsIntermediateRogueBranchCommit(t *testing.T) {
 		t.Errorf("expected offending commit SHA in failure message, got: %s", res.Message)
 	}
 }
+
+// @verifies TC-BG-06
+func TestCommitSchemaGate_BranchModeAcceptsPlainAndRejectsShim(t *testing.T) {
+	repoDir := workspace.InitHermeticGitRepo(t)
+	cfgYAML := "project: bg\ndefault_branch: main\ngovernance:\n  boundary:\n    enforce: true\n    isolation_mode: branch\n"
+	if err := os.WriteFile(filepath.Join(repoDir, "nomos.yaml"), []byte(cfgYAML), 0644); err != nil {
+		t.Fatalf("write nomos.yaml: %v", err)
+	}
+	if out, err := workspace.SafeGitCommand(repoDir, "checkout", "-b", "feat/jira-12").CombinedOutput(); err != nil {
+		t.Fatalf("checkout feat/jira-12: %v (%s)", err, string(out))
+	}
+	if err := os.WriteFile(filepath.Join(repoDir, "feature.txt"), []byte("ok\n"), 0644); err != nil {
+		t.Fatalf("write feature.txt: %v", err)
+	}
+	if err := workspace.SafeGitCommand(repoDir, "add", "feature.txt").Run(); err != nil {
+		t.Fatalf("git add: %v", err)
+	}
+	if err := workspace.SafeGitCommand(repoDir, "commit", "-m", "JIRA-12: ship cache invalidation fix").Run(); err != nil {
+		t.Fatalf("git commit: %v", err)
+	}
+
+	gate := &CommitSchemaGate{}
+	res, err := gate.Evaluate(&vscope.VerifyContext{RepoRoot: repoDir, WorktreePath: repoDir})
+	if err != nil || !res.Passed {
+		t.Fatalf("TC-BG-06: expected branch mode CommitSchemaGate pass, got res=%+v err=%v", res, err)
+	}
+
+	shimRes, sErr := checkCommitComplianceWithIsolation("Commit Schema Invariant Gate", repoDir, "Add feature\n\nsatisfy SUB-1 deterministic execution requirements", "", true)
+	if sErr != nil || shimRes.Passed {
+		t.Fatalf("TC-BG-06: expected branch mode to still reject canned shim, got res=%+v err=%v", shimRes, sErr)
+	}
+}

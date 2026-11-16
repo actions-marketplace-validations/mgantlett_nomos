@@ -78,7 +78,7 @@ func SynthesizeDynamicHandshake(repoRoot string) (*HandshakeEvent, error) {
 	seat := resolveHandshakeSeat()
 	repo := filepath.Base(primaryRoot)
 
-	_, activeTask := detectBranchAndTask(treeRoot)
+	branch, activeTask := detectBranchAndTask(treeRoot)
 	healthy := checkDatabasesHealth()
 	gateCount := verify.RegisteredGateCount()
 
@@ -94,7 +94,10 @@ func SynthesizeDynamicHandshake(repoRoot string) (*HandshakeEvent, error) {
 	if activeTask != "" && strings.Contains(filepath.ToSlash(treeRoot), "/worktrees/") {
 		wtRoot = treeRoot
 	}
-	nextActions := types.BuildHandshakeNextActions(phase, activeTask, wtRoot, directives, wavefront, intentTwinOff)
+	nextActions := resolveHandshakeNextActions(handshakeNextActionsInput{
+		treeRoot: treeRoot, primaryRoot: primaryRoot, branch: branch, phase: phase,
+		activeTask: activeTask, wtRoot: wtRoot, directives: directives, wavefront: wavefront, intentTwinOff: intentTwinOff,
+	})
 
 	event := &HandshakeEvent{
 		Seat:                 seat,
@@ -344,4 +347,40 @@ func ValidateHandshakeEvent(event *HandshakeEvent) error {
 		return types.NewNomosError(types.ErrCodePhaseViolation, "invalid phase %q", event.Phase)
 	}
 	return nil
+}
+
+type handshakeNextActionsInput struct {
+	treeRoot      string
+	primaryRoot   string
+	branch        string
+	phase         types.Phase
+	activeTask    string
+	wtRoot        string
+	directives    []string
+	wavefront     []string
+	intentTwinOff bool
+}
+
+func resolveHandshakeNextActions(in handshakeNextActionsInput) []types.ActionAffordance {
+	if in.activeTask != "" || in.wtRoot != "" {
+		return types.BuildHandshakeNextActions(in.phase, in.activeTask, in.wtRoot, in.directives, in.wavefront, in.intentTwinOff)
+	}
+	cfg, err := config.LoadConfig(in.treeRoot)
+	if err != nil || cfg == nil {
+		cfg, err = config.LoadConfig(in.primaryRoot)
+	}
+	if err != nil || cfg == nil || cfg.Governance.Boundary.EffectiveIsolationMode() != config.IsolationModeBranch {
+		return types.BuildHandshakeNextActions(in.phase, in.activeTask, in.wtRoot, in.directives, in.wavefront, in.intentTwinOff)
+	}
+	isProtected := in.branch == "" || in.branch == "HEAD" || workspace.IsProtectedBranch(in.branch) || strings.EqualFold(strings.TrimSpace(in.branch), strings.TrimSpace(cfg.DefaultBranch))
+	if isProtected {
+		return []types.ActionAffordance{
+			{Command: "git switch -c feat/<slug>", Summary: "Create a feature branch before editing (protected trunk is guarded)", Phase: types.PhaseEdit},
+			{Command: "nomos verify", Summary: "Run 42-gate verification baseline check", Phase: types.PhaseReview},
+		}
+	}
+	return []types.ActionAffordance{
+		{Command: "nomos verify", Summary: "Verify modified files on feature branch before ending turn or committing", Phase: types.PhaseReview},
+		{Command: `git commit -m "<summary>"`, Summary: "Commit verified changes and distill lessons into Mneme", Phase: types.PhaseSync},
+	}
 }

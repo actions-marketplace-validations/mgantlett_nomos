@@ -75,20 +75,29 @@ func EvaluateStopHook(p *HookPayload, hermeticDir string, containerSandbox bool)
 	if containerSandbox && hermeticDir == "" {
 		return evaluateContainerStopHook(p)
 	}
-	wtRoot := resolveWorktreeTraceRoot(p, hermeticDir)
-	if wtRoot == "" {
+	traceKey, wsRoot, branchLabel := resolveTraceScopeAndWorkspace(p, hermeticDir)
+	if traceKey == "" {
 		return HookDecision{Decision: hookDecisionAllow}
 	}
-	tr := loadHookSessionTrace(wtRoot)
+	tr := loadHookSessionTrace(traceKey)
 	if tr == nil || len(tr.MutatedFiles) == 0 {
 		return HookDecision{Decision: hookDecisionAllow}
 	}
 	if tr.DirtyUnverifiedEdits || tr.UnverifiedCalls > 0 {
+		if branchLabel != "" {
+			return HookDecision{
+				Decision: hookDecisionBlock,
+				Reason: fmt.Sprintf(
+					"❌ [Nomos Anti-Phantom Gate] Active branch '%s' has %d modified file(s) without a clean post-edit verification pass. Run 'nomos verify' before ending your turn (Law 2).",
+					branchLabel, len(tr.MutatedFiles),
+				),
+			}
+		}
 		return HookDecision{
 			Decision: hookDecisionBlock,
 			Reason: fmt.Sprintf(
 				"❌ [Nomos Anti-Phantom Gate] Active worktree '%s' has %d modified file(s) without a clean post-edit verification pass. Run 'nomos verify' inside the worktree before ending your turn (Law 2).",
-				filepath.Base(wtRoot), len(tr.MutatedFiles),
+				filepath.Base(wsRoot), len(tr.MutatedFiles),
 			),
 		}
 	}

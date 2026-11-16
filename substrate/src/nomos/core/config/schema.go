@@ -39,6 +39,7 @@ var configFieldDescriptions = map[string]string{
 	"governance":                   "Boundary enforcement and Definition of Done quality gate policies.",
 	"boundary":                     "Package import and CLI command boundary protections.",
 	"enforce":                      "Enforce declared boundary constraints during verification.",
+	"isolation_mode":               "Workspace mutation isolation policy: worktree (hermetic task worktrees under worktrees/, default when omitted) or branch (Branch Guard blocking edits/commits on default_branch while allowing normal feature-branch commits).",
 	"prohibited_packages":          "Import path substrings disallowed inside this repository.",
 	"prohibited_commands":          "CLI subcommands disallowed inside this repository.",
 	"lock_dependencies":            "Reject unapproved dependency graph mutations in worktrees.",
@@ -188,6 +189,9 @@ func applyStringEnumMetadata(name string, propNode *JSONSchemaNode) {
 	case "credential_read_mode":
 		propNode.Enum = []string{CredentialReadModeHostDeny, CredentialReadModeStrict, CredentialReadModeTaintOnly}
 		propNode.Default = CredentialReadModeHostDeny
+	case "isolation_mode":
+		propNode.Enum = []string{IsolationModeWorktree, IsolationModeBranch}
+		propNode.Default = IsolationModeWorktree
 	}
 }
 

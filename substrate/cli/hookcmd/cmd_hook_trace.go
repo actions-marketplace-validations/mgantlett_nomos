@@ -37,20 +37,20 @@ type HookSessionTrace struct {
 
 var standaloneVerifyCmdRe = regexp.MustCompile(`(?i)^\s*(?:cd\s+\S+\s*&&\s*)?(?:\S+/)?nomos\s+(?:verify|task\s+review|task\s+sync)(?:\s|$)`)
 
-// recordPreToolSessionTrace records allowed or denied PreToolUse activity scoped to an active worktree.
+// recordPreToolSessionTrace records allowed or denied PreToolUse activity scoped to an active worktree or branch.
 func recordPreToolSessionTrace(p *HookPayload, hermeticDir string, denied bool) {
 	if p == nil || p.IsPostInvoke {
 		return
 	}
-	wtRoot := resolveWorktreeTraceRoot(p, hermeticDir)
-	if wtRoot == "" {
+	traceKey, wsRoot, branchLabel := resolveTraceScopeAndWorkspace(p, hermeticDir)
+	if traceKey == "" && branchLabel == "" {
 		return
 	}
-	path := resolveTraceStateFilePath(wtRoot)
+	path := resolveTraceStateFilePath(traceKey)
 	if path == "" {
 		return
 	}
-	tr := loadOrInitHookSessionTrace(path, wtRoot)
+	tr := loadOrInitHookSessionTrace(path, wsRoot)
 	if denied {
 		tr.DeniedInterceptions++
 		saveHookSessionTrace(path, tr)
@@ -60,25 +60,25 @@ func recordPreToolSessionTrace(p *HookPayload, hermeticDir string, denied bool) 
 	if isNomosVerificationCommand(p.CommandLine) {
 		resetWorktreeChurnCounters(&tr)
 	}
-	recordTracePayloadDetails(&tr, p, wtRoot)
+	recordTracePayloadDetails(&tr, p, wsRoot)
 	saveHookSessionTrace(path, tr)
 }
 
-// evaluateWorktreeChurnAdvisory tracks unverified PostToolUse calls inside an active task worktree
+// evaluateWorktreeChurnAdvisory tracks unverified PostToolUse calls inside an active task worktree or feature branch
 // and emits non-blocking advisories at 75 and 150 calls since the last 'nomos verify' run.
 func evaluateWorktreeChurnAdvisory(p *HookPayload, hermeticDir, style string) string {
 	if p == nil || p.IsPostInvoke {
 		return ""
 	}
-	wtRoot := resolveWorktreeTraceRoot(p, hermeticDir)
-	if wtRoot == "" {
+	traceKey, wsRoot, branchLabel := resolveTraceScopeAndWorkspace(p, hermeticDir)
+	if traceKey == "" && branchLabel == "" {
 		return ""
 	}
-	path := resolveTraceStateFilePath(wtRoot)
+	path := resolveTraceStateFilePath(traceKey)
 	if path == "" {
 		return ""
 	}
-	tr := loadOrInitHookSessionTrace(path, wtRoot)
+	tr := loadOrInitHookSessionTrace(path, wsRoot)
 	if isNomosVerificationCommand(p.CommandLine) {
 		if hasFailedVerificationResponse(p.ToolResponseText) {
 			tr.DirtyUnverifiedEdits = true
@@ -110,15 +110,21 @@ func MarkWorktreeVerificationFailed(worktreeDir string) {
 
 // markWorktreeVerificationFailed preserves DirtyUnverifiedEdits when 'nomos verify' fails in-process.
 func markWorktreeVerificationFailed(worktreeDir string) {
-	wtRoot := extractEnclosingWorktreeRoot(normalizeCanonicalPath(worktreeDir, "/"))
-	if wtRoot == "" {
-		return
+	traceKey := extractEnclosingWorktreeRoot(normalizeCanonicalPath(worktreeDir, "/"))
+	wsRoot := traceKey
+	if traceKey == "" {
+		repoRoot, cfg, branch, isBranch := ResolveBranchGuardContext(worktreeDir)
+		if !isBranch || IsProtectedTrunkForConfig(branch, cfg) {
+			return
+		}
+		traceKey = BranchTraceKey(repoRoot, branch)
+		wsRoot = repoRoot
 	}
-	path := resolveTraceStateFilePath(wtRoot)
+	path := resolveTraceStateFilePath(traceKey)
 	if path == "" {
 		return
 	}
-	tr := loadOrInitHookSessionTrace(path, wtRoot)
+	tr := loadOrInitHookSessionTrace(path, wsRoot)
 	tr.DirtyUnverifiedEdits = true
 	saveHookSessionTrace(path, tr)
 }
@@ -157,23 +163,30 @@ func recordPostToolSessionTrace(p *HookPayload, hermeticDir string) {
 	if p == nil || p.IsPostInvoke {
 		return
 	}
-	wtRoot := resolveWorktreeTraceRoot(p, hermeticDir)
-	if wtRoot == "" {
+	traceKey, wsRoot, branchLabel := resolveTraceScopeAndWorkspace(p, hermeticDir)
+	if traceKey == "" && branchLabel == "" {
 		return
 	}
-	path := resolveTraceStateFilePath(wtRoot)
+	path := resolveTraceStateFilePath(traceKey)
 	if path == "" {
 		return
 	}
-	tr := loadOrInitHookSessionTrace(path, wtRoot)
+	tr := loadOrInitHookSessionTrace(path, wsRoot)
 	if tr.ToolCallsCount == 0 {
 		tr.ToolCallsCount = 1
 	}
-	recordTracePayloadDetails(&tr, p, wtRoot)
+	recordTracePayloadDetails(&tr, p, wsRoot)
 	if isNomosVerificationCommand(p.CommandLine) && hasFailedVerificationResponse(p.ToolResponseText) {
 		tr.DirtyUnverifiedEdits = true
 	}
 	saveHookSessionTrace(path, tr)
+}
+
+func resolveTraceScopeAndWorkspace(p *HookPayload, hermeticDir string) (string, string, string) {
+	if wtRoot := resolveWorktreeTraceRoot(p, hermeticDir); wtRoot != "" {
+		return wtRoot, wtRoot, ""
+	}
+	return resolveBranchGuardScopeFromPayload(p, hermeticDir)
 }
 
 func recordTracePayloadDetails(tr *HookSessionTrace, p *HookPayload, wtRoot string) {

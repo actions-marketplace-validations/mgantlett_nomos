@@ -23,29 +23,42 @@ export NOMOS_IN_GIT_HOOK=1
         exit 0
     fi
 
+    IS_BRANCH_MODE=0
+    if [ -n "$REPO_ROOT" ] && [ -f "$REPO_ROOT/nomos.yaml" ] && grep -qE '^[[:space:]]*isolation_mode:[[:space:]]*["'\'']?branch["'\'']?([[:space:]]*(#.*)?)?$' "$REPO_ROOT/nomos.yaml"; then
+        IS_BRANCH_MODE=1
+    fi
+
     # 1. Direct commits to protected trunk branches are forbidden by Law 3
     if [[ "$CURRENT_BRANCH" == "intent" || "$CURRENT_BRANCH" == "substrate" || "$CURRENT_BRANCH" == "main" || "$CURRENT_BRANCH" == "master" || "$CURRENT_BRANCH" == "develop" ]]; then
-        echo -e "\n\e[31m🚨 Commit Blocked: Direct commits to $CURRENT_BRANCH are forbidden by Nomos Root Mutability Hook (Law 3).\e[0m"
-        echo -e "All mutations execute inside isolated task worktrees (\e[33mworktrees/<repo>-<KEY>\e[0m) and merge via 2PC sync:"
-        echo -e "  • Ask your coding agent: \e[36m\"Ship my current changes via a Nomos chore\"\e[0m"
-        echo -e "  • Or manually: \e[33mgit stash && nomos task chore \"Quick fix\"\e[0m (apply in worktree, then \e[33mnomos task sync <KEY> -F .tmp/walkthrough.md\e[0m)\n"
+        if [[ "$IS_BRANCH_MODE" == "1" ]]; then
+            echo -e "\n\e[31m🚨 Commit Blocked: Direct commits to $CURRENT_BRANCH are forbidden by Nomos Branch Guard (Law 3).\e[0m"
+            echo -e "Switch to a feature branch before editing or committing:"
+            echo -e "  • \e[33mgit switch -c feat/<slug>\e[0m (then commit normally with \e[33mgit commit\e[0m)\n"
+        else
+            echo -e "\n\e[31m🚨 Commit Blocked: Direct commits to $CURRENT_BRANCH are forbidden by Nomos Root Mutability Hook (Law 3).\e[0m"
+            echo -e "All mutations execute inside isolated task worktrees (\e[33mworktrees/<repo>-<KEY>\e[0m) and merge via 2PC sync:"
+            echo -e "  • Ask your coding agent: \e[36m\"Ship my current changes via a Nomos chore\"\e[0m"
+            echo -e "  • Or manually: \e[33mgit stash && nomos task chore \"Quick fix\"\e[0m (apply in worktree, then \e[33mnomos task sync <KEY> -F .tmp/walkthrough.md\e[0m)\n"
+        fi
         exit 1
     fi
 
-    # 2. Direct commits in root repository workspace are forbidden; all mutations occur in worktrees
-    if [[ ! "$REPO_ROOT" =~ /worktrees/ ]]; then
-        echo -e "\n\e[31m🚨 Commit Blocked: Commits directly in root repository workspace ($REPO_ROOT) are forbidden by Law 3.\e[0m"
-        echo -e "All code mutations and commits must execute inside transient task worktrees."
-        echo -e "  • Ask your coding agent: \e[36m\"Ship my current changes via a Nomos chore\"\e[0m"
-        echo -e "  • Or manually: \e[33mgit stash && nomos task chore \"Quick fix\"\e[0m\n"
-        exit 1
-    fi
+    if [[ "$IS_BRANCH_MODE" != "1" ]]; then
+        # 2. Direct commits in root repository workspace are forbidden in worktree mode; all mutations occur in worktrees
+        if [[ ! "$REPO_ROOT" =~ /worktrees/ ]]; then
+            echo -e "\n\e[31m🚨 Commit Blocked: Commits directly in root repository workspace ($REPO_ROOT) are forbidden by Law 3.\e[0m"
+            echo -e "All code mutations and commits must execute inside transient task worktrees."
+            echo -e "  • Ask your coding agent: \e[36m\"Ship my current changes via a Nomos chore\"\e[0m"
+            echo -e "  • Or manually: \e[33mgit stash && nomos task chore \"Quick fix\"\e[0m\n"
+            exit 1
+        fi
 
-    # 3. Enforce canonical CLI commit entry point (Law 1 & Law 6)
-    if [[ "${NOMOS_COMMIT_IN_PROGRESS:-0}" != "1" ]]; then
-        echo -e "\n\e[31m🚨 Commit Blocked: Direct 'git commit' is forbidden by Law 1 & Law 6.\e[0m"
-        echo -e "Please commit via \e[33mnomos task commit <KEY> -m \"<summary>\"\e[0m or \e[33mnomos task sync <KEY> -F <walkthrough>\e[0m.\n"
-        exit 1
+        # 3. Enforce canonical CLI commit entry point in worktree mode (Law 1 & Law 6)
+        if [[ "${NOMOS_COMMIT_IN_PROGRESS:-0}" != "1" ]]; then
+            echo -e "\n\e[31m🚨 Commit Blocked: Direct 'git commit' is forbidden by Law 1 & Law 6.\e[0m"
+            echo -e "Please commit via \e[33mnomos task commit <KEY> -m \"<summary>\"\e[0m or \e[33mnomos task sync <KEY> -F <walkthrough>\e[0m.\n"
+            exit 1
+        fi
     fi
 
     # 4. Check staged files to ensure no staged paths target root workspace files outside worktree
@@ -97,23 +110,36 @@ const CommitMsgHookScript = `#!/usr/bin/env bash
         exit 0
     fi
 
-    # 1. Enforce canonical [<INT|SUB-N>] + Conventional Commit subject (<= 110 chars ceiling, <= 80 target)
-    if ! printf '%s\n' "$FIRST_LINE" | grep -qE '^\[(INT|SUB)-[1-9][0-9]*(-[a-z0-9-]+)?\][[:space:]]+(feat|fix|perf|docs|chore|refactor|test)(\([a-z0-9_,/-]+\))?:[[:space:]]+[^[:space:]]'; then
-        echo -e "\n\e[31m❌ Commit Blocked: Subject must match '[<INT|SUB-N>] <feat|fix|perf|docs|chore|refactor|test>(<scope>): <summary>'.\e[0m"
-        echo "Please use 'nomos task commit' or 'nomos task sync -F <walkthrough>' to generate compliant Golden Commits."
-        exit 1
+    REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+    IS_BRANCH_MODE=0
+    if [ -n "$REPO_ROOT" ] && [ -f "$REPO_ROOT/nomos.yaml" ] && grep -qE '^[[:space:]]*isolation_mode:[[:space:]]*["'\'']?branch["'\'']?([[:space:]]*(#.*)?)?$' "$REPO_ROOT/nomos.yaml"; then
+        IS_BRANCH_MODE=1
     fi
-    if printf '%s\n' "$FIRST_LINE" | grep -qiE '\bself[- ]healing\b'; then
-        echo -e "\n\e[31m❌ Commit Blocked: Avoid marketing euphemisms ('self-healing'); use concrete engineering terms (feat, perf, refactor, fix).\e[0m"
-        exit 1
-    fi
-    if printf '%s\n' "$FIRST_LINE" | grep -qiE '(\[(task[[:space:]]+)?(int|sub|arc)-[0-9]+[a-z]?(-[a-z0-9-]+)?\]|\((int|sub|arc)-[0-9]+[a-z]?(-[a-z0-9-]+)?\))[[:space:]]*$'; then
-        echo -e "\n\e[31m❌ Commit Blocked: Subject contains a duplicate trailing task key token.\e[0m"
-        exit 1
-    fi
-    if [[ "${#FIRST_LINE}" -gt 110 ]]; then
-        echo -e "\n\e[31m❌ Commit Blocked: Subject exceeds 110 characters (${#FIRST_LINE}); target <= 80 characters.\e[0m"
-        exit 1
+
+    if [[ "$IS_BRANCH_MODE" == "1" ]]; then
+        if ! printf '%s' "$FIRST_LINE" | grep -q '[^[:space:]]'; then
+            echo -e "\n\e[31m❌ Commit Blocked: Commit message subject cannot be empty.\e[0m"
+            exit 1
+        fi
+    else
+        # 1. Enforce canonical [<INT|SUB-N>] + Conventional Commit subject (<= 110 chars ceiling, <= 80 target)
+        if ! printf '%s\n' "$FIRST_LINE" | grep -qE '^\[(INT|SUB)-[1-9][0-9]*(-[a-z0-9-]+)?\][[:space:]]+(feat|fix|perf|docs|chore|refactor|test)(\([a-z0-9_,/-]+\))?:[[:space:]]+[^[:space:]]'; then
+            echo -e "\n\e[31m❌ Commit Blocked: Subject must match '[<INT|SUB-N>] <feat|fix|perf|docs|chore|refactor|test>(<scope>): <summary>'.\e[0m"
+            echo "Please use 'nomos task commit' or 'nomos task sync -F <walkthrough>' to generate compliant Golden Commits."
+            exit 1
+        fi
+        if printf '%s\n' "$FIRST_LINE" | grep -qiE '\bself[- ]healing\b'; then
+            echo -e "\n\e[31m❌ Commit Blocked: Avoid marketing euphemisms ('self-healing'); use concrete engineering terms (feat, perf, refactor, fix).\e[0m"
+            exit 1
+        fi
+        if printf '%s\n' "$FIRST_LINE" | grep -qiE '(\[(task[[:space:]]+)?(int|sub|arc)-[0-9]+[a-z]?(-[a-z0-9-]+)?\]|\((int|sub|arc)-[0-9]+[a-z]?(-[a-z0-9-]+)?\))[[:space:]]*$'; then
+            echo -e "\n\e[31m❌ Commit Blocked: Subject contains a duplicate trailing task key token.\e[0m"
+            exit 1
+        fi
+        if [[ "${#FIRST_LINE}" -gt 110 ]]; then
+            echo -e "\n\e[31m❌ Commit Blocked: Subject exceeds 110 characters (${#FIRST_LINE}); target <= 80 characters.\e[0m"
+            exit 1
+        fi
     fi
 
     # 2. Reject '---' patch-scissors lines, legacy Dual-Layer headers, raw diff dumps, and shims
@@ -134,17 +160,19 @@ const CommitMsgHookScript = `#!/usr/bin/env bash
         exit 1
     fi
 
-    # 3. Require substantive rationale prose and a canonical 'Task: <KEY>' trailer matching the subject key
-    SUBJECT_KEY="${FIRST_LINE#\[}"
-    SUBJECT_KEY="${SUBJECT_KEY%%\]*}"
-    if ! grep -qE "^Task:[[:space:]]+${SUBJECT_KEY}[[:space:]]*$" "$1"; then
-        echo -e "\n\e[31m❌ Commit Blocked: Missing 'Task: ${SUBJECT_KEY}' Git trailer matching subject prefix.\e[0m"
-        exit 1
-    fi
-    BODY_PROSE=$(tail -n +2 "$1" | grep -vE '^[[:space:]]*#' | grep -vE '^___+[[:space:]]*$' | grep -vE '^[A-Za-z][A-Za-z0-9-]*:[[:space:]]+' | tr -d '[:space:]')
-    if [[ "${#BODY_PROSE}" -lt 10 ]]; then
-        echo -e "\n\e[31m❌ Commit Blocked: Commit body requires substantive rationale prose above the 'Task:' trailer.\e[0m"
-        exit 1
+    if [[ "$IS_BRANCH_MODE" != "1" ]]; then
+        # 3. Require substantive rationale prose and a canonical 'Task: <KEY>' trailer matching the subject key
+        SUBJECT_KEY="${FIRST_LINE#\[}"
+        SUBJECT_KEY="${SUBJECT_KEY%%\]*}"
+        if ! grep -qE "^Task:[[:space:]]+${SUBJECT_KEY}[[:space:]]*$" "$1"; then
+            echo -e "\n\e[31m❌ Commit Blocked: Missing 'Task: ${SUBJECT_KEY}' Git trailer matching subject prefix.\e[0m"
+            exit 1
+        fi
+        BODY_PROSE=$(tail -n +2 "$1" | grep -vE '^[[:space:]]*#' | grep -vE '^___+[[:space:]]*$' | grep -vE '^[A-Za-z][A-Za-z0-9-]*:[[:space:]]+' | tr -d '[:space:]')
+        if [[ "${#BODY_PROSE}" -lt 10 ]]; then
+            echo -e "\n\e[31m❌ Commit Blocked: Commit body requires substantive rationale prose above the 'Task:' trailer.\e[0m"
+            exit 1
+        fi
     fi
 }
 `
@@ -230,6 +258,9 @@ func InstallHooks(repoRoot string) error {
 	if err := os.WriteFile(filepath.Join(hooksDir, "pre-push"), []byte(PrePushHookScript), 0755); err != nil {
 		return types.NewNomosError(types.ErrCodeBoundary, "failed writing pre-push hook: %v", err)
 	}
+	if err := writePostCommitHook(hooksDir); err != nil {
+		return err
+	}
 	EnsureGitExcludeBoundaries(cleanRoot)
 	EnsureOriginNotesRefspecs(cleanRoot)
 	return nil
@@ -255,78 +286,18 @@ func EnsureHooksInstalled(repoRoot string) (bool, error) {
 	preCommit := filepath.Join(hooksDir, "pre-commit")
 	commitMsg := filepath.Join(hooksDir, "commit-msg")
 	prePush := filepath.Join(hooksDir, "pre-push")
+	postCommit := filepath.Join(hooksDir, "post-commit")
 
 	if hookMatches(preCommit, PreCommitHookScript) &&
 		hookMatches(commitMsg, CommitMsgHookScript) &&
-		hookMatches(prePush, PrePushHookScript) {
+		hookMatches(prePush, PrePushHookScript) &&
+		hookMatches(postCommit, PostCommitHookScript) {
 		EnsureGitExcludeBoundaries(cleanRoot)
 		EnsureOriginNotesRefspecs(cleanRoot)
 		return false, nil // all hooks present, executable, and canonical
 	}
 
 	return true, InstallHooks(cleanRoot)
-}
-
-var canonicalExcludeEntries = []string{
-	"/worktrees/",
-	"/.tmp/",
-	"*.tmp",
-	"*.bak",
-	"*.orig",
-	"*.swp",
-}
-
-// EnsureGitExcludeBoundaries self-heals canonical scratch and worktree patterns in .git/info/exclude.
-func EnsureGitExcludeBoundaries(repoRoot string) {
-	if strings.TrimSpace(repoRoot) == "" {
-		return
-	}
-	gitDir, err := resolveGitCommonDir(repoRoot)
-	if err != nil {
-		return
-	}
-	infoDir := filepath.Join(gitDir, "info")
-	if mkErr := os.MkdirAll(infoDir, 0755); mkErr != nil {
-		return
-	}
-	excludePath := filepath.Join(infoDir, "exclude")
-	existingBytes, rErr := os.ReadFile(excludePath)
-	var existing string
-	if rErr == nil {
-		existing = string(existingBytes)
-	}
-	var missing []string
-	for _, pat := range canonicalExcludeEntries {
-		if !excludeContainsPattern(existing, pat) {
-			missing = append(missing, pat)
-		}
-	}
-	if len(missing) == 0 {
-		return
-	}
-	var sb strings.Builder
-	sb.WriteString(existing)
-	if len(existing) > 0 && !strings.HasSuffix(existing, "\n") {
-		sb.WriteString("\n")
-	}
-	sb.WriteString("# Nomos Self-Healed Scratch & Worktree Boundaries\n")
-	for _, m := range missing {
-		sb.WriteString(m + "\n")
-	}
-	if wErr := os.WriteFile(excludePath, []byte(sb.String()), 0644); wErr != nil {
-		return
-	}
-}
-
-func excludeContainsPattern(existing, pattern string) bool {
-	trimmedAnchor := strings.TrimPrefix(pattern, "/")
-	for _, raw := range strings.Split(existing, "\n") {
-		line := strings.TrimSpace(raw)
-		if line == pattern || (trimmedAnchor != "" && line == trimmedAnchor) {
-			return true
-		}
-	}
-	return false
 }
 
 const (
