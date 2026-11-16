@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -81,6 +82,9 @@ backlog DAG, Mneme memory recall, blast-radius impact, and X-Ray tools.`,
   nomos mcp`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := emitInteractiveHint(cmd.InOrStdin(), cmd.ErrOrStderr(), version); err != nil {
+				return err
+			}
 			return ServeStdio(cmd.InOrStdin(), cmd.OutOrStdout(), version)
 		},
 	}
@@ -183,5 +187,34 @@ func writeRPCFrame(out io.Writer, resp MCPResponse) error {
 		return fmt.Errorf("marshal mcp response: %w", err)
 	}
 	_, err = fmt.Fprintf(out, "%s\n", payload)
+	return err
+}
+
+type statReader interface {
+	io.Reader
+	Stat() (os.FileInfo, error)
+}
+
+func isCharDevice(r io.Reader) bool {
+	sr, ok := r.(statReader)
+	if !ok {
+		return false
+	}
+	info, err := sr.Stat()
+	if err != nil {
+		return false
+	}
+	return (info.Mode() & os.ModeCharDevice) != 0
+}
+
+func emitInteractiveHint(in io.Reader, errOut io.Writer, version string) error {
+	if errOut == nil || !isCharDevice(in) {
+		return nil
+	}
+	_, err := fmt.Fprintf(
+		errOut,
+		"nomos mcp (v%s): stdio JSON-RPC 2.0 server ready; waiting for MCP client frames on stdin (Ctrl+C or Ctrl+D to exit)\n",
+		strings.TrimSpace(version),
+	)
 	return err
 }

@@ -5,6 +5,8 @@ package mcpcmd
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -184,4 +186,95 @@ func marshalJSONStr(t *testing.T, s string) string {
 		t.Fatalf("json.Marshal(%q): %v", s, err)
 	}
 	return string(b)
+}
+
+type charDeviceFileInfo struct {
+	os.FileInfo
+}
+
+func (i charDeviceFileInfo) Mode() os.FileMode {
+	return i.FileInfo.Mode() | os.ModeCharDevice
+}
+
+type charDeviceReader struct {
+	io.Reader
+	info os.FileInfo
+	err  error
+}
+
+func (r charDeviceReader) Stat() (os.FileInfo, error) {
+	if r.err != nil {
+		return nil, r.err
+	}
+	return charDeviceFileInfo{FileInfo: r.info}, nil
+}
+
+// @verifies TC-MCP-01
+func TestMCPInteractiveTTYHintWritesOnlyToStderr(t *testing.T) {
+	tmpFile, err := os.CreateTemp(t.TempDir(), "mcp-stdin-*")
+	if err != nil {
+		t.Fatalf("CreateTemp: %v", err)
+	}
+	if _, err := tmpFile.WriteString(`{"jsonrpc":"2.0","id":1,"method":"ping"}` + "\n"); err != nil {
+		t.Fatalf("WriteString: %v", err)
+	}
+	if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
+		t.Fatalf("Seek: %v", err)
+	}
+	defer func() {
+		if closeErr := tmpFile.Close(); closeErr != nil {
+			t.Errorf("Close temp file: %v", closeErr)
+		}
+	}()
+
+	info, err := tmpFile.Stat()
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+
+	pingFrame := `{"jsonrpc":"2.0","id":1,"method":"ping"}` + "\n"
+
+	// 1. Interactive TTY stdin emits 1-line hint on stderr while keeping stdout pure JSON-RPC.
+	cmdTTY := NewMCPCmd("4.22.0")
+	var outTTY, errTTY bytes.Buffer
+	cmdTTY.SetIn(charDeviceReader{Reader: strings.NewReader(pingFrame), info: info})
+	cmdTTY.SetOut(&outTTY)
+	cmdTTY.SetErr(&errTTY)
+	if err := cmdTTY.Execute(); err != nil {
+		t.Fatalf("Execute on TTY stdin failed: %v", err)
+	}
+	if !strings.Contains(errTTY.String(), "waiting for MCP client frames on stdin") {
+		t.Fatalf("expected interactive stderr hint, got %q", errTTY.String())
+	}
+	var resp MCPResponse
+	if err := json.Unmarshal([]byte(strings.TrimSpace(outTTY.String())), &resp); err != nil {
+		t.Fatalf("expected valid JSON-RPC stdout response, got %q (%v)", outTTY.String(), err)
+	}
+	if string(resp.ID) != "1" {
+		t.Fatalf("expected JSON-RPC response id 1, got %s", string(resp.ID))
+	}
+
+	// 2. Non-TTY stdin (strings.Reader and regular file) emits zero stderr noise.
+	for name, r := range map[string]io.Reader{
+		"string_reader": strings.NewReader(pingFrame),
+		"regular_file":  tmpFile,
+		"stat_error":    charDeviceReader{Reader: strings.NewReader(pingFrame), err: errors.New("stat failed")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cmd := NewMCPCmd("4.22.0")
+			var outBuf, errBuf bytes.Buffer
+			cmd.SetIn(r)
+			cmd.SetOut(&outBuf)
+			cmd.SetErr(&errBuf)
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("Execute (%s) failed: %v", name, err)
+			}
+			if errBuf.Len() != 0 {
+				t.Fatalf("expected empty stderr for non-TTY %s, got %q", name, errBuf.String())
+			}
+			if !strings.Contains(outBuf.String(), `"id":1`) {
+				t.Fatalf("expected JSON-RPC response on stdout for %s, got %q", name, outBuf.String())
+			}
+		})
+	}
 }
