@@ -341,6 +341,10 @@ type UpdateCheckCache struct {
 ### 4.17 Branch Guard Post-Commit Hook (`nomos hook post-commit`)
 * **`nomos hook post-commit`**: Executes automatically from `.git/hooks/post-commit` when `BoundaryConfig.IsolationMode` resolves to `branch`. On non-protected branches, reads the latest commit message and changed files, distills resolved `BRANCH-*` traps into `mneme.db`, and clears the branch trace. Under `branch` mode, `vscope.IsWorktreeContext` treats feature branches as diff-scoped verification targets. `CommitSchemaGate` also accepts standard commit subjects without worktree trailers.
 
+### 4.18 Zero-Phone-Home CI Scaffolding & OASIS SARIF 2.1.0 (`nomos init --ci` & `--sarif`)
+* **`nomos init --ci [--dir <PATH>]`**: Generates deterministic `.github/workflows/nomos-verify.yml` and `.gitlab-ci.yml` `nomos-verify` workflows executing `nomos verify` and SARIF upload with zero network phone-home, printing a Markdown verification badge snippet. Rejects combining `--ci` with `--local` (`ERR_VALIDATION_FAILED`). Extends `nomos init` under Law 6 Canonical Singularity instead of adding a duplicate top-level command.
+* **`nomos xray [dir] --sarif` and `nomos verify [path] --sarif`**: Emits valid OASIS SARIF 2.1.0 JSON (`version: "2.1.0"`, `$schema: "https://json.schemastore.org/sarif-2.1.0.json"`, `#SarifLog`) ingestible by GitHub Code Scanning. Rejects combining `--sarif` with `--json`, `--markdown`, or `--pr` (`ERR_VALIDATION_FAILED`).
+
 ---
 
 ## 5. Table-Driven Verification Vectors
@@ -402,6 +406,8 @@ type UpdateCheckCache struct {
 | `TC-INIT-06` | Law 6 (Agent Adapter Filtering) | `nomos init --agents claude` | Scaffolds selected agent hooks and compact `AGENTS_BRANCH.md` |
 | `TC-INIT-07` | Law 3 & Law 7 (Worktree & Strict Overrides) | `nomos init --worktrees` and `nomos init --strict` | `--worktrees` sets `isolation_mode: "worktree"`; `--strict` preserves `strict_mode: true` |
 | `TC-HELP-01` | Law 6 (Two-Tier Root Help) | `nomos --help` vs `nomos --help-agent` | Default help hides agent RPCs; `--help-agent` prints full catalog without aliases |
+| `TC-CI-01` | Law 5 & Law 6 (Offline CI Scaffolding) | `nomos init --ci` vs `nomos init --ci --local` | Writes offline GitHub and GitLab CI configs; rejects `--ci --local` |
+| `TC-SARIF-01` | Law 2 & Law 4 (OASIS SARIF 2.1.0 Output) | `nomos xray --sarif` and `nomos verify --sarif` | Emits valid SARIF 2.1.0 JSON with driver rules and locations |
 | `TC-XRAY-03` | Law 2 & Law 3 (Read-Only CLI X-Ray) | `nomos xray --json` and `nomos xray --markdown` on uninitialized directory | Emits structured `XrayReport` and Markdown card with zero filesystem or ledger writes |
 | `TC-BG-07` | Law 1 & Law 2 (Post-Commit Mneme Distill) | `nomos hook post-commit` after `nomos verify` trap fix on `feat/auth` | Distills `BRANCH-*` trap-to-fix pitfall into `mneme.db` and clears branch trace |
 | `TC-REL-001` | Law 4 (SPDX Apache-2.0 License) | `LICENSE` audit in `legal_release_contract_test.go` | Verifies verbatim SPDX Apache-2.0 text and appendix |
@@ -427,5 +433,6 @@ type UpdateCheckCache struct {
 | CapBAC task lease enforcement (`capbac.Lease`) | `substrate/src/nomos/core/capbac/lease.go` | `Cell 1.3 (capbac_lease)` |
 | Worktree lifecycle, 2PC sync & Git Notes receipts | `substrate/cli/cmd_task.go`, `substrate/cli/cmd_task_sync.go`, `substrate/src/nomos/modules/task/git_notes.go` | `Cell 3.2 (hermetic_worktree)`, `Cell 3.3 (release_receipt)` |
 | Ambient provider lifecycle hooks (`nomos hook`) | `substrate/cli/hookcmd/` | `Cell 1.2 (phase_discipline)`, `Cell 3.2 (hermetic_worktree)` |
+| OASIS SARIF 2.1.0 & offline CI workflow scaffolding (`#SarifLog`) | `substrate/src/nomos/modules/verify/sarif/sarif.go`, `substrate/cli/selfupdate/cmd_init_ci.go` | `Cell 2.1 (non_verbal_proof)`, `Cell 6.3 (canonical_singularity)` |
 
 Run `nomos verify` to execute all 42 Definition of Done quality gates and confirm exit code `0`.
