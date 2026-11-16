@@ -11,6 +11,7 @@ import (
 	"github.com/mgantlett/nomos/substrate/cli/diag"
 	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
 	"github.com/mgantlett/nomos/substrate/cli/inspectcmd"
+	"github.com/mgantlett/nomos/substrate/cli/mcpcmd"
 	"github.com/mgantlett/nomos/substrate/cli/selfupdate"
 	"github.com/mgantlett/nomos/substrate/cli/tui"
 
@@ -73,7 +74,7 @@ func configureRootHelp(rootCmd *cobra.Command, helpAgent *bool, hiddenAgentCmds 
 			return
 		}
 		defaultHelp(cmd, args)
-		if _, err := fmt.Fprintln(cmd.OutOrStdout(), "\nAgent Harness & Internal RPCs: run \"nomos --help-agent\" for handshake, hook, directive, capabilities, physics, and session commands."); err != nil {
+		if _, err := fmt.Fprintln(cmd.OutOrStdout(), "\nAgent Harness & Internal RPCs: run \"nomos --help-agent\" for handshake, hook, directive, capabilities, physics, session, and mcp commands."); err != nil {
 			return
 		}
 	})
@@ -83,7 +84,7 @@ func shouldRecordCommandTelemetry(cmd *cobra.Command) bool {
 	if cmd == nil || cmd.Name() == "" {
 		return false
 	}
-	if cmd.Name() == "version" || cmd.Name() == "hook" {
+	if cmd.Name() == "version" || cmd.Name() == "hook" || cmd.Name() == "mcp" {
 		return false
 	}
 	for parent := cmd.Parent(); parent != nil; parent = parent.Parent() {
@@ -168,6 +169,7 @@ func registerSubcommands(root *cobra.Command) []*cobra.Command {
 	directiveCmd := inspectcmd.NewDirectiveCmd()
 	capabilitiesCmd := inspectcmd.NewCapabilitiesCmd()
 	sessionCmd := inspectcmd.NewSessionCmd()
+	mcpCmd := mcpcmd.NewMCPCmd(RootCmdVersion)
 
 	addHiddenCommandWithGroup(root, handshakeCmd, "agent")
 	addHiddenCommandWithGroup(root, hookCmd, "agent")
@@ -175,13 +177,14 @@ func registerSubcommands(root *cobra.Command) []*cobra.Command {
 	addHiddenCommandWithGroup(root, capabilitiesCmd, "agent")
 	addCommandWithGroup(root, inspectcmd.NewMemCmd(), "agent")
 	addHiddenCommandWithGroup(root, sessionCmd, "agent")
+	addHiddenCommandWithGroup(root, mcpCmd, "agent")
 
 	addCommandWithGroup(root, diag.NewIssueCmd(), "diagnostics")
 	addCommandWithGroup(root, selfupdate.NewUpdateCmd(), "diagnostics")
 	addCommandWithGroup(root, selfupdate.NewVersionCmd(), "diagnostics")
 
 	tui.DiscoverPlugins(root)
-	return []*cobra.Command{physicsCmd, handshakeCmd, hookCmd, directiveCmd, capabilitiesCmd, sessionCmd}
+	return []*cobra.Command{physicsCmd, handshakeCmd, hookCmd, directiveCmd, capabilitiesCmd, sessionCmd, mcpCmd}
 }
 
 func addCommandWithGroup(root *cobra.Command, cmd *cobra.Command, groupID string) {

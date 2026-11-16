@@ -281,7 +281,7 @@ func TestRootCmd_TwoTierHelpAndHelpAgentSurface(t *testing.T) {
 			t.Errorf("TC-HELP-01: expected default help to include %q, got:\n%s", visible, defaultOut)
 		}
 	}
-	for _, hidden := range []string{"handshake", "hook", "directive", "capabilities", "physics", "session"} {
+	for _, hidden := range []string{"handshake", "hook", "directive", "capabilities", "physics", "session", "mcp"} {
 		if strings.Contains(defaultOut, "\n  "+hidden+" ") {
 			t.Errorf("TC-HELP-01: expected internal RPC %q hidden in command list, got:\n%s", hidden, defaultOut)
 		}
@@ -291,7 +291,7 @@ func TestRootCmd_TwoTierHelpAndHelpAgentSurface(t *testing.T) {
 	if aErr != nil {
 		t.Fatalf("nomos --help-agent failed: %v", aErr)
 	}
-	for _, revealed := range []string{"handshake", "hook", "directive", "capabilities", "physics", "session"} {
+	for _, revealed := range []string{"handshake", "hook", "directive", "capabilities", "physics", "session", "mcp"} {
 		if !strings.Contains(agentOut, "\n  "+revealed+" ") {
 			t.Errorf("TC-HELP-01: expected --help-agent to list %q in command list, got:\n%s", revealed, agentOut)
 		}
