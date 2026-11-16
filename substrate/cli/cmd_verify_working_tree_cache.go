@@ -19,30 +19,49 @@ import (
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/prproof"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/sarif"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
 
 type verifyPRFlags struct {
 	prMode     bool
 	mutateDiff bool
+	sarifMode  bool
 	prOutput   string
 	baseRef    string
 }
 
 func (f verifyPRFlags) hasCustomProbe() bool {
-	return f.prMode || f.mutateDiff || strings.TrimSpace(f.prOutput) != ""
+	return f.prMode || f.mutateDiff || f.sarifMode || strings.TrimSpace(f.prOutput) != ""
 }
 
 func finalizeVerificationReport(out io.Writer, ctx *vscope.VerifyContext, jsonOutput bool, report *verify.PipelineReport, prFlags verifyPRFlags) error {
 	if prFlags.prMode || strings.TrimSpace(prFlags.prOutput) != "" {
 		return executePRProofMode(out, ctx.WorktreePath, report, prFlags, jsonOutput)
 	}
-	renderStandardVerifyReport(out, ctx.RepoRoot, ctx.WorktreePath, ctx.TaskID, jsonOutput, report)
+	if prFlags.sarifMode {
+		if err := writeVerifySarifOutput(out, report); err != nil {
+			return err
+		}
+	} else {
+		renderStandardVerifyReport(out, ctx.RepoRoot, ctx.WorktreePath, ctx.TaskID, jsonOutput, report)
+	}
 	if !report.Passed {
 		return handleFailedVerificationReport(ctx.RepoRoot, ctx.WorktreePath, ctx.TaskID, ctx.AllFiles, ctx.IsBaseline, report)
 	}
 	if prFlags.mutateDiff {
 		return executeStandaloneMutateDiff(out, ctx.WorktreePath, prFlags.baseRef)
+	}
+	return nil
+}
+
+func writeVerifySarifOutput(out io.Writer, report *verify.PipelineReport) error {
+	raw, err := sarif.MarshalIndent(sarif.FromVerifyReport(report, RootCmdVersion))
+	if err != nil {
+		return types.NewNomosError(types.ErrCodeCore, "SARIF serialization failed: %v", err)
+	}
+	if _, wErr := fmt.Fprintln(out, string(raw)); wErr != nil {
+		return types.NewNomosError(types.ErrCodeCore, "SARIF write failed: %v", wErr)
 	}
 	return nil
 }

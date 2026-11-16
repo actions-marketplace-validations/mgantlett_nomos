@@ -128,3 +128,56 @@ func TestInitCmd_BaselineFlagWritesManifestAndCalibratesRatchet(t *testing.T) {
 		t.Fatalf("expected %s committed in baseline governance commit with --worktrees, got:\n%s", constants.FileNomosBaselineJSON, headFiles)
 	}
 }
+
+func TestXraySarifAndInitCIFlagIntegration(t *testing.T) {
+	// @verifies TC-CI-01
+	// @verifies TC-SARIF-01
+	dir := seedCLIXrayRepo(t)
+	runGitOrFail(t, dir, "init", "-b", "main")
+	runGitOrFail(t, dir, "config", "user.email", "dev@example.com")
+	runGitOrFail(t, dir, "config", "user.name", "CI Verifier")
+	runGitOrFail(t, dir, "add", "app.go")
+	runGitOrFail(t, dir, "commit", "-m", "chore: seed monolith")
+
+	var out strings.Builder
+	xrayCmd := NewRootCmd()
+	xrayCmd.SetOut(&out)
+	xrayCmd.SetArgs([]string{"xray", dir, "--sarif"})
+	if err := xrayCmd.Execute(); err != nil {
+		t.Fatalf("nomos xray --sarif failed: %v", err)
+	}
+	if !strings.Contains(out.String(), `"version": "2.1.0"`) || !strings.Contains(out.String(), "NOMOS-XRAY-HOTSPOT") {
+		t.Fatalf("unexpected xray --sarif output:\n%s", out.String())
+	}
+
+	conflictCmd := NewRootCmd()
+	conflictCmd.SetArgs([]string{"init", "--ci", "--local", "--dir", dir})
+	if err := conflictCmd.Execute(); err == nil {
+		t.Fatal("expected nomos init --ci --local to fail closed")
+	}
+
+	var initOut strings.Builder
+	ciCmd := NewRootCmd()
+	ciCmd.SetOut(&initOut)
+	ciCmd.SetArgs([]string{"init", "--ci", "--dir", dir})
+	if err := ciCmd.Execute(); err != nil {
+		t.Fatalf("nomos init --ci failed: %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, ".github", "workflows", "nomos-verify.yml")); statErr != nil {
+		t.Fatalf("expected offline GitHub Actions workflow written: %v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, ".gitlab-ci.yml")); statErr != nil {
+		t.Fatalf("expected offline GitLab CI workflow written: %v", statErr)
+	}
+
+	var vOut strings.Builder
+	vCmd := NewRootCmd()
+	vCmd.SetOut(&vOut)
+	vCmd.SetArgs([]string{"verify", "--baseline", "--sarif", dir})
+	if err := vCmd.Execute(); err == nil {
+		t.Fatal("expected verify --sarif on uncommitted trunk artifacts to return non-zero while emitting SARIF")
+	}
+	if !strings.Contains(vOut.String(), `"version": "2.1.0"`) || !strings.Contains(vOut.String(), `"name": "Nomos"`) || !strings.Contains(vOut.String(), `"level": "error"`) {
+		t.Fatalf("unexpected verify --sarif output:\n%s", vOut.String())
+	}
+}

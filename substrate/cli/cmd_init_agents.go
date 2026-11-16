@@ -258,6 +258,10 @@ func printInitializationSummary(info initSummaryData) {
 	if info.wroteBaseline && info.preInitXray != nil {
 		writeSummaryLine(out, "  %s Baseline locked %s\n", check, tui.UiCommandStyle.Render(fmt.Sprintf("(%s · score %d/100 · grade %s)", constants.FileNomosBaselineJSON, info.preInitXray.HangoverScore, info.preInitXray.Grade)))
 	}
+	if len(info.ciFiles) > 0 {
+		writeSummaryLine(out, "  %s CI workflows: %s\n", check, tui.UiCommandStyle.Render(strings.Join(info.ciFiles, ", ")))
+		writeSummaryLine(out, "  %s README badge: %s\n", check, tui.UiMutedStyle.Render(selfupdate.FormatReadmeBadgeSnippet(filepath.Base(info.absDir))))
+	}
 	if info.createdBaselineCommit {
 		writeSummaryLine(out, "  %s Created baseline governance commit on %s\n", check, tui.UiBoldValueStyle.Render(info.defaultBranch))
 	}

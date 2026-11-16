@@ -27,12 +27,13 @@ import (
 //go:embed templates/* templates/hooks/* templates/hooks/scripts/*
 var initTemplates embed.FS
 
-// InitOptions parameterizes workspace initialization across Branch Guard, Worktrees, and stealth trial modes (@intent task_lifecycle_cli_spec.md).
+// InitOptions parameterizes workspace initialization across Branch Guard, Worktrees, CI, and stealth trial modes (@intent task_lifecycle_cli_spec.md).
 type InitOptions struct {
 	Worktrees  bool
 	Local      bool
 	Strict     bool
 	Baseline   bool
+	CI         bool
 	Agents     string
 	LegacyInit bool
 	Out        io.Writer
@@ -47,6 +48,7 @@ type initSummaryData struct {
 	createdBaselineCommit bool
 	preInitXray           *xray.XrayReport
 	wroteBaseline         bool
+	ciFiles               []string
 }
 
 // NewInitCmd creates the workspace initialization command.
@@ -78,6 +80,7 @@ func NewInitCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&opts.Worktrees, "worktrees", false, "Enable isolated git worktrees and formal INT/SUB lifecycle instead of Branch Guard")
 	cmd.Flags().BoolVar(&opts.Local, "local", false, "Register all Nomos files in .git/info/exclude for a zero-footprint local stealth trial")
 	cmd.Flags().BoolVar(&opts.Strict, "strict", false, "Enforce strict_mode: true without automatic brownfield baseline relaxation")
+	cmd.Flags().BoolVar(&opts.CI, "ci", false, "Generate offline GitHub Actions and GitLab CI workflows running nomos verify")
 	cmd.Flags().StringVar(&opts.Agents, "agents", "", "Comma-separated agent targets (claude, cursor, opencode, gemini, agy, or all)")
 	return cmd
 }
@@ -106,6 +109,10 @@ func executeInitWithOptions(dir string, opts InitOptions) error {
 	if err := scaffoldGovernanceForOptions(absDir, opts, selectedAgents, shouldBaseline, preInitXray); err != nil {
 		return err
 	}
+	ciFiles, ciErr := scaffoldCIWorkflowsIfRequested(absDir, opts)
+	if ciErr != nil {
+		return ciErr
+	}
 
 	isGitRepo, createdCommit := initializeGitGovernanceWithOptions(absDir, opts)
 	if dbErr := verifyDatabaseConnectivity(); dbErr != nil {
@@ -122,14 +129,26 @@ func executeInitWithOptions(dir string, opts InitOptions) error {
 		createdBaselineCommit: createdCommit,
 		preInitXray:           preInitXray,
 		wroteBaseline:         shouldBaseline,
+		ciFiles:               ciFiles,
 	})
 	return nil
+}
+
+func scaffoldCIWorkflowsIfRequested(absDir string, opts InitOptions) ([]string, error) {
+	if !opts.CI {
+		return nil, nil
+	}
+	return selfupdate.ScaffoldCIWorkflows(absDir, detectDefaultBranch(absDir))
 }
 
 func validateInitPreconditions(dir string, opts InitOptions) (string, error) {
 	if opts.Baseline && opts.Strict {
 		return "", types.NewNomosError(types.ErrCodeValidationFailed, "cannot combine --baseline and --strict on nomos init").
 			WithRemedy("omit --baseline to enforce strict_mode: true, or omit --strict to lock a brownfield baseline")
+	}
+	if opts.CI && opts.Local {
+		return "", types.NewNomosError(types.ErrCodeValidationFailed, "cannot combine --ci and --local on nomos init").
+			WithRemedy("omit --local to commit CI workflow files, or omit --ci for a stealth local trial")
 	}
 	absDir, err := filepath.Abs(dir)
 	if err != nil {
