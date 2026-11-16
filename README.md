@@ -24,48 +24,50 @@
 
 Coding agents optimize for making their prompt finish, even when that means deleting failing tests, returning empty `// TODO` stubs, editing linter configs, or stuffing new complexity into fragile legacy files.
 
-**Nomos** is a single `~20 MB` static Go binary (`Apache 2.0`, zero cloud account, zero telemetry) that sits between your coding agent (**Claude Code**, **Cursor**, **OpenCode**, **Gemini CLI**, **Antigravity**, **Windsurf**, or **Aider**) and Git. Just as PostgreSQL placed ACID transactions between applications and raw disk, Nomos places **human-authored repository laws underneath machine speed** so nothing touches `main` unless it passes isolated `git worktree` sandboxes and compiled AST verification.
+**Nomos** is a single `~20 MB` static Go binary (`Apache 2.0`, zero cloud account, zero telemetry) that sits between your coding agent (**Claude Code**, **Cursor**, **OpenCode**, **Gemini CLI**, **Antigravity**, **Windsurf**, or **Aider**) and Git. Just as PostgreSQL placed ACID transactions between applications and raw disk, Nomos places **human-authored repository laws underneath machine speed** so nothing touches `main` without passing compiled AST verification on feature branches.
 
-**Inspect in 5 seconds. Govern in one command. Invisible after that:**
+**Audit in 5 seconds. Guard every branch in one command. Scale when you need it:**
 
 ```bash
 curl -fsSL https://sophialabs.ca/install | bash
-cd your-project && nomos xray .          # 5-sec read-only AI Hangover Score & hotspot scan (zero config)
-nomos init --baseline                    # Scaffolds nomos.yaml + freezes existing brownfield debt on Day 0
+cd your-project && nomos xray .          # 1. Read-only AI Hangover Score & hotspot scan (use --markdown to share)
+nomos init                               # 2. Enables Branch Guard, auto-baselines brownfield debt & detects agents
+nomos init --local                       #    (Or run a stealth solo trial in .git/info/exclude with clean git status)
+git switch -c feat/auth                  # 3. Code & git commit normally; main stays locked and verified
 ```
 
 ---
 
-## ✨ What's Included Out of the Box (100% Apache 2.0 Open-Core)
+## ✨ Progressive Governance Out of the Box (100% Apache 2.0 Open-Core)
 
-Every single-repository governance capability ships locally in the open-source `nomos` binary with zero crippled commands:
+Every single-repository governance capability ships locally in the open-source `nomos` binary with zero crippled commands, and you adopt complexity only as your repo grows:
 
-### 1. Zero-Init Brownfield X-Ray & Debt Ratchet (`nomos xray`, `nomos init --baseline`)
-- **Sub-Second Git-Aware Audit (`nomos xray .`):** Walks your Git index (`git ls-files --cached --others --exclude-standard`, honoring `.gitignore` automatically) across 11 languages to compute an `AI Hangover Score` (`0-100`, `Grade A-F`), structural clones, `>400 LOC` monoliths, oversized functions, high-arity (`>8` params) and deep-nesting (`>5` levels) signatures, magic-string duplication clusters, empty/TODO stubs, skipped tests, swallowed errors, secret/host-path leaks, CWE security sinks, and ready-to-lock hexagonal `architecture_boundaries` with **zero repository writes**.
-- **Drop Into `200k+ LOC` Legacy Repos on Day 1 (`nomos init --baseline`):** Freezes observed Day-0 structural envelopes in `nomos.baseline.json` (`strict_mode: false`) with **zero upfront warning cleanup**, while ratcheting **every file an agent touches** (`<= 0` added cyclomatic/cognitive/arity debt, `>= 0` test coverage delta, `0` new structural clones, swallowed errors, or secret/path leaks).
-- **Tamper-Proof Human Exceptions:** Agents are blocked from adding inline linter-ignore comments or editing `nomos.yaml` inside a task branch; human architects declare legitimate adapter carve-outs (`allow_only`, `forbid_imports`, `exclude`) directly on protected `main`.
-- **Self-Hosted Dogfood Proof (`0/100 Grade A`):** `nomos` enforces `strict_mode: true` across its own `458`-file (`84,742 LOC`) Go codebase with `0` clones, `0` monoliths, `0` high-arity or deep-nesting violations, `0` empty stubs, and `0` swallowed errors.
+### 1. Zero-Init Brownfield X-Ray & Auto-Baseline (`nomos xray`, `nomos init`)
+- **Sub-Second Git-Aware Audit (`nomos xray . [--markdown]`):** Walks your Git index (`git ls-files --cached --others --exclude-standard`, honoring `.gitignore` automatically) across 11 languages to compute an `AI Hangover Score` (`0-100`, `Grade A-F`), structural clones, `>400 LOC` monoliths, oversized functions, high-arity (`>8` params) and deep-nesting (`>5` levels) signatures, magic-string duplication clusters, empty/TODO stubs, skipped tests, swallowed errors, secret/host-path leaks, CWE security sinks, and ready-to-lock hexagonal `architecture_boundaries` with **zero repository writes**.
+- **Drop Into `200k+ LOC` Legacy Repos With Zero Flags (`nomos init`):** Bare `nomos init` scans your repo automatically and freezes observed Day-0 debt bounds in `nomos.baseline.json` (`strict_mode: false`) when legacy debt exists, keeping greenfield repos strict (`nomos init --strict` forces strict mode anywhere). Every file an agent touches is ratcheted (`<= 0` added cyclomatic/cognitive/arity debt, `>= 0` test coverage delta, `0` new structural clones, swallowed errors, or secret/path leaks).
+- **Zero-Footprint Stealth Trial (`nomos init --local`):** Want to test Nomos on your team's repo before opening a PR? `--local` registers all generated contracts and agent hooks in `.git/info/exclude` instead of touching `.gitignore`, keeping `git status` clean and making zero commits on `main`. Run `nomos init` later to promote cleanly.
+- **Self-Hosted Dogfood Proof (`0/100 Grade A`):** `nomos` enforces `strict_mode: true` across its own Go codebase with `0` clones, `0` monoliths, `0` high-arity or deep-nesting violations, `0` empty stubs, and `0` swallowed errors.
 
-### 2. Hermetic Worktrees, Multi-Agent `MTPO` & Constitutional `main` (`nomos task`, `nomos physics`)
-- **Physically Read-Only `main`:** Direct agent commits to `main` fail closed; tasks execute inside disposable `worktrees/<repo>-<task>` sandboxes (`nomos task chore`, `nomos task pair`, `nomos task dag`).
-- **Write-Time Multi-Worktree AST Collision Radar (`MTPO`):** Computes live exported AST symbol hulls across sibling `worktrees/*` sandboxes (`nomos physics`, `nomos task start`, and `PostToolUse` advisories) so concurrent coding agents detect overlapping symbols before drifting into semantic merge conflicts.
-- **Spec-vs-Code Separation & 2PC Receipts:** Separates human contracts (`INT-*`) from implementation (`SUB-*`) across `PLAN -> EDIT -> REVIEW -> SYNC -> LEARN`, then `nomos task sync` fast-forwards `main`, stamps a SHA-256 **Git Notes** receipt (`refs/notes/nomos/releases`), and prunes the worktree.
+### 2. Branch Guard First, Isolated Worktrees When Ready (`branch` vs `nomos init --worktrees`)
+- **Protected `main`, Normal `feat/*` Workflow:** Out of the box, `nomos init` configures `isolation_mode: "branch"`. Direct agent writes or commits on `main`/`master` and tampering with `nomos.yaml`, `nomos.baseline.json`, or `.git/hooks/*` fail closed, while edits and plain `git commit` calls on `feat/*` branches work normally behind automated `42`-gate `pre-commit` verification.
+- **Upgrade Without Friction (`nomos init --worktrees`):** Whenever you want parallel multi-agent sandboxes, cross-branch collision radar, or strict spec-before-code separation, add `--worktrees` (detailed in the expandable architecture reference below).
 
 ### 3. 42 Polyglot Anti-Cheat AST Gates & PR Mutation Proofs (`nomos verify`)
 - **11 Languages in `~460ms` (`~24ms` Single-File Radar, `0` LLM Judge Tokens):** Built-in AST, `.scm` query, `wazero` WASM, and native toolchain/coverage probes across **Go, TypeScript/Svelte, Python, Rust, Ruby, C/C++, Java, Kotlin, and C#**.
 - **Diff-Scoped AST Mutation & Zero-Trust PR Receipts (`nomos verify --pr --mutate-diff`):** Mutates newly added conditionals and return values across Go, TypeScript/JS, and Python to prove modified tests actually fail when logic breaks (blocking tautological `assert True` tests), and emits GitHub PR proof receipts via `action.yml`.
-- **Anti-Reward-Hacking & Architectural Obligations:** Blocks deleted or skipped tests (`t.Skip`, `@pytest.mark.skip`, `#[ignore]`, `xit`, `@Disabled`, `[Fact(Skip=...)]`), hollow stubs (`todo!()`, `pass`, `NotImplementedError`), functions `> 60 LOC` (`400 LOC` file ceiling), directional `architecture_boundaries`, `strict_types`, `TC-*` bindings, and 1-turn `NomosError` remediation.
+- **Anti-Reward-Hacking & Architectural Obligations:** Blocks deleted or skipped tests (`t.Skip`, `@pytest.mark.skip`, `#[ignore]`, `xit`, `@Disabled`, `[Fact(Skip=...)]`), hollow stubs (`todo!()`, `pass`, `NotImplementedError`), functions `> 60 LOC` (`400 LOC` file ceiling), directional `architecture_boundaries`, `strict_types`, and 1-turn remediation.
 
 ### 4. `~4ms` Pre-Tool Security Airlock & Loop Circuit-Breaker (`nomos hook`)
-- **Host Credential & SSRF Firewall:** Blocks agent reads of `~/.ssh`, `~/.aws`, `~/.kube`, `~/.gnupg`, `~/.config/gcloud`, `.netrc`, `.npmrc`, and `.pypirc`, blocks cloud metadata SSRF (`169.254.169.254`), and tracks multi-turn compositional taint (`CapabilityFlowGraph`) across web ingress and egress/MCP tools.
-- **Anti-Phantom Stop & 3-Strike Circuit-Breaker:** Prevents agents from claiming "tests pass" without a verified exit code and halts 3 consecutive non-progressing failures before burning context budgets.
+- **Host Credential & SSRF Firewall:** Blocks agent reads of `~/.ssh`, `~/.aws`, `~/.kube`, `~/.gnupg`, `~/.config/gcloud`, `.netrc`, `.npmrc`, and `.pypirc`, blocks cloud metadata SSRF (`169.254.169.254`), and tracks multi-turn compositional taint across web ingress and egress/MCP tools.
+- **Anti-Phantom Stop & 3-Strike Circuit-Breaker:** Prevents agents from claiming "tests pass" on a feature branch or worktree without a verified exit code and halts 3 consecutive non-progressing failures before burning context budgets.
 
 ### 5. Receipt-Gated Episodic Memory (`nomos mem` / `mneme.db`)
 - **Zero-Cloud Local SQLite Recall (`<50ms`):** Pure-Go SQLite WAL store combining AST directory-scoped pitfalls/patterns with 64-dim subword hashing, lexical ranking, and optional local neural embeddings (`LOCAL_EMBEDDING_URL`).
-- **Zero Poisoned Notes:** Promotes `pitfall` and `pattern` lessons strictly after a verified 2PC release receipt so failed runs never pollute repository memory.
+- **Automatic Feature-Branch Distillation (`post-commit`):** In Branch Guard mode, `.git/hooks/post-commit` promotes resolved gate traps and verified commit patterns after passing `git commit` checks (and on 2PC merges in worktree mode) so failed runs never pollute repository memory.
 
-### 6. Drop-In Hooks Across Every Major Coding Agent (`nomos hook install`)
-- **Works With Your Existing Stack:** Auto-scaffolds `AGENTS.md`, `CLAUDE.md`, self-healing Git hooks (`pre-commit`, `commit-msg`, `pre-push`), and native lifecycle hooks for **Claude Code** (`.claude/settings.json`), **Cursor** (`.cursor/hooks.json`), **OpenCode** (`.opencode/plugins/nomos.ts`), **Gemini CLI** (`.gemini/settings.json`), and **Antigravity** (`.agents/hooks.json`), plus `--container-sandbox` for Docker/CI workloads.
+### 6. Auto-Detected Hooks & Clean 2-Tier CLI (`nomos --help`)
+- **Zero Unwanted Dot-Dir Bloat:** `nomos init` detects which agents you actually have installed or configured (**Claude Code**, **Cursor**, **OpenCode**, **Gemini CLI**, or **Antigravity**) or accepts `--agents claude,cursor`, scaffolds compact `AGENTS.md` instructions (`~15` lines in Branch Guard mode), and installs native lifecycle hooks + `pre-commit` / `commit-msg` / `post-commit` / `pre-push` Git guards.
+- **Uncluttered CLI Surface:** Default `nomos --help` focuses on everyday developer workflows (`xray`, `init`, `verify`, `status`, `task`, `mem`, `issue`, `update`); run `nomos --help-agent` anytime to inspect internal agent-harness RPCs (`hook`, `handshake`, `directive`, `capabilities`, `physics`, `session`).
 
 ---
 
@@ -74,7 +76,7 @@ Every single-repository governance capability ships locally in the open-source `
 ### 1. Install `nomos`
 
 ```bash
-# Linux, macOS & WSL2 (SHA-256 verified release binary; pin with NOMOS_VERSION=v4.20.1):
+# Linux, macOS & WSL2 (SHA-256 verified release binary):
 curl -fsSL https://sophialabs.ca/install | bash
 
 # macOS & Linux (Homebrew):
@@ -94,35 +96,37 @@ nomos update && nomos update --sync-workspace
 curl -fsSL https://sophialabs.ca/uninstall | bash
 ```
 
-### 2. X-Ray & Initialize Any Greenfield or Brownfield Repository
+### 2. X-Ray & Initialize in Your Preferred Mode
 
 ```bash
 cd your-project
-nomos xray .              # Sub-second Git-aware AI Hangover Score & 10-sensor hotspot audit
-nomos init --baseline     # Scaffolds nomos.yaml, hooks & locks nomos.baseline.json on Day 0
+nomos xray .              # Step 0: Sub-second read-only AI Hangover Score (or --markdown for PRs/Slack)
+nomos init                # Step 1: Branch Guard + auto-baseline + auto-detected agent hooks (no silent main commit)
+# nomos init --local      # Optional: zero-footprint stealth trial tracked only in .git/info/exclude
 ```
 
-### 3. Prompt Your Agent in Plain English
-
-Open **Claude Code**, **Cursor**, **OpenCode**, **Gemini CLI**, **Antigravity**, or **Windsurf** and ask for a feature normally:
-
-```text
-> "Add TTL cache eviction to Store with unit tests"
-```
-
-Your agent autonomously executes the sandboxed lifecycle under the hood (in as few as 2 CLI calls on small chores):
+### 3. Code on Normal Feature Branches With Any Agent
 
 ```bash
-nomos task chore "Add TTL cache eviction"                              # 1. Opens isolated worktree (worktrees/<repo>-SUB-1)
-nomos task sync SUB-1 -m "Add TTL cache eviction and unit coverage"    # 2. Verifies 42 gates, merges to main & seals Git Note
+git switch -c feat/ttl-cache
+# Open Claude Code, Cursor, OpenCode, Gemini CLI, or Antigravity:
+#   "Add TTL cache eviction to Store with unit tests"
+git add -A && git commit -m "feat: add TTL cache eviction"
+# pre-commit runs nomos verify (42 gates); post-commit distills lessons into mneme.db
 ```
 
-### 4. Enforce Zero-Trust PR Proof Receipts in GitHub Actions (Optional)
+### 4. Graduate to CI PR Proofs, Parallel Worktrees & Sovereign Governance (Optional)
+
+```bash
+# Graduate an existing repo to isolated git worktrees & causal INT/SUB task twins:
+nomos init --worktrees
+```
 
 ```yaml
+# Enforce zero-trust PR mutation proofs in GitHub Actions:
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }
-- uses: mgantlett/nomos@v4.19.0
+- uses: mgantlett/nomos@v4.20.1
   with:
     base-ref: origin/main
     mutate-diff: 'true'
@@ -188,13 +192,18 @@ Across `108` paired zero-hint brownfield episodes (`54` Stock vs. `54` Nomos `v4
 </details>
 
 <details>
-<summary><b>🏗️ Expand Architecture Blueprint, CLI Surface & Specifications</b></summary>
+<summary><b>🏗️ Expand Architecture Blueprint, Worktrees (`INT`/`SUB`), CLI Surface & Specifications</b></summary>
 
 <br />
 
 <div align="center">
   <img src="intent/assets/nomos_hero_blueprint_v1_5.jpg" alt="Nomos v1.5 Downstream Closed-Loop Lifecycle Architecture" width="100%" />
 </div>
+
+When your team scales beyond single-branch workflows (`nomos init --worktrees`):
+- **Hermetic Worktree Isolation:** Direct edits in the root checkout fail closed; `nomos task chore` / `nomos task start` mints `capbac.Lease` capabilities inside disposable `worktrees/<repo>-<task>` sandboxes (`PLAN -> EDIT -> REVIEW -> SYNC -> LEARN`).
+- **Two-Plane Spec-vs-Code Separation (`INT`/`SUB`) & `2PC` Sync:** Separates human specifications (`INT-*`) from substrate implementation (`SUB-*`), while `nomos task sync` runs `42` gates, fast-forwards `main`, records a SHA-256 Git Notes receipt (`refs/notes/nomos/releases`), and prunes the worktree.
+- **Multi-Worktree AST Collision Radar (`MTPO`) & `NCTE-100`:** `nomos physics` computes live exported symbol hulls across active sandboxes to prevent merge collisions, and `nomos directive --lint` enforces unambiguous controlled English in `intent/` specs.
 
 | Capability | Canonical CLI Surface | Architecture Specification |
 | :--- | :--- | :--- |
@@ -235,7 +244,7 @@ Nomos Community Edition is **100% open-source under Apache 2.0** with zero telem
 
 | Capability Layer | Nomos Community Edition (Apache 2.0) | SophiaLabs Nomos Sovereign |
 | :--- | :--- | :--- |
-| **Zero-Init Brownfield X-Ray, Day-0 Debt Ratchet & Trunk-Pinned `nomos.yaml`** (`nomos xray`, `nomos init --baseline`, `nomos.baseline.json`) | ✅ Included | ✅ Included + X-Ray Debt Atlas HUD & Disjoint-AST Fleet Burndown (`nomos code --burndown`) |
+| **Zero-Init Brownfield X-Ray, Day-0 Debt Ratchet & Trunk-Pinned `nomos.yaml`** (`nomos xray`, `nomos init`, `nomos.baseline.json`) | ✅ Included | ✅ Included + X-Ray Debt Atlas HUD & Disjoint-AST Fleet Burndown (`nomos code --burndown`) |
 | **Indirect Control for Tier 1 Coding Agents** (`AGENTS.md`, `CLAUDE.md`, `.claude/settings.json`, `.gemini/settings.json`, `.opencode/plugins/nomos.ts`, `.cursor/hooks.json`, `.agents/hooks.json`) | ✅ Included | ✅ Included + 70/30 Cognitive Complexity Router (`nomos code route`) |
 | **42-Gate Polyglot Verification, PR Receipts & Diff Mutation Proofs** (`nomos verify`, `--pr`, `--mutate-diff`, `action.yml`, 7 Laws + DoD) | ✅ Included | ✅ Included + PR Mutation Proof Deck & Custom Enterprise Gates |
 | **Pre-Tool Security & Anti-Snooping Airlock** (`CapabilityFlowGraph` IFC, Credential & Verifier Airlock, Command & Zero-Trust MCP Guard) | ✅ Included | ✅ Included + Live 2D Firewall & Air-Gap Radar |
