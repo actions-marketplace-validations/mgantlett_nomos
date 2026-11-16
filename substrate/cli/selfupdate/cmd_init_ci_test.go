@@ -23,10 +23,21 @@ func TestScaffoldCIWorkflows_GitHubGitLabAndIdempotency(t *testing.T) {
 		t.Fatalf("read github workflow: %v", err)
 	}
 	ghText := string(ghBytes)
-	for _, want := range []string{"fetch-depth: 0", "nomos verify --sarif", "github/codeql-action/upload-sarif@v3", "NOMOS_NO_UPDATE_CHECK: \"1\""} {
+	for _, want := range []string{
+		"fetch-depth: 0",
+		"nomos verify --sarif",
+		"github/codeql-action/upload-sarif@v3",
+		"NOMOS_NO_UPDATE_CHECK: \"1\"",
+		`export NOMOS_INSTALL_DIR="${HOME}/.local/bin"`,
+		"install.sh | bash",
+		`echo "${NOMOS_INSTALL_DIR}" >> "${GITHUB_PATH}"`,
+	} {
 		if !strings.Contains(ghText, want) {
 			t.Fatalf("github workflow missing %q:\n%s", want, ghText)
 		}
+	}
+	if strings.Contains(ghText, "install.sh | sh") {
+		t.Fatalf("github workflow must pipe install.sh to bash, not sh:\n%s", ghText)
 	}
 
 	glPath := filepath.Join(dir, ".gitlab-ci.yml")
@@ -34,8 +45,20 @@ func TestScaffoldCIWorkflows_GitHubGitLabAndIdempotency(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read gitlab ci: %v", err)
 	}
-	if !strings.Contains(string(glBytes), "nomos-verify:") || !strings.Contains(string(glBytes), "nomos verify") {
-		t.Fatalf("unexpected gitlab ci content:\n%s", string(glBytes))
+	glText := string(glBytes)
+	for _, want := range []string{
+		"nomos-verify:",
+		"nomos verify",
+		`export NOMOS_INSTALL_DIR="${HOME}/.local/bin"`,
+		"install.sh | bash",
+		`export PATH="${NOMOS_INSTALL_DIR}:${PATH}"`,
+	} {
+		if !strings.Contains(glText, want) {
+			t.Fatalf("gitlab ci missing %q:\n%s", want, glText)
+		}
+	}
+	if strings.Contains(glText, "install.sh | sh") {
+		t.Fatalf("gitlab ci must pipe install.sh to bash, not sh:\n%s", glText)
 	}
 
 	// Re-running ScaffoldCIWorkflows must not duplicate nomos-verify job in existing .gitlab-ci.yml.
@@ -52,5 +75,26 @@ func TestScaffoldCIWorkflows_GitHubGitLabAndIdempotency(t *testing.T) {
 	badge := FormatReadmeBadgeSnippet("demo-app")
 	if !strings.Contains(badge, "actions/workflows/nomos-verify.yml/badge.svg") {
 		t.Fatalf("unexpected badge snippet %q", badge)
+	}
+}
+
+// TestRootActionYAML_MarketplaceBrandingAndStepSummaryExitTrap verifies root action.yml metadata and failure summary capture.
+func TestRootActionYAML_MarketplaceBrandingAndStepSummaryExitTrap(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "action.yml"))
+	if err != nil {
+		t.Fatalf("read root action.yml: %v", err)
+	}
+	text := string(raw)
+	for _, want := range []string{
+		"branding:",
+		"icon: 'shield'",
+		"VERIFY_EXIT=0",
+		"|| VERIFY_EXIT=$?",
+		`cat "${INPUT_RECEIPT_PATH}" >> "$GITHUB_STEP_SUMMARY"`,
+		`exit "${VERIFY_EXIT}"`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("action.yml missing %q:\n%s", want, text)
+		}
 	}
 }

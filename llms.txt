@@ -10,12 +10,15 @@
 - **Architecture Specifications (37):** https://sophialabs.ca/docs/specs
 - **Empirical Field Dispatches:** https://sophialabs.ca/dispatches
 
-## Quickstart & Day-0 Brownfield Onboarding
+## Quickstart & Progressive Onboarding
 
 ```bash
 curl -fsSL https://sophialabs.ca/install | bash
 nomos xray .              # 5-second read-only AI Hangover Score & structural hotspot audit across 11 languages
-nomos init --baseline     # Freezes legacy brownfield debt in nomos.baseline.json and ratchets agent-touched diffs
+nomos init                # Enables Branch Guard, auto-baselines legacy debt in nomos.baseline.json & detects agent hooks
+nomos init --local        # Zero-footprint stealth trial tracked only in .git/info/exclude
+nomos init --ci           # Scaffolds offline GitHub Actions (SARIF 2.1.0) & GitLab CI verification workflows
+nomos init --worktrees    # Graduates to isolated git worktrees & formal INT/SUB task lifecycle
 ```
 
 Go module installation alternative:
@@ -34,13 +37,12 @@ go install github.com/mgantlett/nomos/substrate/cmd/nomos@latest
 
 ## Canonical CLI Surface
 
-- `nomos xray [path]` - Read-only structural complexity, clone, monolith, stub, and CWE sink diagnostic.
-- `nomos init [--baseline]` - Scaffolds `nomos.yaml`, agent steering rules, and optional brownfield debt baseline.
-- `nomos handshake` - Initializes session state, verifies CapBAC capability leases, installs Git hooks, and emits HATEOAS Next Actions.
+- `nomos xray [path] [--sarif]` - Read-only structural complexity, clone, monolith, stub, CWE sink, and OASIS SARIF 2.1.0 diagnostic.
+- `nomos init [--local] [--ci] [--worktrees] [--baseline]` - Scaffolds Branch Guard (`nomos.yaml`), stealth `.git/info/exclude` trials, offline CI/SARIF workflows, auto-detected agent rules, and optional brownfield debt baseline.
 - `nomos status` - Displays workspace phase, active worktrees, and ready task wavefront.
 - `nomos task chore "<title>"` - Provisions an isolated task worktree in `EDIT` phase in one turn.
 - `nomos task start <KEY> --edit` - Enters `EDIT` phase inside an isolated worktree for a planned `INT-*` or `SUB-*` task.
-- `nomos verify [--pr --mutate-diff] [--impact]` - Runs all 42 Definition of Done quality gates, optional mutation proofs, and 1-hop AST blast radius.
+- `nomos verify [--pr --mutate-diff] [--sarif] [--impact]` - Runs all 42 Definition of Done quality gates, optional mutation proofs, SARIF 2.1.0 output, and 1-hop AST blast radius.
 - `nomos task sync <KEY> -m "<summary>"` - Executes atomic 2PC verification, fast-forward merge to `main`, Git Notes receipt, and worktree cleanup.
 - `nomos mem recall "<query>" [-A]` - Searches local or cross-repository verified episodic lessons.
-- `nomos capabilities [id]` / `nomos directive [name]` - Inspects active quality gates, hooks, and embedded phase playbooks.
+- `nomos --help-agent` - Reveals internal agent-harness RPCs (`handshake`, `hook`, `capabilities`, `directive`, `physics`).

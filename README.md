@@ -52,9 +52,9 @@ Every single-repository governance capability ships locally in the open-source `
 - **Protected `main`, Normal `feat/*` Workflow:** Out of the box, `nomos init` configures `isolation_mode: "branch"`. Direct agent writes or commits on `main`/`master` and tampering with `nomos.yaml`, `nomos.baseline.json`, or `.git/hooks/*` fail closed, while edits and plain `git commit` calls on `feat/*` branches work normally behind automated `42`-gate `pre-commit` verification.
 - **Upgrade Without Friction (`nomos init --worktrees`):** Whenever you want parallel multi-agent sandboxes, cross-branch collision radar, or strict spec-before-code separation, add `--worktrees` (detailed in the expandable architecture reference below).
 
-### 3. 42 Polyglot Anti-Cheat AST Gates & PR Mutation Proofs (`nomos verify`)
+### 3. 42 Polyglot Anti-Cheat AST Gates, SARIF & PR Mutation Proofs (`nomos verify`)
 - **11 Languages in `~460ms` (`~24ms` Single-File Radar, `0` LLM Judge Tokens):** Built-in AST, `.scm` query, `wazero` WASM, and native toolchain/coverage probes across **Go, TypeScript/Svelte, Python, Rust, Ruby, C/C++, Java, Kotlin, and C#**.
-- **Diff-Scoped AST Mutation & Zero-Trust PR Receipts (`nomos verify --pr --mutate-diff`):** Mutates newly added conditionals and return values across Go, TypeScript/JS, and Python to prove modified tests actually fail when logic breaks (blocking tautological `assert True` tests), and emits GitHub PR proof receipts via `action.yml`.
+- **Diff-Scoped AST Mutation, OASIS SARIF 2.1.0 & Zero-Trust PR Receipts (`nomos verify --pr --mutate-diff`, `--sarif`):** Mutates newly added conditionals and return values across Go, TypeScript/JS, and Python to prove modified tests actually fail when logic breaks (blocking tautological `assert True` tests), emits OASIS SARIF 2.1.0 (`nomos xray --sarif` / `nomos verify --sarif`) for GitHub Code Scanning, and publishes GitHub PR proof receipts via `action.yml`.
 - **Anti-Reward-Hacking & Architectural Obligations:** Blocks deleted or skipped tests (`t.Skip`, `@pytest.mark.skip`, `#[ignore]`, `xit`, `@Disabled`, `[Fact(Skip=...)]`), hollow stubs (`todo!()`, `pass`, `NotImplementedError`), functions `> 60 LOC` (`400 LOC` file ceiling), directional `architecture_boundaries`, `strict_types`, and 1-turn remediation.
 
 ### 4. `~4ms` Pre-Tool Security Airlock & Loop Circuit-Breaker (`nomos hook`)
@@ -118,6 +118,9 @@ git add -A && git commit -m "feat: add TTL cache eviction"
 ### 4. Graduate to CI PR Proofs, Parallel Worktrees & Sovereign Governance (Optional)
 
 ```bash
+# Scaffold zero-phone-home GitHub Actions (SARIF) & GitLab CI workflows:
+nomos init --ci
+
 # Graduate an existing repo to isolated git worktrees & causal INT/SUB task twins:
 nomos init --worktrees
 ```
@@ -126,7 +129,7 @@ nomos init --worktrees
 # Enforce zero-trust PR mutation proofs in GitHub Actions:
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }
-- uses: mgantlett/nomos@v4.20.1
+- uses: mgantlett/nomos@v4.21.1
   with:
     base-ref: origin/main
     mutate-diff: 'true'

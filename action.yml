@@ -1,5 +1,8 @@
 name: 'Nomos Zero-Trust PR Proof'
 description: 'Evaluate 42 deterministic Nomos quality gates, diff AST micro-mutation oracle, and seal a SHA-256 PR proof receipt.'
+branding:
+  icon: 'shield'
+  color: 'blue'
 
 inputs:
   base-ref:
@@ -51,7 +54,9 @@ runs:
         if [ "${INPUT_MUTATE_DIFF}" = "true" ]; then
           EXTRA_FLAGS+=(--mutate-diff)
         fi
-        nomos verify --pr --base-ref "${INPUT_BASE_REF}" --pr-output "${INPUT_RECEIPT_PATH}" "${EXTRA_FLAGS[@]}"
+        VERIFY_EXIT=0
+        nomos verify --pr --base-ref "${INPUT_BASE_REF}" --pr-output "${INPUT_RECEIPT_PATH}" "${EXTRA_FLAGS[@]}" || VERIFY_EXIT=$?
         if [ -f "${INPUT_RECEIPT_PATH}" ] && [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
           cat "${INPUT_RECEIPT_PATH}" >> "$GITHUB_STEP_SUMMARY"
         fi
+        exit "${VERIFY_EXIT}"

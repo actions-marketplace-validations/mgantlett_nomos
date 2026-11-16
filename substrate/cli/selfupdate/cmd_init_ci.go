@@ -70,8 +70,9 @@ jobs:
         env:
           NOMOS_NO_UPDATE_CHECK: "1"
         run: |
-          curl -fsSL https://raw.githubusercontent.com/mgantlett/nomos/main/install.sh | sh
-          echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+          export NOMOS_INSTALL_DIR="${HOME}/.local/bin"
+          curl -fsSL https://raw.githubusercontent.com/mgantlett/nomos/main/install.sh | bash
+          echo "${NOMOS_INSTALL_DIR}" >> "${GITHUB_PATH}"
       - name: Run Nomos SARIF Probe
         run: nomos verify --sarif > nomos.sarif || true
       - name: Upload SARIF to GitHub Code Scanning
@@ -111,8 +112,9 @@ func renderGitLabVerifyJob() string {
     NOMOS_NO_UPDATE_CHECK: "1"
     GIT_DEPTH: "0"
   script:
-    - curl -fsSL https://raw.githubusercontent.com/mgantlett/nomos/main/install.sh | sh
-    - export PATH="${HOME}/.local/bin:${PATH}"
+    - export NOMOS_INSTALL_DIR="${HOME}/.local/bin"
+    - curl -fsSL https://raw.githubusercontent.com/mgantlett/nomos/main/install.sh | bash
+    - export PATH="${NOMOS_INSTALL_DIR}:${PATH}"
     - nomos verify
 `
 }
