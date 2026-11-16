@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v4.21.1] - 2026-11-16
+
+> Exempt external Go modules without nomos/substrate (Apache 2.0)
+
+### Verification & Quality Gates (`nomos verify`)
+- **Exempt external Go modules without nomos/substrate (`SUB-3145`)**: Scope GitSubprocessHygieneGate to Go modules referencing github.com/mgantlett/nomos/substrate so external Go repos calling exec.Command("git") pass nomos verify.
+
+---
+
 ## [v4.21.0] - 2026-11-16
 
 > Resolve repo root and git HEAD in pure Go for sub-millisecond PreToolUse; Frictionless Branch Guard nomos init, stealth --local mode, and 2-tier --help-agent; Branch Guard progressive onboarding and frictionless nomos init; Dual-gate pattern filesystem grounding, periodic sweep, and nomos mem dismiss --stale (Apache 2.0)
