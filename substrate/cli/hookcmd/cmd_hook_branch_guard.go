@@ -27,8 +27,8 @@ func ResolveBranchGuardContext(dirOrPath string) (string, *config.EcosystemConfi
 	} else if os.IsNotExist(err) {
 		start = filepath.Dir(start)
 	}
-	repoRoot, err := workspace.FindRepoRoot(start)
-	if err != nil || repoRoot == "" {
+	repoRoot := findRepoRootFast(start)
+	if repoRoot == "" {
 		return "", nil, "", false
 	}
 	if _, cfgErr := os.Stat(filepath.Join(repoRoot, constants.FileNomosYAML)); cfgErr != nil {
@@ -38,8 +38,79 @@ func ResolveBranchGuardContext(dirOrPath string) (string, *config.EcosystemConfi
 	if err != nil || cfg == nil || cfg.Governance.Boundary.EffectiveIsolationMode() != config.IsolationModeBranch {
 		return filepath.ToSlash(filepath.Clean(repoRoot)), cfg, "", false
 	}
-	branch := resolveCurrentGitBranch(repoRoot)
+	branch := resolveCurrentGitBranchFast(repoRoot)
 	return filepath.ToSlash(filepath.Clean(repoRoot)), cfg, branch, true
+}
+
+func findRepoRootFast(start string) string {
+	cur := filepath.Clean(start)
+	if cur == "" || cur == "." {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return ""
+		}
+		cur = cwd
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(cur, constants.DirGit)); err == nil {
+			return cur
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return ""
+		}
+		cur = parent
+	}
+}
+
+func resolveGitDirFast(repoRoot string) string {
+	dotGit := filepath.Join(repoRoot, constants.DirGit)
+	info, err := os.Stat(dotGit)
+	if err != nil {
+		return ""
+	}
+	if info.IsDir() {
+		return dotGit
+	}
+	raw, rErr := os.ReadFile(dotGit)
+	if rErr != nil {
+		return ""
+	}
+	line := strings.TrimSpace(string(raw))
+	const prefix = "gitdir:"
+	if !strings.HasPrefix(line, prefix) {
+		return ""
+	}
+	gitDir := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+	if gitDir == "" {
+		return ""
+	}
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(repoRoot, gitDir)
+	}
+	return filepath.Clean(gitDir)
+}
+
+func resolveCurrentGitBranchFast(repoRoot string) string {
+	gitDir := resolveGitDirFast(repoRoot)
+	if gitDir != "" {
+		if headRaw, err := os.ReadFile(filepath.Join(gitDir, "HEAD")); err == nil {
+			line := strings.TrimSpace(string(headRaw))
+			const refPrefix = "ref: "
+			const headsPrefix = "refs/heads/"
+			if strings.HasPrefix(line, refPrefix) {
+				ref := strings.TrimSpace(strings.TrimPrefix(line, refPrefix))
+				if strings.HasPrefix(ref, headsPrefix) {
+					return strings.TrimPrefix(ref, headsPrefix)
+				}
+				return "HEAD"
+			}
+			if line != "" {
+				return "HEAD"
+			}
+		}
+	}
+	return resolveCurrentGitBranch(repoRoot)
 }
 
 func resolveCurrentGitBranch(repoRoot string) string {
@@ -148,11 +219,16 @@ func resolveBranchGuardScopeFromPayload(p *HookPayload, hermeticDir string) (str
 	baseCwd := resolveHookWorkspaceDir(p, "")
 	candidates := []string{p.TargetFile, p.Cwd, baseCwd}
 	candidates = append(candidates, p.WorkspacePaths...)
+	seen := make(map[string]bool, len(candidates))
 	for _, raw := range candidates {
 		if strings.TrimSpace(raw) == "" {
 			continue
 		}
 		norm := normalizeCanonicalPath(raw, baseCwd)
+		if seen[norm] {
+			continue
+		}
+		seen[norm] = true
 		repoRoot, cfg, branch, isBranch := ResolveBranchGuardContext(norm)
 		if !isBranch || IsProtectedTrunkForConfig(branch, cfg) {
 			continue

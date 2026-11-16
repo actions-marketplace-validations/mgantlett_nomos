@@ -130,7 +130,7 @@ func resolveCanonicalHookWorkspace(p *HookPayload, hermeticDir string) string {
 		return filepath.Clean(hermeticDir)
 	}
 	base := resolveHookWorkspaceDir(p, "")
-	if pr, err := workspace.FindRepoRoot(base); err == nil && pr != "" {
+	if pr := findRepoRootFast(base); pr != "" {
 		return filepath.Clean(pr)
 	}
 	return filepath.Clean(base)

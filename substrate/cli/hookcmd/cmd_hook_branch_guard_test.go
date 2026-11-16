@@ -160,3 +160,30 @@ func TestBranchGuard_PostCommitDistillsTrapToMnemeAndClearsTrace(t *testing.T) {
 		t.Fatalf("TC-BG-07: expected post-commit to clear branch trace, got %+v", tr)
 	}
 }
+
+func TestResolveBranchGuardContext_FastPathAndGitfileWorktree(t *testing.T) {
+	t.Setenv("NOMOS_HOME", t.TempDir())
+	repoDir := setupBranchGuardTestRepo(t)
+	if out, err := workspace.SafeGitCommand(repoDir, "checkout", "-b", "feat/fast-head").CombinedOutput(); err != nil {
+		t.Fatalf("git checkout: %v (%s)", err, string(out))
+	}
+
+	root, _, branch, isBranch := hookcmd.ResolveBranchGuardContext(filepath.Join(repoDir, "sub", "file.go"))
+	if !isBranch || branch != "feat/fast-head" || root == "" {
+		t.Fatalf("expected fast-path branch feat/fast-head, got root=%q branch=%q isBranch=%v", root, branch, isBranch)
+	}
+
+	// Simulate linked worktree gitfile pointing to real git dir
+	wtDir := t.TempDir()
+	realGitDir := filepath.Join(repoDir, constants.DirGit)
+	if err := os.WriteFile(filepath.Join(wtDir, constants.DirGit), []byte("gitdir: "+realGitDir+"\n"), 0644); err != nil {
+		t.Fatalf("write .git file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(wtDir, constants.FileNomosYAML), []byte("project: wt\ndefault_branch: main\ngovernance:\n  boundary:\n    isolation_mode: branch\n"), 0644); err != nil {
+		t.Fatalf("write nomos.yaml: %v", err)
+	}
+	_, _, wtBranch, wtIsBranch := hookcmd.ResolveBranchGuardContext(filepath.Join(wtDir, "mod.go"))
+	if !wtIsBranch || wtBranch != "feat/fast-head" {
+		t.Fatalf("expected gitfile branch feat/fast-head, got branch=%q isBranch=%v", wtBranch, wtIsBranch)
+	}
+}
