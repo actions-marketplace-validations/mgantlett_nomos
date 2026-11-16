@@ -14,18 +14,21 @@ const (
 )
 
 const (
-	HelpRootExample = `  nomos xray
-  nomos init --baseline
-  nomos status
-  nomos task dag
-  nomos verify --all`
+	HelpRootExample = `  nomos xray .
+  nomos init
+  nomos init --local
+  nomos verify
+  nomos status`
 
 	HelpInitLong = `Bootstrap or synchronize a repository with Nomos governance contracts:
-scaffolds nomos.yaml, synchronizes the managed protocol block in AGENTS.md and @AGENTS.md import in CLAUDE.md,
-chains ambient lifecycle hooks, installs Git pre-commit/commit-msg/pre-push guards, and optionally snapshots Day-0 structural debt bounds (--baseline).`
+scaffolds nomos.yaml in Branch Guard mode by default (or --worktrees for isolated sandboxes),
+auto-snapshots Day-0 brownfield debt into nomos.baseline.json (override with --strict),
+registers zero-footprint stealth ignores (--local), detects active AI coding agents (--agents),
+and installs Git pre-commit/commit-msg/post-commit/pre-push defense hooks.`
 	HelpInitExample = `  nomos init
-  nomos init --baseline
-  nomos init --dir ./my-service --baseline`
+  nomos init --local
+  nomos init --agents claude,cursor
+  nomos init --worktrees --strict`
 
 	HelpXrayLong = `Execute a zero-init, read-only structural debt and AI-hangover scan across 11 languages.
 Evaluates Type-2 structural clones, >400 LOC monoliths, oversized/complex functions, empty stubs,

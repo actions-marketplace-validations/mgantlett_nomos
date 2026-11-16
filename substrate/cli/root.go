@@ -31,12 +31,13 @@ func init() {
 
 // NewRootCmd constructs the authoritative root Cobra command for Nomos.
 func NewRootCmd() *cobra.Command {
+	var helpAgent bool
 	rootCmd := &cobra.Command{
 		Use:     "nomos",
 		Version: RootCmdVersion,
 		Short:   "Deterministic execution substrate between coding agents and Git",
 		Long: `Nomos Open-Core Deterministic Execution Substrate
-The deterministic runtime between any coding agent and Git: causal INT/SUB spec-vs-code DAGs, isolated git worktrees, 42 polyglot anti-reward-hacking AST gates, receipt-gated SQLite memory, and atomic 2PC releases.`,
+Progressive guardrails between coding agents and Git: zero-write codebase X-Ray, Branch Guard on normal feat/* branches, 42 polyglot AST quality gates, receipt-gated SQLite memory, and optional isolated git worktrees.`,
 		Example:       tui.HelpRootExample,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -47,9 +48,35 @@ The deterministic runtime between any coding agent and Git: causal INT/SUB spec-
 		},
 	}
 	rootCmd.SetVersionTemplate(selfupdate.FormatVersionOutput())
+	rootCmd.Flags().BoolVar(&helpAgent, "help-agent", false, "Show internal agent harness and RPC commands")
 
-	registerSubcommands(rootCmd)
+	hiddenAgentCmds := registerSubcommands(rootCmd)
+	configureRootHelp(rootCmd, &helpAgent, hiddenAgentCmds)
 	return rootCmd
+}
+
+func configureRootHelp(rootCmd *cobra.Command, helpAgent *bool, hiddenAgentCmds []*cobra.Command) {
+	defaultHelp := rootCmd.HelpFunc()
+	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		if cmd != rootCmd {
+			defaultHelp(cmd, args)
+			return
+		}
+		if *helpAgent {
+			for _, sub := range hiddenAgentCmds {
+				sub.Hidden = false
+			}
+			defaultHelp(cmd, args)
+			for _, sub := range hiddenAgentCmds {
+				sub.Hidden = true
+			}
+			return
+		}
+		defaultHelp(cmd, args)
+		if _, err := fmt.Fprintln(cmd.OutOrStdout(), "\nAgent Harness & Internal RPCs: run \"nomos --help-agent\" for handshake, hook, directive, capabilities, physics, and session commands."); err != nil {
+			return
+		}
+	})
 }
 
 func shouldRecordCommandTelemetry(cmd *cobra.Command) bool {
@@ -119,7 +146,7 @@ func recordRootExecutionAnomaly(repoRoot string, err error) {
 	}
 }
 
-func registerSubcommands(root *cobra.Command) {
+func registerSubcommands(root *cobra.Command) []*cobra.Command {
 	root.AddGroup(
 		&cobra.Group{ID: "lifecycle", Title: "Workspace & Lifecycle Commands:"},
 		&cobra.Group{ID: "quality", Title: "Quality & Invariant Verification Commands:"},
@@ -133,23 +160,37 @@ func registerSubcommands(root *cobra.Command) {
 
 	addCommandWithGroup(root, NewVerifyCmd(), "quality")
 	addCommandWithGroup(root, NewXrayCmd(), "quality")
-	addCommandWithGroup(root, NewPhysicsCmd(), "quality")
+	physicsCmd := NewPhysicsCmd()
+	addHiddenCommandWithGroup(root, physicsCmd, "quality")
 
-	addCommandWithGroup(root, NewHandshakeCmd(), "agent")
-	addCommandWithGroup(root, hookcmd.NewHookCmd(RootCmdVersion, newHookInstallCmd()), "agent")
-	addCommandWithGroup(root, inspectcmd.NewDirectiveCmd(), "agent")
-	addCommandWithGroup(root, inspectcmd.NewCapabilitiesCmd(), "agent")
+	handshakeCmd := NewHandshakeCmd()
+	hookCmd := hookcmd.NewHookCmd(RootCmdVersion, newHookInstallCmd())
+	directiveCmd := inspectcmd.NewDirectiveCmd()
+	capabilitiesCmd := inspectcmd.NewCapabilitiesCmd()
+	sessionCmd := inspectcmd.NewSessionCmd()
+
+	addHiddenCommandWithGroup(root, handshakeCmd, "agent")
+	addHiddenCommandWithGroup(root, hookCmd, "agent")
+	addHiddenCommandWithGroup(root, directiveCmd, "agent")
+	addHiddenCommandWithGroup(root, capabilitiesCmd, "agent")
 	addCommandWithGroup(root, inspectcmd.NewMemCmd(), "agent")
-	addCommandWithGroup(root, inspectcmd.NewSessionCmd(), "agent")
+	addHiddenCommandWithGroup(root, sessionCmd, "agent")
 
 	addCommandWithGroup(root, diag.NewIssueCmd(), "diagnostics")
 	addCommandWithGroup(root, selfupdate.NewUpdateCmd(), "diagnostics")
 	addCommandWithGroup(root, selfupdate.NewVersionCmd(), "diagnostics")
 
 	tui.DiscoverPlugins(root)
+	return []*cobra.Command{physicsCmd, handshakeCmd, hookCmd, directiveCmd, capabilitiesCmd, sessionCmd}
 }
 
 func addCommandWithGroup(root *cobra.Command, cmd *cobra.Command, groupID string) {
+	cmd.GroupID = groupID
+	root.AddCommand(cmd)
+}
+
+func addHiddenCommandWithGroup(root *cobra.Command, cmd *cobra.Command, groupID string) {
+	cmd.Hidden = true
 	cmd.GroupID = groupID
 	root.AddCommand(cmd)
 }

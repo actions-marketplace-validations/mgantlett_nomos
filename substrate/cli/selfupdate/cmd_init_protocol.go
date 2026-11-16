@@ -3,10 +3,12 @@
 package selfupdate
 
 import (
-	"github.com/mgantlett/nomos/substrate/cli/tui"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/mgantlett/nomos/substrate/cli/tui"
+	"github.com/mgantlett/nomos/substrate/src/nomos/core/config"
 )
 
 const (
@@ -29,14 +31,30 @@ func ScaffoldClaudeConfig(dir string) error {
 	return os.WriteFile(claudePath, mergedBytes, 0644)
 }
 
-// ScaffoldAgentsConfig executes deterministic selfupdate verification logic (@intent task_lifecycle_cli_spec.md).
-func ScaffoldAgentsConfig(dir string) error {
-	agentsPath := filepath.Join(dir, "AGENTS.md")
-	return scaffoldOrMergeProtocolFile(agentsPath)
+// ProtocolTemplatePathForRepo returns the embedded AGENTS template path matching the repository isolation mode (@intent task_lifecycle_cli_spec.md).
+func ProtocolTemplatePathForRepo(dir string) string {
+	if cfg, err := config.LoadConfig(dir); err == nil && cfg != nil && cfg.Governance.Boundary.EffectiveIsolationMode() == config.IsolationModeBranch {
+		return "templates/AGENTS_BRANCH.md"
+	}
+	return "templates/AGENTS.md"
 }
 
-func scaffoldOrMergeProtocolFile(targetPath string) error {
-	tmplBytes, err := tui.ReadEmbeddedTemplate("templates/AGENTS.md")
+// ScaffoldAgentsConfig executes deterministic selfupdate verification logic (@intent task_lifecycle_cli_spec.md).
+func ScaffoldAgentsConfig(dir string) error {
+	return scaffoldOrMergeProtocolFile(filepath.Join(dir, "AGENTS.md"), ProtocolTemplatePathForRepo(dir))
+}
+
+// ScaffoldAgentsConfigForMode merges the Branch Guard or Worktree AGENTS protocol template into AGENTS.md (@intent task_lifecycle_cli_spec.md).
+func ScaffoldAgentsConfigForMode(dir string, branchMode bool) error {
+	tmplPath := "templates/AGENTS.md"
+	if branchMode {
+		tmplPath = "templates/AGENTS_BRANCH.md"
+	}
+	return scaffoldOrMergeProtocolFile(filepath.Join(dir, "AGENTS.md"), tmplPath)
+}
+
+func scaffoldOrMergeProtocolFile(targetPath, templatePath string) error {
+	tmplBytes, err := tui.ReadEmbeddedTemplate(templatePath)
 	if err != nil {
 		return err
 	}

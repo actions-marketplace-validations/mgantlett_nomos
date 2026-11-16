@@ -20,6 +20,7 @@ governance:
     # --------------------------------------------------------------------------
     boundary:
         enforce: true
+        isolation_mode: "branch"
 
         # Optional: Ban specific Go import prefixes across repository packages
         # (e.g., prevent domain packages from importing deprecated or UI layers)

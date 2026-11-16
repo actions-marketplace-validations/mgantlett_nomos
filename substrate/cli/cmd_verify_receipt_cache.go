@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/config"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/constants"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
@@ -85,6 +86,7 @@ func syncVerifyCommandReceipt(repoRoot, targetDir, taskKey, commitRange string, 
 	}
 	if !baseline && strings.TrimSpace(commitRange) == "" {
 		saveWorktreeVerifyReceiptWithStrict(repoRoot, targetDir, taskKey, strict, report, time.Now())
+		hookcmd.MarkWorktreeVerificationPassed(targetDir)
 	}
 }
 

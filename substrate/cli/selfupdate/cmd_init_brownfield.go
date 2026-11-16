@@ -165,6 +165,16 @@ func isRootToolingConfigFile(name string) bool {
 	return false
 }
 
+// NomosYAMLRenderOptions controls nomos.yaml scaffolding calibration (@intent task_lifecycle_cli_spec.md).
+type NomosYAMLRenderOptions struct {
+	RawTemplate     string
+	ProjectName     string
+	Branch          string
+	IsolationMode   string
+	ForceBrownfield bool
+	ForceStrict     bool
+}
+
 // RenderScaffoldedNomosYAML executes deterministic selfupdate verification logic (@intent task_lifecycle_cli_spec.md).
 func RenderScaffoldedNomosYAML(dir, rawTemplate, projectName, branch string) string {
 	return RenderScaffoldedNomosYAMLWithOptions(dir, rawTemplate, projectName, branch, false)
@@ -172,14 +182,32 @@ func RenderScaffoldedNomosYAML(dir, rawTemplate, projectName, branch string) str
 
 // RenderScaffoldedNomosYAMLWithOptions renders nomos.yaml and optionally forces brownfield strict_mode: false calibration (@intent task_lifecycle_cli_spec.md).
 func RenderScaffoldedNomosYAMLWithOptions(dir, rawTemplate, projectName, branch string, forceBrownfield bool) string {
-	content := strings.ReplaceAll(rawTemplate, "{{.ProjectName}}", projectName)
-	content = strings.ReplaceAll(content, "{{.DefaultBranch}}", branch)
+	return RenderScaffoldedNomosYAMLConfigured(dir, NomosYAMLRenderOptions{
+		RawTemplate:     rawTemplate,
+		ProjectName:     projectName,
+		Branch:          branch,
+		IsolationMode:   config.IsolationModeWorktree,
+		ForceBrownfield: forceBrownfield,
+	})
+}
+
+// RenderScaffoldedNomosYAMLConfigured renders nomos.yaml with explicit isolation mode and strict/brownfield controls (@intent task_lifecycle_cli_spec.md).
+func RenderScaffoldedNomosYAMLConfigured(dir string, opts NomosYAMLRenderOptions) string {
+	content := strings.ReplaceAll(opts.RawTemplate, "{{.ProjectName}}", opts.ProjectName)
+	content = strings.ReplaceAll(content, "{{.DefaultBranch}}", opts.Branch)
+	content = ApplyIsolationMode(content, opts.IsolationMode)
 
 	isBrownfield, substrateRoots := detectBrownfieldWorkspace(dir)
-	if !isBrownfield && !forceBrownfield {
+	if !isBrownfield && !opts.ForceBrownfield {
 		return content
 	}
-	content = strings.Replace(content, "        strict_mode: true", "        strict_mode: false", 1)
+	if !opts.ForceStrict {
+		content = strings.Replace(content, "        strict_mode: true", "        strict_mode: false", 1)
+	}
+	strictAnchor := "        strict_mode: false\n"
+	if opts.ForceStrict {
+		strictAnchor = "        strict_mode: true\n"
+	}
 	if len(substrateRoots) > 0 {
 		var sb strings.Builder
 		sb.WriteString("        substrate_source_roots:\n")
@@ -192,16 +220,46 @@ func RenderScaffoldedNomosYAMLWithOptions(dir, rawTemplate, projectName, branch 
 		if strings.Contains(content, commentedBlock) {
 			content = strings.Replace(content, commentedBlock, sb.String(), 1)
 		} else {
-			content = strings.Replace(content, "        strict_mode: false\n", "        strict_mode: false\n"+sb.String(), 1)
+			content = strings.Replace(content, strictAnchor, strictAnchor+sb.String(), 1)
 		}
 	}
 	if inferred := impact.InferCleanArchitectureBoundaries(dir); len(inferred) > 0 {
-		content = injectScaffoldedArchitectureBoundaries(content, inferred)
+		content = injectScaffoldedArchitectureBoundaries(content, inferred, strictAnchor)
 	}
 	return content
 }
 
-func injectScaffoldedArchitectureBoundaries(content string, rules []config.ArchitectureBoundaryRule) string {
+// ApplyIsolationMode updates governance.boundary.isolation_mode in nomos.yaml content (@intent task_lifecycle_cli_spec.md).
+func ApplyIsolationMode(content, mode string) string {
+	if mode != config.IsolationModeBranch && mode != config.IsolationModeWorktree {
+		return content
+	}
+	target := `isolation_mode: "` + mode + `"`
+	lines := strings.Split(content, "\n")
+	replaced := false
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "isolation_mode:") {
+			indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+			lines[i] = indent + target
+			replaced = true
+			break
+		}
+	}
+	if replaced {
+		return strings.Join(lines, "\n")
+	}
+	for i, line := range lines {
+		if strings.TrimSpace(line) == "enforce: true" || strings.TrimSpace(line) == "enforce: false" {
+			indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+			lines = append(lines[:i+1], append([]string{indent + target}, lines[i+1:]...)...)
+			return strings.Join(lines, "\n")
+		}
+	}
+	return content
+}
+
+func injectScaffoldedArchitectureBoundaries(content string, rules []config.ArchitectureBoundaryRule, strictAnchor string) string {
 	rendered := renderArchitectureBoundariesYAMLBlock(rules)
 	commentedBoundaryBlock := "        # architecture_boundaries:\n" +
 		"        #     - name: \"domain-purity\"\n" +
@@ -212,7 +270,7 @@ func injectScaffoldedArchitectureBoundaries(content string, rules []config.Archi
 	if strings.Contains(content, commentedBoundaryBlock) {
 		return strings.Replace(content, commentedBoundaryBlock, rendered, 1)
 	}
-	return strings.Replace(content, "        strict_mode: false\n", "        strict_mode: false\n"+rendered, 1)
+	return strings.Replace(content, strictAnchor, strictAnchor+rendered, 1)
 }
 
 func renderArchitectureBoundariesYAMLBlock(rules []config.ArchitectureBoundaryRule) string {

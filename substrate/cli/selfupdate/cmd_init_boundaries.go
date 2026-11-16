@@ -9,24 +9,36 @@ import (
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/constants"
 )
 
-func canonicalBoundaryPatterns() []string {
-	return []string{
-		"/" + constants.DirWorktrees + "/",
-		"/" + constants.DirTmp + "/",
+func canonicalBoundaryPatternsForMode(includeWorktrees bool) []string {
+	patterns := make([]string, 0, 10)
+	if includeWorktrees {
+		patterns = append(patterns, "/"+constants.DirWorktrees+"/")
+	}
+	patterns = append(patterns,
+		"/"+constants.DirTmp+"/",
 		"/.vscode/",
-		"/" + constants.DirNomosHome + "/",
+		"/"+constants.DirNomosHome+"/",
 		"/go.work",
 		"/go.work.sum",
 		"*.tmp",
 		"*.bak",
 		"*.orig",
 		"*.swp",
-	}
+	)
+	return patterns
 }
 
 // ScaffoldNomosBoundaries executes deterministic selfupdate verification logic (@intent task_lifecycle_cli_spec.md).
 func ScaffoldNomosBoundaries(dir string) error {
-	boundaries := canonicalBoundaryPatterns()
+	return ScaffoldNomosBoundariesForMode(dir, true, false)
+}
+
+// ScaffoldNomosBoundariesForMode applies ignore boundaries parameterized by worktree creation and stealth mode (@intent task_lifecycle_cli_spec.md).
+func ScaffoldNomosBoundariesForMode(dir string, includeWorktrees, localStealth bool) error {
+	if localStealth {
+		return nil
+	}
+	boundaries := canonicalBoundaryPatternsForMode(includeWorktrees)
 	gitIgnorePath := filepath.Join(dir, ".gitignore")
 	if err := appendMissingPatterns(gitIgnorePath, "# Nomos Operational Boundaries", boundaries); err != nil {
 		return err
@@ -41,6 +53,9 @@ func ScaffoldNomosBoundaries(dir string) error {
 				return aErr
 			}
 		}
+	}
+	if !includeWorktrees {
+		return nil
 	}
 	return tui.EnsureIDEBoundarySettings(dir)
 }

@@ -101,8 +101,30 @@ func TestInitCmd_BaselineFlagWritesManifestAndCalibratesRatchet(t *testing.T) {
 		t.Fatal("expected nomos init --baseline to enforce strict_mode: false on indebted repo")
 	}
 
-	headFiles := runGitOrFail(t, dir, "show", "--name-only", "--pretty=format:", "HEAD")
+	headAfterDefault := strings.TrimSpace(runGitOrFail(t, dir, "rev-parse", "HEAD"))
+	headBefore := strings.TrimSpace(runGitOrFail(t, dir, "rev-list", "-n1", "HEAD"))
+	if headAfterDefault != headBefore {
+		t.Fatalf("expected %s hash check consistent", headAfterDefault)
+	}
+	logCount := strings.TrimSpace(runGitOrFail(t, dir, "rev-list", "--count", "HEAD"))
+	if logCount != "1" {
+		t.Fatalf("expected default nomos init --baseline NOT to silently commit on main, got %s commits", logCount)
+	}
+
+	wtDir := seedCLIXrayRepo(t)
+	runGitOrFail(t, wtDir, "init", "-b", "main")
+	runGitOrFail(t, wtDir, "config", "user.email", "dev@example.com")
+	runGitOrFail(t, wtDir, "config", "user.name", "Brownfield Maintainer")
+	runGitOrFail(t, wtDir, "add", "app.go")
+	runGitOrFail(t, wtDir, "commit", "-m", "chore: seed legacy monolith")
+
+	wtCmd := NewRootCmd()
+	wtCmd.SetArgs([]string{"init", "--baseline", "--worktrees", "--dir", wtDir})
+	if err := wtCmd.Execute(); err != nil {
+		t.Fatalf("nomos init --baseline --worktrees failed: %v", err)
+	}
+	headFiles := runGitOrFail(t, wtDir, "show", "--name-only", "--pretty=format:", "HEAD")
 	if !strings.Contains(headFiles, constants.FileNomosBaselineJSON) {
-		t.Fatalf("expected %s committed in baseline governance commit, got:\n%s", constants.FileNomosBaselineJSON, headFiles)
+		t.Fatalf("expected %s committed in baseline governance commit with --worktrees, got:\n%s", constants.FileNomosBaselineJSON, headFiles)
 	}
 }

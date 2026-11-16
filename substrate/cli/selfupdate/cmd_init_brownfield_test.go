@@ -52,4 +52,24 @@ func TestRenderScaffoldedNomosYAML_InfersCleanArchitectureBoundaries(t *testing.
 	if !strings.Contains(forced, "strict_mode: false") {
 		t.Fatalf("expected forceBrownfield=true to emit strict_mode: false, got:\n%s", forced)
 	}
+
+	strictRendered := RenderScaffoldedNomosYAMLConfigured(dir, NomosYAMLRenderOptions{
+		RawTemplate:     rawTmpl,
+		ProjectName:     "strict-app",
+		Branch:          "main",
+		IsolationMode:   config.IsolationModeBranch,
+		ForceBrownfield: false,
+		ForceStrict:     true,
+	})
+	if !strings.Contains(strictRendered, "strict_mode: true") {
+		t.Fatalf("expected ForceStrict=true to preserve strict_mode: true, got:\n%s", strictRendered)
+	}
+	if !strings.Contains(strictRendered, `isolation_mode: "branch"`) {
+		t.Fatalf("expected branch isolation_mode, got:\n%s", strictRendered)
+	}
+
+	upgraded := ApplyIsolationMode(strictRendered, config.IsolationModeWorktree)
+	if !strings.Contains(upgraded, `isolation_mode: "worktree"`) {
+		t.Fatalf("expected ApplyIsolationMode upgrade to worktree, got:\n%s", upgraded)
+	}
 }

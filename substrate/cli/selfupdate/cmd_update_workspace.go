@@ -40,7 +40,7 @@ func DetectWorkspaceContractDrift(repoRoot string) []string {
 	if hasSchemaPinDrift(configPath) {
 		drifted = append(drifted, constants.FileNomosYAML)
 	}
-	if hasProtocolFileDrift(filepath.Join(cleanRoot, "AGENTS.md")) {
+	if hasProtocolFileDrift(cleanRoot, filepath.Join(cleanRoot, "AGENTS.md")) {
 		drifted = append(drifted, "AGENTS.md")
 	}
 	if hasClaudeFileDrift(filepath.Join(cleanRoot, "CLAUDE.md")) {
@@ -77,12 +77,12 @@ func extractNomosSchemaPinVersion(content string) string {
 	return strings.TrimSpace(rest[:slash])
 }
 
-func hasProtocolFileDrift(targetPath string) bool {
+func hasProtocolFileDrift(repoRoot, targetPath string) bool {
 	existing, err := os.ReadFile(targetPath)
 	if err != nil {
 		return false
 	}
-	tmpl, tErr := tui.ReadEmbeddedTemplate("templates/AGENTS.md")
+	tmpl, tErr := tui.ReadEmbeddedTemplate(ProtocolTemplatePathForRepo(repoRoot))
 	if tErr != nil {
 		return false
 	}

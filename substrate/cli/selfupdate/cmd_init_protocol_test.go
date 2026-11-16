@@ -84,3 +84,21 @@ func TestScaffoldClaudeConfig_Lifecycle(t *testing.T) {
 		t.Fatalf("expected '@AGENTS.md' and custom hint preserved, got %q", uStr)
 	}
 }
+
+func TestScaffoldAgentsConfigForMode_BranchAndWorktree(t *testing.T) {
+	dir := t.TempDir()
+	branchCfg := "project: \"demo\"\ndefault_branch: \"main\"\ngovernance:\n    boundary:\n        enforce: true\n        isolation_mode: \"branch\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "nomos.yaml"), []byte(branchCfg), 0644); err != nil {
+		t.Fatalf("write nomos.yaml: %v", err)
+	}
+	if ProtocolTemplatePathForRepo(dir) != "templates/AGENTS_BRANCH.md" {
+		t.Fatalf("expected AGENTS_BRANCH template in branch mode, got %q", ProtocolTemplatePathForRepo(dir))
+	}
+	worktreeCfg := strings.Replace(branchCfg, `"branch"`, `"worktree"`, 1)
+	if err := os.WriteFile(filepath.Join(dir, "nomos.yaml"), []byte(worktreeCfg), 0644); err != nil {
+		t.Fatalf("update nomos.yaml: %v", err)
+	}
+	if ProtocolTemplatePathForRepo(dir) != "templates/AGENTS.md" {
+		t.Fatalf("expected full AGENTS template in worktree mode, got %q", ProtocolTemplatePathForRepo(dir))
+	}
+}

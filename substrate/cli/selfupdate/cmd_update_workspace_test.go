@@ -23,7 +23,7 @@ func TestWorkspaceContractSync_DetectsDriftAndRefreshesIdempotently(t *testing.T
 
 	initCmd := cli.NewRootCmd()
 	initCmd.SetOut(new(bytes.Buffer))
-	initCmd.SetArgs([]string{"init", "--dir", repoDir})
+	initCmd.SetArgs([]string{"init", "--dir", repoDir, "--agents", "all"})
 	if err := initCmd.Execute(); err != nil {
 		t.Fatalf("nomos init failed: %v", err)
 	}

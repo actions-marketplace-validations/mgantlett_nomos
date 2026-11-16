@@ -59,3 +59,25 @@ func TestAppendMissingPatterns_IdempotentWithUnanchoredLegacy(t *testing.T) {
 		t.Errorf("expected missing %s to be appended, got:\n%s", localNomosPattern, content)
 	}
 }
+
+func TestScaffoldNomosBoundariesForMode_SkipsWorktreesAndStealth(t *testing.T) {
+	branchDir := t.TempDir()
+	if err := ScaffoldNomosBoundariesForMode(branchDir, false, false); err != nil {
+		t.Fatalf("ScaffoldNomosBoundariesForMode branch failed: %v", err)
+	}
+	giRaw, err := os.ReadFile(filepath.Join(branchDir, ".gitignore"))
+	if err != nil {
+		t.Fatalf("read .gitignore: %v", err)
+	}
+	if strings.Contains(string(giRaw), "/worktrees/") {
+		t.Fatalf("expected branch mode .gitignore to omit /worktrees/, got:\n%s", string(giRaw))
+	}
+
+	stealthDir := t.TempDir()
+	if err := ScaffoldNomosBoundariesForMode(stealthDir, false, true); err != nil {
+		t.Fatalf("ScaffoldNomosBoundariesForMode stealth failed: %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(stealthDir, ".gitignore")); !os.IsNotExist(statErr) {
+		t.Fatalf("expected stealth mode not to create .gitignore")
+	}
+}

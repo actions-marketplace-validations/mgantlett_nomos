@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
 	"github.com/mgantlett/nomos/substrate/cli/tui"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/constants"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/types"
@@ -141,6 +142,9 @@ func tryRenderCachedVerifyReceipt(out io.Writer, ctx *vscope.VerifyContext, json
 	}
 	renderVerificationSummary(cached)
 	fmt.Printf("  %s\n", tui.UiMutedStyle.Render("⚡ Reused verified working-tree receipt cache"))
+	if cached.Passed {
+		hookcmd.MarkWorktreeVerificationPassed(ctx.WorktreePath)
+	}
 	if cached.Passed && ctx.TaskID != "" {
 		tui.RenderPhaseTransitionNextActions(out, types.PhaseReview, ctx.TaskID, ctx.WorktreePath, ctx.RepoRoot)
 	}

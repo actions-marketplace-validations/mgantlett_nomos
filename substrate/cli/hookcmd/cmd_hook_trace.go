@@ -102,6 +102,39 @@ func evaluateWorktreeChurnAdvisory(p *HookPayload, hermeticDir, style string) st
 	return msg
 }
 
+func resolveWorktreeOrBranchTraceTarget(worktreeDir string) (traceKey, wsRoot, path string) {
+	traceKey = extractEnclosingWorktreeRoot(normalizeCanonicalPath(worktreeDir, "/"))
+	wsRoot = traceKey
+	if traceKey == "" {
+		repoRoot, cfg, branch, isBranch := ResolveBranchGuardContext(worktreeDir)
+		if !isBranch || IsProtectedTrunkForConfig(branch, cfg) {
+			return "", "", ""
+		}
+		traceKey = BranchTraceKey(repoRoot, branch)
+		wsRoot = repoRoot
+	}
+	path = resolveTraceStateFilePath(traceKey)
+	if path == "" {
+		return "", "", ""
+	}
+	return traceKey, wsRoot, path
+}
+
+// MarkWorktreeVerificationPassed clears DirtyUnverifiedEdits and UnverifiedCalls when 'nomos verify' passes.
+// @intent task_lifecycle_cli_spec.md
+func MarkWorktreeVerificationPassed(worktreeDir string) {
+	traceKey, wsRoot, path := resolveWorktreeOrBranchTraceTarget(worktreeDir)
+	if path == "" || wsRoot == "" {
+		return
+	}
+	tr := loadHookSessionTrace(traceKey)
+	if tr == nil {
+		return
+	}
+	resetWorktreeChurnCounters(tr)
+	saveHookSessionTrace(path, *tr)
+}
+
 // MarkWorktreeVerificationFailed preserves DirtyUnverifiedEdits when 'nomos verify' fails in-process.
 // @intent task_lifecycle_cli_spec.md
 func MarkWorktreeVerificationFailed(worktreeDir string) {
@@ -110,18 +143,8 @@ func MarkWorktreeVerificationFailed(worktreeDir string) {
 
 // markWorktreeVerificationFailed preserves DirtyUnverifiedEdits when 'nomos verify' fails in-process.
 func markWorktreeVerificationFailed(worktreeDir string) {
-	traceKey := extractEnclosingWorktreeRoot(normalizeCanonicalPath(worktreeDir, "/"))
-	wsRoot := traceKey
-	if traceKey == "" {
-		repoRoot, cfg, branch, isBranch := ResolveBranchGuardContext(worktreeDir)
-		if !isBranch || IsProtectedTrunkForConfig(branch, cfg) {
-			return
-		}
-		traceKey = BranchTraceKey(repoRoot, branch)
-		wsRoot = repoRoot
-	}
-	path := resolveTraceStateFilePath(traceKey)
-	if path == "" {
+	traceKey, wsRoot, path := resolveWorktreeOrBranchTraceTarget(worktreeDir)
+	if path == "" || traceKey == "" {
 		return
 	}
 	tr := loadOrInitHookSessionTrace(path, wsRoot)
