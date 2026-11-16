@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v4.22.1] - 2026-11-16
+
+> Skip vendors/third_party dirs and separate `path_leaks` from `secret_leaks`; Emit stderr interactive hint when nomos mcp runs on a TTY; Add GitHub Marketplace Action badge to `README.md` (Apache 2.0)
+
+### CLI, Distribution & Hooks (`nomos cli`)
+- **Emit stderr interactive hint when nomos mcp runs on a TTY (`SUB-3168`)**: Emit stderr interactive hint when nomos mcp runs on a TTY.
+
+### Release & Packaging (`README.md`)
+- **Skip vendors/third_party dirs and separate `path_leaks` from `secret_leaks` (`SUB-3169`)**: Skip vendors/third_party dirs and separate `path_leaks` from `secret_leaks`.
+- **Add GitHub Marketplace Action badge to `README.md` (`SUB-3163`)**: Add GitHub Marketplace Action badge to `README.md`.
+
+---
+
 ## [v4.22.0] - 2026-11-16
 
 > Add zero-dependency nomos mcp stdio server for read, orient, and verify affordances; Add Java and C# WASM Tree-sitter drivers to polyglot AST verification and brownfield xray; Pin NOMOS_INSTALL_DIR in init --ci workflows and preserve PR step summary; Ship nomos ci-init workflow generator and OASIS SARIF 2.1.0 output for xray and verify (Apache 2.0)
