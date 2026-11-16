@@ -8,6 +8,7 @@
 
 [![CI](https://github.com/mgantlett/nomos/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/mgantlett/nomos/actions/workflows/ci.yaml)
 [![Release](https://img.shields.io/github/v/release/mgantlett/nomos?color=0EA5E9)](https://github.com/mgantlett/nomos/releases/latest)
+[![Marketplace](https://img.shields.io/badge/Marketplace-Nomos_PR_Proof-0EA5E9?logo=github)](https://github.com/marketplace/actions/nomos-zero-trust-pr-proof)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/mgantlett/nomos?filename=substrate%2Fgo.mod&logo=go&logoColor=white)](substrate/go.mod)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24240539.svg)](https://doi.org/10.5281/zenodo.24240539)
@@ -116,6 +117,8 @@ git add -A && git commit -m "feat: add TTL cache eviction"
 ```
 
 ### 4. Graduate to CI PR Proofs, Parallel Worktrees & Sovereign Governance (Optional)
+
+Install the official [Nomos Zero-Trust PR Proof GitHub Action](https://github.com/marketplace/actions/nomos-zero-trust-pr-proof) from GitHub Marketplace, or scaffold CI workflows locally:
 
 ```bash
 # Scaffold zero-phone-home GitHub Actions (SARIF) & GitLab CI workflows:
