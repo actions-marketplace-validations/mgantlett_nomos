@@ -19,7 +19,9 @@ type: spec
 
 Gen 2 Nomos quality gates relied on line-scanning regex heuristics for complexity, docstring density, and forbidden literal audits. Regex scanning broke on polyglot workspaces and produced false positives inside comments and multiline strings. Line heuristics also lacked structural awareness of nested syntax trees.
 
-In strict compliance with **Law 2 (The Non-Verbal Proof Law)**, this specification formalizes the **Tree-sitter AST Gate Engine**. The engine integrates Tree-sitter query rules and polyglot structural scanners across Go, TypeScript, Svelte, Python, Rust, C/C++, Java, Kotlin, C#, and Markdown. Under Nomos v4, pure-Go `wazero` (`github.com/tetratelabs/wazero`) executes linear-memory WebAssembly scanning hermetically without CGo or external process spawns. The engine binds directly to `treesitter.WazeroTreeSitterEngine` and `treesitter.GateEvaluationReport` (`substrate/src/nomos/modules/verify/treesitter/types.go`). It evaluates extracted AST metrics against `config.ThresholdsConfig` (`nomos.yaml` and `nomos.schema.json`) across all 42 DoD gates.
+In strict compliance with **Law 2 (The Non-Verbal Proof Law)**, this specification formalizes the **Tree-sitter AST Gate Engine**. The engine integrates Tree-sitter queries and structural scanners across Go, TypeScript, Svelte, Python, Ruby, Rust, C/C++, Java, Kotlin, and C#. It also validates HTML, CSS, YAML, and Markdown files.
+
+Under Nomos v4, pure-Go `wazero` (`github.com/tetratelabs/wazero`) executes linear-memory WebAssembly scanning hermetically without CGo or external process spawns. The engine binds directly to `treesitter.WazeroTreeSitterEngine` and `treesitter.GateEvaluationReport` (`substrate/src/nomos/modules/verify/treesitter/types.go`). It evaluates extracted AST metrics against `config.ThresholdsConfig` (`nomos.yaml` and `nomos.schema.json`) across all 42 DoD gates.
 
 ```mermaid
 graph TD
@@ -107,6 +109,61 @@ The substrate embeds Tree-sitter queries via `//go:embed queries/*` to extract f
  (boolean_operator)] @branch
 ```
 
+#### 4. Java Query (`queries/java.scm`)
+```scheme
+;; Method and constructor declarations in Java
+((block_comment)* @func.doc
+ .
+ [(method_declaration name: (identifier) @func.name body: (block) @func.body)
+  (constructor_declaration name: (identifier) @func.name body: (constructor_body) @func.body)])
+
+;; Complexity decision branch nodes
+[(if_statement)
+ (for_statement)
+ (enhanced_for_statement)
+ (while_statement)
+ (do_statement)
+ (switch_label)
+ (catch_clause)
+ (ternary_expression)
+ (binary_expression operator: "&&")
+ (binary_expression operator: "||")] @branch
+
+;; Anti-shim stub patterns (Gate 10)
+[(throw_statement (object_creation_expression type: (type_identifier) @shim.stub))]
+
+;; Test skip / reward-hacking annotations
+[(marker_annotation name: (identifier) @test.skip)]
+```
+
+#### 5. C# Query (`queries/csharp.scm`)
+```scheme
+;; Method and constructor declarations in C#
+((comment)* @func.doc
+ .
+ [(method_declaration name: (identifier) @func.name body: (block) @func.body)
+  (constructor_declaration name: (identifier) @func.name body: (block) @func.body)])
+
+;; Complexity decision branch nodes
+[(if_statement)
+ (for_statement)
+ (foreach_statement)
+ (while_statement)
+ (do_statement)
+ (switch_section)
+ (catch_clause)
+ (conditional_expression)
+ (binary_expression operator: "&&")
+ (binary_expression operator: "||")
+ (binary_expression operator: "??")] @branch
+
+;; Anti-shim stub patterns (Gate 10)
+[(throw_statement (object_creation_expression type: (identifier) @shim.stub))]
+
+;; Test skip / reward-hacking attributes
+[(attribute name: (identifier) @test.skip)]
+```
+
 ### 3.2 Concrete Mathematical Predicates
 
 #### 1. Cyclomatic Complexity ($M$)
@@ -129,6 +186,9 @@ For any source file $S$ containing functions $F_1, \dots, F_k$:
 $$CDS(S) = \sum_{i=1}^k \left( \max(0, M(F_i) - 10) \times 2.0 + \max(0, \text{LOC}(F_i) - 30) \times 0.5 \right) + \max(0, 100 - \text{Density}) \times 0.2$$
 
 The file passes `Cell 1.1 (cognitive_debt)` when $CDS(S) \le \text{thresholds.max\_cds}$ (default: 45).
+
+### 3.3 Managed WASM Grammar Drivers & Anti-Shim Contracts
+`WazeroTreeSitterEngine` instantiates dedicated Java (`treesitter_java_wasm`) and C# (`treesitter_csharp_wasm`) WebAssembly modules inside `wazero` with `CGO_ENABLED=0`. Each module verifies `{}`/`()`/`[]` block balance and counts statement terminators in linear memory. Anti-shim evaluation rejects empty bodies, placeholder exception throws, and single-statement constant-return stubs on parameterized methods. `ExtractExportedSymbols` and `mtpo.ExtractFileASTSets` index `public` Java and C# types and methods for collision and impact graphs.
 
 ---
 
@@ -153,7 +213,10 @@ The engine evaluates extracted AST metrics deterministically against `config.Thr
 ```go
 package treesitter
 
-import "embed"
+import (
+	"context"
+	"embed"
+)
 
 //go:embed queries/*
 var QueryFS embed.FS
@@ -212,6 +275,9 @@ type WazeroTreeSitterEngine struct{}
 
 func CalculateCDS(functions []FunctionMetric, density int) int
 func ValidateQueryFS() error
+func EvaluateJavaWasm(ctx context.Context, filePath string, content []byte) (*GateEvaluationReport, error)
+func EvaluateCSharpWasm(ctx context.Context, filePath string, content []byte) (*GateEvaluationReport, error)
+func ExtractExportedSymbols(lang string, content []byte) []string
 ```
 
 ### 4.3 Canonical 7x3 Matrix Sensor Bindings
@@ -335,6 +401,8 @@ The following table-driven verification vectors validate the Tree-sitter AST Gat
 | `TC-POLY-002` | `cpp` | `int evaluate(int a) { if (a > 1 && a < 10) return a; return 0; }` | `func: evaluate`, `branches: 2` | $M = 3$, $\text{LOC} = 1$ | `PASS` | C/C++ `queries/cpp.scm` AST branch extraction |
 | `TC-POLY-003` | `java` | `/** JavaDoc */\npublic int run(int v) { for (int i=0; i<v; i++) {} return v; }` | `func: run`, `doc: true`, `branches: 1` | $M = 2$, $\text{doc} = 100\%$ | `PASS` | JVM (`java`/`kotlin`) AST metric extraction |
 | `TC-POLY-004` | `csharp` | `public int Check(int x) { if (x == 0) return 1; return x; }` | `func: Check`, `branches: 1` | $M = 2$, $\text{LOC} = 1$ | `PASS` | C# `queries/csharp.scm` AST metric extraction |
+| `TC-POLY-005` | `java` / `csharp` | Parameterized `.java` and `.cs` methods returning constant literals (`return null;`, `return 0;`, `return false;`) | `EmptyBlocks: 1`, WASM `grammar_id` verified | $M = 1$, `EmptyBlock = true` | `FAIL` | `wazero` Java/C# WASM driver & constant-return anti-shim rejection (`CGO_ENABLED=0`) |
+| `TC-POLY-006` | `java` / `csharp` | Brownfield `.java` and `.cs` fixture with `public` exports, high-complexity hotspot, and stubs | `ExtractExportedSymbols` + `xray.ScanRepository` | Hotspots, stubs, and `public` symbols extracted | `PASS` | Java/C# symbol export & zero-init `xray` hotspot scanning |
 | `TC-TS-11` | `polyglot` | Function exceeds `V(G)`, `LOC`, `MaxFuncParams`, or brownfield `dCDS` | Span `file:start-end` + delta | Exact excess computed | `FAIL` | 1-turn extraction recipe emitted (`go`, `python`, `typescript`) |
 | `TC-TS-12` | `polyglot` | Directory exceeds `MaxPackageFiles` (`40` non-test files) | Directory fan-out counted | Strict or net-new growth | `FAIL` | Sub-package cohesion recipe emitted; legacy brownfield count ratcheted |
 | `TC-TS-13` | `polyglot` | Legacy file moved via `git mv` during sub-package split | Rename map `git diff -M50%` resolved | Baseline metrics preserved | `PASS` | Rename-aware baseline lookup prevents false greenfield penalties |
