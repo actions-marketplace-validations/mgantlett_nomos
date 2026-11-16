@@ -59,6 +59,8 @@ All task operations require canonical keys matching `^(INT|SUB)-[0-9]+(-[a-z0-9-
 - Current worktree directory location and branch.
 - CapBAC token consumption vs. step budget.
 - Database connection status and pending DAG wavefront candidates.
+- `RenderXrayTerminal` appends a multi-language contract and compliance affordance only when `FilesScanned >= 50` across at least two languages.
+- `Execute` enriches unknown root command errors with a `NomosError` remedy referencing `nomos-plugin-<name>` installation when absent from `PATH`.
 
 ---
 
