@@ -260,6 +260,10 @@ Session Sentinel (`CHARTER-4-BOUNDARY`) evaluates candidate workspace roots stru
 
 `nomos task start` and `nomos task chore` allocate monotonic `MTPO` sequences (`mtpo.AllocateSequence`) inside SQLite table `worktree_mtpo` anchored to trunk `HEAD`. During active `EDIT` turns, `nomos hook post-tool` invokes `mtpo.RecordFileMutation` in under `25ms` to index modified files, exported AST symbols, read symbols, and package imports. When a higher-sequence worktree overlaps an earlier active worktree blast radius, `nomos hook post-tool` injects non-blocking advisory steering without locking files. During `nomos task sync`, `mtpo.VerifySyncSerializability` checks committed predecessors before fast-forwarding `main` and rejects stale base commits with a deterministic rebase and re-verify remedy.
 
+`BoundaryConfig.IsolationMode` selects either `worktree` (default when omitted) or `branch` (`Branch Guard` mode). Under `branch` mode, `nomos hook pre-tool` rejects edits and redirects on `default_branch` or protected trunks with a `git switch -c feat/<slug>` remedy. It also rejects edits targeting `nomos.yaml`, `nomos.baseline.json`, `.git/hooks/*`, or `.git/info/exclude`, while allowing in-place edits on feature branches.
+
+`nomos hook stop` evaluates branch-scoped traces keyed by repository root and branch, blocking turn exit until `nomos verify` passes. Git `pre-commit` blocks protected trunks and runs diff-scoped `nomos verify` on regular `git commit` invocations. `commit-msg` and `CommitSchemaGate` allow standard non-empty subjects without `[INT|SUB-N]` or `Task:` trailers, retaining anti-shim checks. `post-commit` invokes `nomos hook post-commit` to distill verified `trap -> fix` pitfalls into `mneme.db`.
+
 ---
 
 ## 6. Table-Driven Verification Vectors
@@ -306,6 +310,12 @@ Session Sentinel (`CHARTER-4-BOUNDARY`) evaluates candidate workspace roots stru
 | `TC-LRN-13` | Slow-step shell timeout advisory | `nomos hook post-tool` on slow shell command without `timeout` | `"Emits timeout pacing advisory and skips explicit timeout invocations."` | PASS |
 | `TC-SEN-010` | Sentinel plugin workspace authorization (`CHARTER-4-BOUNDARY`) | `EvaluateSentinel` across `substrate/cmd/nomos-plugin-*` vs consumer repo | `"Authorizes Substrate and plugin workspaces at 100/100 CLEAN and flags external consumer peeking."` | PASS |
 | `TC-MTPO-04` | PostToolUse MTPO collision steering | `nomos hook post-tool` edits file overlapping earlier active worktree | `"Injects non-blocking MTPO advisory naming predecessor task key and symbol."` | PASS |
+| `TC-BG-01` | Branch Guard trunk edit block | `nomos hook pre-tool` in `isolation_mode: branch` on `main` | `"Denies mutation on main with git switch -c feat/<slug> remedy."` | PASS |
+| `TC-BG-02` | Branch Guard feature-branch edit allow | `nomos hook pre-tool` in `isolation_mode: branch` on `feat/auth` | `"Permits in-place file mutation and tracks branch trace."` | PASS |
+| `TC-BG-03` | Branch Guard config tamper deny | `nomos hook pre-tool` in `isolation_mode: branch` targeting `nomos.yaml` | `"Denies mutation of protected governance file on feature branch."` | PASS |
+| `TC-BG-04` | Branch Guard Stop verification gate | `nomos hook stop` on `feat/auth` with unverified edits | `"Blocks turn exit until nomos verify clears branch trace."` | PASS |
+| `TC-BG-05` | Branch Guard Git hook commit pass | `pre-commit` + `commit-msg` on `feat/auth` with plain message | `"Permits raw git commit after nomos verify without [SUB-N] trailers."` | PASS |
+| `TC-BG-06` | Branch Guard CommitSchemaGate pass | `CommitSchemaGate` evaluates feature-branch commits in `branch` mode | `"Accepts Jira, Linear, or plain subjects while rejecting canned shims."` | PASS |
 
 ---
 

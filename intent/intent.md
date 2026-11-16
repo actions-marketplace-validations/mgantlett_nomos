@@ -88,6 +88,7 @@ package config
 // BoundaryConfig declares architectural package and CLI command boundary protections (#BoundaryConfig).
 type BoundaryConfig struct {
 	Enforce              bool     `yaml:"enforce" json:"enforce"`
+	IsolationMode        string   `yaml:"isolation_mode,omitempty" json:"isolation_mode,omitempty"`
 	ProhibitedPackages   []string `yaml:"prohibited_packages,omitempty" json:"prohibited_packages,omitempty"`
 	ProhibitedCommands   []string `yaml:"prohibited_commands,omitempty" json:"prohibited_commands,omitempty"`
 	LockDependencies     bool     `yaml:"lock_dependencies,omitempty" json:"lock_dependencies,omitempty"`

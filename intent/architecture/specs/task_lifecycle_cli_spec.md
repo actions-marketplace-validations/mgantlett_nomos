@@ -336,6 +336,9 @@ type UpdateCheckCache struct {
 * **`nomos xray [dir] [--json] [--markdown] [--top <N>]`**: Scans any directory across 11 languages without writing files or mutating SQLite stores. Emits `HangoverScore` (`0-100`), `Grade`, clones, monoliths, stubs, skipped tests, and `XrayHotspot` outputs.
 * **`nomos init --baseline [--dir <PATH>]`**: Captures Day-0 `XrayReport` bounds before scaffolding and sets `strict_mode: false` on indebted repositories. Writes `nomos.baseline.json` (`XrayBaselineManifest`) and stages it alongside governance contracts.
 
+### 4.17 Branch Guard Post-Commit Hook (`nomos hook post-commit`)
+* **`nomos hook post-commit`**: Executes automatically from `.git/hooks/post-commit` when `BoundaryConfig.IsolationMode` resolves to `branch`. On non-protected branches, reads the latest commit message and changed files, distills resolved `BRANCH-*` traps into `mneme.db`, and clears the branch trace. Under `branch` mode, `vscope.IsWorktreeContext` treats feature branches as diff-scoped verification targets. `CommitSchemaGate` also accepts standard commit subjects without worktree trailers.
+
 ---
 
 ## 5. Table-Driven Verification Vectors
@@ -393,6 +396,7 @@ type UpdateCheckCache struct {
 | `TC-INIT-02` | Law 1 (Cold-Start Recall & Lean Steering) | `nomos handshake` with `intent_twin_mode: off` and zero `pattern` records | Recalls Day-0 `architecture` memory and steers `IDLE` to `chore` |
 | `TC-INIT-03` | Law 4 & Law 7 (Auto-Calibrated Baseline Lock) | `nomos init --baseline` on legacy repository with pre-existing debt | Writes `nomos.baseline.json`, sets `strict_mode: false`, and freezes observed `BaselineEnvelope` |
 | `TC-XRAY-03` | Law 2 & Law 3 (Read-Only CLI X-Ray) | `nomos xray --json` and `nomos xray --markdown` on uninitialized directory | Emits structured `XrayReport` and Markdown card with zero filesystem or ledger writes |
+| `TC-BG-07` | Law 1 & Law 2 (Post-Commit Mneme Distill) | `nomos hook post-commit` after `nomos verify` trap fix on `feat/auth` | Distills `BRANCH-*` trap-to-fix pitfall into `mneme.db` and clears branch trace |
 | `TC-REL-001` | Law 4 (SPDX Apache-2.0 License) | `LICENSE` audit in `legal_release_contract_test.go` | Verifies verbatim SPDX Apache-2.0 text and appendix |
 | `TC-REL-005` | Law 4 (Third-Party Notice Parity) | `THIRD_PARTY_NOTICES.md` and `.goreleaser.yaml` archive audit | Covers direct `go.mod` dependencies and bundles notices |
 | `TC-REL-006` | Law 6 (Trademark & Logo Carve-Out) | `NOTICE` corporate attribution audit | Preserves trademark shield and logo carve-out cleanly |
