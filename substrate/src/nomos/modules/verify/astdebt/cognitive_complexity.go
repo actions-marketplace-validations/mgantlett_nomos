@@ -9,9 +9,11 @@ import (
 )
 
 const (
-	// MaxFunctionCognitiveComplexity defines the statutory upper bound on per-function cognitive complexity (@intent tree_sitter_ast_gate_spec.md).
+	// MaxFunctionCognitiveComplexity defines the statutory upper bound on Python/Ruby indent-language cognitive complexity (@intent tree_sitter_ast_gate_spec.md).
 	MaxFunctionCognitiveComplexity = 10
-	// MaxPolyglotCyclomaticComplexity defines the default statutory upper bound on non-Go polyglot cyclomatic complexity (@intent tree_sitter_ast_gate_spec.md).
+	// MaxBraceCognitiveComplexity defines the statutory upper bound on brace-language cognitive complexity (@intent tree_sitter_ast_gate_spec.md).
+	MaxBraceCognitiveComplexity = 15
+	// MaxPolyglotCyclomaticComplexity defines the default statutory upper bound on Python/Ruby indent-language cyclomatic complexity (@intent tree_sitter_ast_gate_spec.md).
 	MaxPolyglotCyclomaticComplexity = 10
 )
 
@@ -24,13 +26,26 @@ var (
 	cogBraceBoolTokenRe  = regexp.MustCompile(`(&&|\|\|)`)
 )
 
-// EffectiveMaxComplexity returns MaxPolyglotCyclomaticComplexity (10) for non-Go files when configured equals Go default (15) (@intent tree_sitter_ast_gate_spec.md).
+func isIndentComplexityExt(filePath string) bool {
+	ext := strings.ToLower(filepath.Ext(filePath))
+	return ext == ExtPy || ext == ExtRB || ext == ExtRake
+}
+
+// DefaultMaxCognitiveComplexity returns 10 for Python/Ruby indent languages and 15 for brace languages (@intent tree_sitter_ast_gate_spec.md).
+func DefaultMaxCognitiveComplexity(filePath string) int {
+	if isIndentComplexityExt(filePath) {
+		return MaxFunctionCognitiveComplexity
+	}
+	return MaxBraceCognitiveComplexity
+}
+
+// EffectiveMaxComplexity returns MaxPolyglotCyclomaticComplexity (10) for Python/Ruby indent files when configured equals Go default (15) (@intent tree_sitter_ast_gate_spec.md).
 func EffectiveMaxComplexity(filePath string, configured int) int {
 	def := DefaultThresholds().MaxComplexity
 	if configured <= 0 {
 		configured = def
 	}
-	if strings.EqualFold(filepath.Ext(filePath), ExtGo) || configured != def {
+	if !isIndentComplexityExt(filePath) || configured != def {
 		return configured
 	}
 	return MaxPolyglotCyclomaticComplexity
@@ -42,7 +57,7 @@ func EvaluatePolyglotCognitiveViolations(relPath string, src []byte, maxCog int)
 		return nil
 	}
 	if maxCog <= 0 {
-		maxCog = MaxFunctionCognitiveComplexity
+		maxCog = DefaultMaxCognitiveComplexity(relPath)
 	}
 	var out []string
 	for _, fn := range analyzePolyglotCognitiveScores(relPath, string(src)) {

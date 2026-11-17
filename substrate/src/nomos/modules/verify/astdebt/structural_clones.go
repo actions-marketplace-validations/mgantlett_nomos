@@ -342,7 +342,7 @@ func EnrichComplexityViolations(root string, funcs []FunctionMetric, thresh Thre
 		for rel, src := range seenFiles {
 			violations = append(violations, EvaluateParameterArityViolations(rel, src, maxParams)...)
 			violations = append(violations, EvaluatePolyglotNestingViolations(rel, src, MaxFunctionNesting)...)
-			violations = append(violations, EvaluatePolyglotCognitiveViolations(rel, src, MaxFunctionCognitiveComplexity)...)
+			violations = append(violations, EvaluatePolyglotCognitiveViolations(rel, src, DefaultMaxCognitiveComplexity(rel))...)
 		}
 	}
 	return violations

@@ -74,8 +74,11 @@ func TestR3Tuning_PyTernaryCogAndPolyglotCC10(t *testing.T) {
 	if rErr != nil || rep.Passed {
 		t.Fatalf("expected Python CC=12 > 10 to fail GateEvaluationReport, got err=%v passed=%v", rErr, rep != nil && rep.Passed)
 	}
-	if astdebt.EffectiveMaxComplexity("handler.go", 15) != 15 || astdebt.EffectiveMaxComplexity("branchy.py", 15) != 10 {
+	if astdebt.EffectiveMaxComplexity("handler.go", 15) != 15 || astdebt.EffectiveMaxComplexity("TaskDagTab.svelte", 15) != 15 || astdebt.EffectiveMaxComplexity("atlas.ts", 15) != 15 || astdebt.EffectiveMaxComplexity("branchy.py", 15) != 10 {
 		t.Fatalf("unexpected EffectiveMaxComplexity defaults")
+	}
+	if astdebt.DefaultMaxCognitiveComplexity("atlas.ts") != 15 || astdebt.DefaultMaxCognitiveComplexity("branchy.py") != 10 {
+		t.Fatalf("unexpected DefaultMaxCognitiveComplexity defaults")
 	}
 	if astdebt.EffectiveMaxComplexity("branchy.py", 12) != 12 {
 		t.Fatalf("expected explicit override 12 to be preserved")

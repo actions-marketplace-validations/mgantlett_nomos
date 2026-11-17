@@ -268,10 +268,7 @@ func BuildEvaluationReport(filePath string, totalLines int, funcs []FunctionMetr
 	if cds > thresh.MaxCDS || totalLines > thresh.MaxFileLOC || len(emptyBlocks) > 0 {
 		passed = false
 	}
-	effMaxComp := thresh.MaxComplexity
-	if !strings.EqualFold(filepath.Ext(filePath), ".go") && effMaxComp == 15 {
-		effMaxComp = 10
-	}
+	effMaxComp := effectiveTreeSitterMaxComplexity(filePath, thresh.MaxComplexity)
 	for _, fn := range funcs {
 		if fn.Complexity > effMaxComp || fn.LOC > thresh.MaxFuncLOC {
 			passed = false
@@ -287,6 +284,18 @@ func BuildEvaluationReport(filePath string, totalLines int, funcs []FunctionMetr
 		Density:     density,
 		EmptyBlocks: emptyBlocks,
 		Passed:      passed,
+	}
+}
+
+func effectiveTreeSitterMaxComplexity(filePath string, configured int) int {
+	if configured != 15 {
+		return configured
+	}
+	switch strings.ToLower(filepath.Ext(filePath)) {
+	case ".py", ".rb", ".rake":
+		return 10
+	default:
+		return configured
 	}
 }
 
