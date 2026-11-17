@@ -321,8 +321,8 @@ Session Sentinel (`CHARTER-4-BOUNDARY`) evaluates candidate workspace roots stru
 | `TC-BG-04` | Branch Guard Stop verification gate | `nomos hook stop` on `feat/auth` with unverified edits | `"Blocks turn exit until nomos verify clears branch trace."` | PASS |
 | `TC-BG-05` | Branch Guard Git hook commit pass | `pre-commit` + `commit-msg` on `feat/auth` with plain message | `"Permits raw git commit after nomos verify without [SUB-N] trailers."` | PASS |
 | `TC-BG-06` | Branch Guard CommitSchemaGate pass | `CommitSchemaGate` evaluates feature-branch commits in `branch` mode | `"Accepts Jira, Linear, or plain subjects while rejecting canned shims."` | PASS |
-| `TC-BG-08` | Bash digest tracking & SessionStart hull | `Bash` file write across `post-tool` and `--container-sandbox` `stop`, plus `SessionStart` banner | `"Triggers AST radar, blocks unverified Stop, and renders Manifest Deps hull."` | PASS |
-| `TC-BG-09` | Post-edit behavioral Stop gate and testless hull guidance | Source edit without tests followed by Stop vs post-edit run | `"Blocks un-executed source edits and clears after behavioral run."` | PASS |
+| `TC-BG-08` | Bash digest tracking & SessionStart hull | `Bash` file write across `post-tool` and `--container-sandbox` `stop`, plus `SessionStart` banner | `"Triggers AST radar, blocks unverified Stop, skips sample/fixture dirs in Workspace Modules, and omits git commit in container Next Actions."` | PASS |
+| `TC-BG-09` | Post-edit behavioral Stop gate and testless hull guidance | Source edit without tests followed by Stop vs post-edit run | `"Prompts boundary/edge-case unittest.TestCase tests in .tmp/tests/test_<module>.py, blocks un-executed source edits, and clears after behavioral run."` | PASS |
 
 ---
 

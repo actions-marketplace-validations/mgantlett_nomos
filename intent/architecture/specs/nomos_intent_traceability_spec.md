@@ -411,8 +411,9 @@ func FormatPRProofMarkdown(receipt *PRProofReceipt) string
    - `nomos verify --pr` emits Markdown or `--json` `PRProofReceipt` digests sealing 42-gate posture, plane separation, `xray` debt delta, and SHA-256 provenance.
    - `EvaluateContainerPreToolHook` blocks shell and file snooping against `/tests`, `/solution`, `/logs/verifier`, `/verifier`, `/grading`, `/eval`, `/harness`, `/oracle`, and `/proc/1/environ`.
 10. **Scratch Regression Suite Discovery (`TC-COV-005`):**
-   - `TDDGate`, `PolyglotToolchainGate`, and `CoverageGate` discover `.tmp/tests/` suites alongside `tests/` and include `requirements.txt` in manifest checks.
-   - Python runners pass `.tmp/tests` explicitly to `pytest` and `unittest` so untracked suites enforce `>= 80%` statement coverage.
+   - `TDDGate`, `PolyglotToolchainGate`, and `CoverageGate` discover `.tmp/tests/` alongside `tests/` and read `requirements.txt` manifests.
+   - Brownfield target resolution pairs `.tmp/tests/test_<stem>.py` and `.tmp/tests/<stem>_test.py`.
+   - Python runners pass `.tmp/tests` explicitly to `pytest` and `unittest` and canonicalize traced paths via `os.path.realpath` for accurate `>= 80%` coverage.
    - When Git scope contains modified Python sources, `CoverageGate` measures trace coverage strictly across modified non-test Python files.
 
 ---
