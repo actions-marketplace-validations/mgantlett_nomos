@@ -25,7 +25,8 @@ func CheckPolyglotUncheckedErrors(ext, relPath string, content []byte) []string 
 	}
 	switch ext {
 	case ExtPy:
-		return scanPythonSilentExcepts(relPath, text)
+		out := scanPythonSilentExcepts(relPath, text)
+		return append(out, scanPythonExceptionGaming(relPath, text)...)
 	case ExtJava, ExtKT, ExtKTS, ExtCS, ExtCPP, ExtCC, ExtCXX, ExtHPP:
 		return scanBraceSilentCatches(relPath, text, false)
 	case ExtRS:
@@ -98,7 +99,7 @@ func scanBraceSilentCatches(relPath, text string, checkPromises bool) []string {
 			out = append(out, fmt.Sprintf("%s:%d: empty promise .catch() handler silently swallows rejection", relPath, line))
 		}
 	}
-	return out
+	return append(out, scanBraceFallbackCatches(relPath, text)...)
 }
 
 func scanRustErrorDiscards(relPath, text string) []string {

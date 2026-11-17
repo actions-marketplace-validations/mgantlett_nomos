@@ -4,6 +4,7 @@ package verify
 import (
 	"context"
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"go/ast"
 	"go/parser"
@@ -172,26 +173,7 @@ func (g *AntiShimGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, 
 		if walkErr != nil || info == nil || info.IsDir() || !isPolyglotTargetFile(path) {
 			return nil
 		}
-		relPath, rErr := filepath.Rel(root, path)
-		if rErr != nil {
-			relPath = path
-		}
-		var fileViolations []string
-		fileViolations = append(fileViolations, scanCustomForbiddenShims(path, relPath, forbiddenShims)...)
-		if !strings.HasSuffix(path, ".go") {
-			fileViolations = append(fileViolations, scanPolyglotAntiShim(path, relPath)...)
-		} else {
-			fileViolations = append(fileViolations, scanGoFileAntiShimCached(ctx, path, relPath)...)
-		}
-		violations = append(violations, filterNetNewLineViolations(ctx, root, path, fileViolations, func(baseBytes []byte) []string {
-			return scanTempBaselineViolations(path, baseBytes, func(tmpPath string) []string {
-				out := scanCustomForbiddenShims(tmpPath, relPath, forbiddenShims)
-				if !strings.HasSuffix(path, ".go") {
-					return append(out, scanPolyglotAntiShim(tmpPath, relPath)...)
-				}
-				return append(out, scanGoFileAntiShim(token.NewFileSet(), tmpPath, relPath)...)
-			})
-		})...)
+		violations = append(violations, evaluateAntiShimTargetFile(ctx, root, path, forbiddenShims)...)
 		return nil
 	})
 	if err != nil {
@@ -208,6 +190,36 @@ func (g *AntiShimGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, 
 	}
 
 	return &vscope.GateResult{GateName: g.Name(), Passed: true, Message: "zero anti-shim violations detected"}, nil
+}
+
+func evaluateAntiShimTargetFile(ctx *vscope.VerifyContext, root, path string, forbiddenShims []string) []string {
+	relPath, rErr := filepath.Rel(root, path)
+	if rErr != nil {
+		relPath = path
+	}
+	fileViolations := collectLiveAntiShimViolations(ctx, root, path, relPath, forbiddenShims)
+	return filterNetNewLineViolations(ctx, root, path, fileViolations, func(baseBytes []byte) []string {
+		baseOut := scanCoverageAndImportFallbackViolations(root, relPath, baseBytes)
+		tempOut := scanTempBaselineViolations(path, baseBytes, func(tmpPath string) []string {
+			out := scanCustomForbiddenShims(tmpPath, relPath, forbiddenShims)
+			if !strings.HasSuffix(path, ".go") {
+				return append(out, scanPolyglotAntiShim(tmpPath, relPath)...)
+			}
+			return append(out, scanGoFileAntiShim(token.NewFileSet(), tmpPath, relPath)...)
+		})
+		return append(baseOut, tempOut...)
+	})
+}
+
+func collectLiveAntiShimViolations(ctx *vscope.VerifyContext, root, path, relPath string, forbiddenShims []string) []string {
+	fileViolations := scanCustomForbiddenShims(path, relPath, forbiddenShims)
+	if raw, rErr := os.ReadFile(path); rErr == nil {
+		fileViolations = append(fileViolations, scanCoverageAndImportFallbackViolations(root, relPath, raw)...)
+	}
+	if !strings.HasSuffix(path, ".go") {
+		return append(fileViolations, scanPolyglotAntiShim(path, relPath)...)
+	}
+	return append(fileViolations, scanGoFileAntiShimCached(ctx, path, relPath)...)
 }
 
 func scanGoFileAntiShimCached(ctx *vscope.VerifyContext, path, relPath string) []string {
@@ -313,4 +325,12 @@ func scanPolyglotAntiShim(path, relPath string) []string {
 		violations = append(violations, fmt.Sprintf("%s: test_skip_reward_hack (%s)", relPath, skip))
 	}
 	return violations
+}
+
+func scanCoverageAndImportFallbackViolations(root, relPath string, raw []byte) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	out := astdebt.CheckCoverageExclusionDirectives(relPath, raw)
+	return append(out, astdebt.CheckManifestImportFallbacks(root, relPath, raw)...)
 }

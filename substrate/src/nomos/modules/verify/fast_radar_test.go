@@ -97,3 +97,26 @@ func HotComplexHandler(a, b, c, d, e, f, g, h, i int) int {
 	}
 }
 
+func TestEvaluateFastFileRadar_DesignSlopAndHygieneSensors(t *testing.T) {
+	dir := initTestGitRepo(t)
+	nomosYAML := "project: py-slop\ndefault_branch: main\ngovernance:\n  quality_gates:\n    strict_mode: true\n"
+	if err := os.WriteFile(filepath.Join(dir, "nomos.yaml"), []byte(nomosYAML), 0644); err != nil {
+		t.Fatal(err)
+	}
+	badPy := "def run(x):\n    try:\n        return int(x)\n    except (OSError, KeyError, TypeError):\n        return {}  # pragma: no cover\n"
+	pyPath := filepath.Join(dir, "worker.py")
+	if err := os.WriteFile(pyPath, []byte(badPy), 0644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := EvaluateFastFileRadar(dir, pyPath)
+	if err != nil {
+		t.Fatalf("EvaluateFastFileRadar python: %v", err)
+	}
+	joined := strings.Join(res.Breaches, "\n")
+	for _, want := range []string{"catch-all exception tuple", "coverage_exclusion_reward_hack"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("expected %q in Python FastFileRadar breaches, got: %v", want, res.Breaches)
+		}
+	}
+}
+

@@ -293,3 +293,24 @@ func hasGoInterfaceOrMethodReceiver(node *ast.File) bool {
 	}
 	return false
 }
+
+func evaluateFastDesignSlopAndHygiene(ctx *vscope.VerifyContext, wtRoot, absPath, relFile string, data []byte, res *FastFileRadarResult) {
+	curHits := collectFileDesignSlopHits(wtRoot, absPath, relFile, data)
+	filtered := filterNetNewLineViolations(ctx, wtRoot, absPath, curHits, func(baseBytes []byte) []string {
+		return collectFileDesignSlopHits(wtRoot, absPath, relFile, baseBytes)
+	})
+	res.Breaches = append(res.Breaches, filtered...)
+}
+
+func collectFileDesignSlopHits(wtRoot, absPath, relFile string, data []byte) []string {
+	ext := strings.ToLower(filepath.Ext(absPath))
+	var hits []string
+	hits = append(hits, astdebt.CheckPolyglotUncheckedErrors(ext, relFile, data)...)
+	hits = append(hits, astdebt.CheckCoverageExclusionDirectives(relFile, data)...)
+	hits = append(hits, astdebt.CheckManifestImportFallbacks(wtRoot, relFile, data)...)
+	hits = append(hits, astdebt.EvaluatePolyglotNestingViolations(relFile, data, astdebt.MaxFunctionNesting)...)
+	if ext == astdebt.ExtPy {
+		hits = append(hits, astdebt.DetectPolyglotDesignSlop(wtRoot, map[string][]byte{relFile: data})...)
+	}
+	return hits
+}

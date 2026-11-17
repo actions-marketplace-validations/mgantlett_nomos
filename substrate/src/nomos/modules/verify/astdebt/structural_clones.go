@@ -287,6 +287,7 @@ func EnrichCDSViolations(root string, metrics []FileMetric, sources map[string][
 		}
 		clones := DetectStructuralClones(sources, minLines)
 		violations = append(violations, FormatCloneViolations(clones)...)
+		violations = append(violations, DetectPolyglotDesignSlop(root, sources)...)
 	}
 	return violations
 }
@@ -339,21 +340,10 @@ func EnrichComplexityViolations(root string, funcs []FunctionMetric, thresh Thre
 		}
 		for rel, src := range seenFiles {
 			violations = append(violations, EvaluateParameterArityViolations(rel, src, maxParams)...)
+			violations = append(violations, EvaluatePolyglotNestingViolations(rel, src, MaxFunctionNesting)...)
 		}
 	}
 	return violations
-}
-
-func loadCachedSourceBytes(root, relFile string, cache map[string][]byte) []byte {
-	if src, ok := cache[relFile]; ok {
-		return src
-	}
-	src, err := os.ReadFile(filepath.Join(root, relFile))
-	if err != nil {
-		src = nil
-	}
-	cache[relFile] = src
-	return src
 }
 
 func lookupFunctionEndLine(fn FunctionMetric, src []byte, thresh Thresholds, cache map[string]map[string]int) int {
@@ -376,11 +366,4 @@ func lookupFunctionEndLine(fn FunctionMetric, src []byte, thresh Thresholds, cac
 		return fn.Line + fn.LOC - 1
 	}
 	return fn.Line
-}
-
-func formatFileSpan(relFile string, startLine, endLine int) string {
-	if endLine > startLine {
-		return fmt.Sprintf("%s:%d-%d", relFile, startLine, endLine)
-	}
-	return fmt.Sprintf("%s:%d", relFile, startLine)
 }

@@ -183,10 +183,14 @@ func evaluateSingleFileArityRatchet(ctx *vscope.VerifyContext, root, rel string,
 		return nil
 	}
 	allowed := maxParams
+	allowedNest := astdebt.MaxFunctionNesting
 	if baseBytes, ok := loadBaselineFileBytes(ctx, root, absPath); ok {
-		baseMaxP, _, _, baseDeepN := astdebt.SummarizeFileArityAndNesting(rel, baseBytes, maxParams, astdebt.MaxFunctionNesting)
-		_ = baseDeepN
-		allowed = maxInt(maxParams, baseMaxP)
+		baseMaxP, baseMaxN, baseHighA, baseDeepN := astdebt.SummarizeFileArityAndNesting(rel, baseBytes, maxParams, astdebt.MaxFunctionNesting)
+		if baseHighA >= 0 && baseDeepN >= 0 {
+			allowed = maxInt(maxParams, baseMaxP)
+			allowedNest = maxInt(astdebt.MaxFunctionNesting, baseMaxN)
+		}
 	}
-	return astdebt.EvaluateParameterArityViolations(rel, src, allowed)
+	out := astdebt.EvaluateParameterArityViolations(rel, src, allowed)
+	return append(out, astdebt.EvaluatePolyglotNestingViolations(rel, src, allowedNest)...)
 }

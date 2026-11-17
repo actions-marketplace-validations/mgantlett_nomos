@@ -57,6 +57,7 @@ func EvaluateFastFileRadar(repoRoot, filePath string) (*FastFileRadarResult, err
 	}
 	evaluateFastCWESinks(ctx, wtRoot, absPath, res.File, data, res)
 	evaluateFastIntraPackageClones(ctx, wtRoot, absPath, data, res)
+	evaluateFastDesignSlopAndHygiene(ctx, wtRoot, absPath, res.File, data, res)
 	warnPct := applyHotScopeRadarReflex(ctx, repoRoot, wtRoot, absPath, data, res)
 	evaluateFastASTBudgets(ctx, wtRoot, absPath, data, warnPct, res)
 	return res, nil
@@ -317,6 +318,5 @@ func evaluateFastHotScopeProbes(ctx *vscope.VerifyContext, absPath, relFile stri
 		res.Breaches = append(res.Breaches, scanGoFileAntiShim(token.NewFileSet(), absPath, relFile)...)
 		return
 	}
-	res.Breaches = append(res.Breaches, astdebt.CheckPolyglotUncheckedErrors(ext, relFile, data)...)
 	res.Breaches = append(res.Breaches, scanPolyglotAntiShim(absPath, relFile)...)
 }
