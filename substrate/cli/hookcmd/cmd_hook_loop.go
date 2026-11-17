@@ -105,47 +105,101 @@ func advanceLoopBreakerState(prev loopBreakerState, fp, wsDigest, runner string)
 }
 
 var verificationRunnerRules = []struct {
-	family   string
-	patterns []string
+	family string
+	match  func(exe string, args []string) bool
 }{
-	{family: "pytest", patterns: []string{"pytest", "py.test"}},
-	{family: "unittest", patterns: []string{"unittest"}},
-	{family: "go-test", patterns: []string{"go test"}},
-	{family: "cargo-test", patterns: []string{"cargo test"}},
-	{family: "js-test", patterns: []string{"vitest", "jest", "npm test", "pnpm test", "yarn test", "bun test"}},
-	{family: "ctest", patterns: []string{"ctest"}},
+	{family: "pytest", match: func(exe string, args []string) bool {
+		return exe == "pytest" || exe == "py.test" || hasPythonModuleArg(exe, args, "pytest")
+	}},
+	{family: "unittest", match: func(exe string, args []string) bool {
+		return hasPythonModuleArg(exe, args, "unittest")
+	}},
+	{family: "go-test", match: func(exe string, args []string) bool {
+		return exe == "go" && len(args) > 0 && args[0] == "test"
+	}},
+	{family: "cargo-test", match: func(exe string, args []string) bool {
+		return exe == "cargo" && len(args) > 0 && args[0] == "test"
+	}},
+	{family: "js-test", match: isJSVerificationSegment},
+	{family: "ctest", match: func(exe string, args []string) bool {
+		return exe == "ctest"
+	}},
 }
 
 func detectVerificationRunnerFamily(cmdLine string) string {
-	lower := strings.ToLower(strings.TrimSpace(cmdLine))
-	if lower == "" {
+	trimmed := strings.TrimSpace(cmdLine)
+	if trimmed == "" {
 		return ""
 	}
-	for _, rule := range verificationRunnerRules {
-		if containsAnyRunnerToken(lower, rule.patterns) {
-			return rule.family
+	for _, seg := range splitUnquotedShellSegments(trimmed) {
+		exe, _, rawArgs := extractLeadingExeAndArgs(seg)
+		if exe == "" {
+			continue
 		}
-	}
-	if isPythonTestScriptCmd(lower) {
-		return "python-test"
+		args := lowerSlice(rawArgs)
+		for _, rule := range verificationRunnerRules {
+			if rule.match(exe, args) {
+				return rule.family
+			}
+		}
+		if isPythonTestScriptSegment(exe, args) {
+			return "python-test"
+		}
 	}
 	return ""
 }
 
-func containsAnyRunnerToken(lower string, patterns []string) bool {
-	for _, tok := range patterns {
-		if strings.Contains(lower, tok) {
+func isJSVerificationSegment(exe string, args []string) bool {
+	if exe == "vitest" || exe == "jest" {
+		return true
+	}
+	if exe == "npm" || exe == "pnpm" || exe == "yarn" || exe == "bun" {
+		return len(args) > 0 && args[0] == "test"
+	}
+	return false
+}
+
+func hasPythonModuleArg(exe string, args []string, mod string) bool {
+	if !isPythonExe(exe) {
+		return false
+	}
+	for i := 0; i < len(args)-1; i++ {
+		if args[i] == "-m" && args[i+1] == mod {
 			return true
 		}
 	}
 	return false
 }
 
-func isPythonTestScriptCmd(lower string) bool {
-	if !strings.Contains(lower, "python") {
+func isPythonTestScriptSegment(exe string, args []string) bool {
+	if !isPythonExe(exe) {
 		return false
 	}
-	return strings.Contains(lower, "test_") || strings.Contains(lower, "_test.py") || strings.Contains(lower, "tests/")
+	for i, arg := range args {
+		if arg == "-c" || arg == "-" {
+			return false
+		}
+		if strings.HasPrefix(arg, "-") {
+			continue
+		}
+		if i > 0 && args[i-1] == "-m" {
+			return strings.Contains(arg, "test")
+		}
+		return strings.Contains(arg, "tests/") || strings.HasPrefix(filepath.Base(arg), "test_") || strings.HasSuffix(arg, "_test.py")
+	}
+	return false
+}
+
+func isPythonExe(exe string) bool {
+	return exe == "python" || exe == "python3" || strings.HasPrefix(exe, "python3.")
+}
+
+func lowerSlice(vals []string) []string {
+	out := make([]string, len(vals))
+	for i, v := range vals {
+		out[i] = strings.ToLower(v)
+	}
+	return out
 }
 
 func formatLoopBreakerReason(threshold int) string {

@@ -37,11 +37,12 @@ const (
 const maxActiveTaintEdges = 32
 
 var (
-	remoteShellPipeRe = regexp.MustCompile(`(?i)\b(?:curl|wget)\b[^;\n]*\|\s*(?:sudo\s+)?(?:ba)?sh\b`)
-	remoteHTTPFetchRe = regexp.MustCompile(`(?i)\b(?:curl|wget)\b[^\n]*https?://([^\s/'"]+)`)
-	curlExfilFlagRe   = regexp.MustCompile(`(?i)\bcurl\b[^\n]*(?:\s-(?:d|F|T)\b|--(?:data|data-raw|data-binary|form|upload-file)\b|-X\s*(?:POST|PUT|PATCH)\b)`)
-	wgetExfilFlagRe   = regexp.MustCompile(`(?i)\bwget\b[^\n]*--post-(?:data|file)\b`)
-	netExfilCmdRe     = regexp.MustCompile(`(?i)(?:^|[;&|]\s*)(?:scp|nc|ncat|netcat)\s+`)
+	remoteShellPipeRe   = regexp.MustCompile(`(?i)\b(?:curl|wget)\b[^;\n]*\|\s*(?:sudo\s+)?(?:ba)?sh\b`)
+	remoteHTTPFetchRe   = regexp.MustCompile(`(?i)\b(?:curl|wget)\b[^\n]*https?://([^\s/'"]+)`)
+	curlExfilFlagRe     = regexp.MustCompile(`(?i)\bcurl\b[^\n]*(?:\s-(?:d|F|T)\b|--(?:data|data-raw|data-binary|data-urlencode|form|json|upload-file)\b|-X\s*(?:POST|PUT|PATCH)\b)`)
+	wgetExfilFlagRe     = regexp.MustCompile(`(?i)\bwget\b[^\n]*--post-(?:data|file)\b`)
+	inlineNetPostExfilRe = regexp.MustCompile(`(?i)(?:requests\.(?:post|put|patch)\(|urlopen\([^\n]*\bdata\s*=|Request\([^\n]*method\s*=\s*['"](?:POST|PUT|PATCH)['"]|fetch\([^\n]*method\s*[:=]\s*['"](?:POST|PUT|PATCH)['"])`)
+	netExfilCmdRe       = regexp.MustCompile(`(?i)(?:^|[;&|]\s*)(?:scp|nc|ncat|netcat)\s+`)
 	releaseSinkCmdRe  = regexp.MustCompile(`(?i)(?:^|[;&|]\s*)(?:git\s+push|gh\s+(?:release|pr\s+merge)|npm\s+publish|cargo\s+publish|twine\s+upload|docker\s+push)\b`)
 	verifySanitizerRe = regexp.MustCompile(`^\s*(?:cd\s+\S+\s*&&\s*)?(?:\S+/)?nomos\s+(?:verify|task\s+review)(?:\s|$)`)
 
@@ -154,9 +155,6 @@ func (g *CapabilityFlowGraph) EvaluateToolFlow(inv ToolFlowInvocation) FlowDecis
 			Reason:  "❌ [NOMOS CAPABILITY-FLOW INTERCEPT] Piping remote network content directly into a shell interpreter ('curl|sh', 'wget|bash') is prohibited (Law 7). Download to an inspected file and verify before execution.",
 		}
 	}
-	if sinkDec, blocked := g.evaluateSinkViolation(cmd); blocked {
-		return sinkDec
-	}
 	if cmd != "" && isStandaloneVerifySanitizer(cmd) {
 		g.ClearTaint(TaintUntrustedExternal)
 		g.ClearTaint(TaintMCPUntrustedIngress)
@@ -171,6 +169,11 @@ func (g *CapabilityFlowGraph) EvaluateToolFlow(inv ToolFlowInvocation) FlowDecis
 		for _, lbl := range labels {
 			g.AddTaint(lbl, toolLabel, resource)
 		}
+	}
+	if sinkDec, blocked := g.evaluateSinkViolation(cmd); blocked {
+		return sinkDec
+	}
+	if len(labels) > 0 {
 		return FlowDecision{Allowed: true, Role: FlowRoleSource}
 	}
 	return FlowDecision{Allowed: true, Role: FlowRoleNeutral}
@@ -210,7 +213,10 @@ func (g *CapabilityFlowGraph) evaluateSinkViolation(cmd string) (FlowDecision, b
 }
 
 func isExfiltrationCommand(cmd string) bool {
-	return curlExfilFlagRe.MatchString(cmd) || wgetExfilFlagRe.MatchString(cmd) || netExfilCmdRe.MatchString(cmd)
+	return curlExfilFlagRe.MatchString(cmd) ||
+		wgetExfilFlagRe.MatchString(cmd) ||
+		inlineNetPostExfilRe.MatchString(cmd) ||
+		netExfilCmdRe.MatchString(cmd)
 }
 
 func isStandaloneVerifySanitizer(cmd string) bool {

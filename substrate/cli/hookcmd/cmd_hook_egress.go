@@ -43,7 +43,8 @@ func evaluateOutboundEgressGuard(p *HookPayload, wsRoot string) HookDecision {
 	if p == nil {
 		return HookDecision{Decision: hookDecisionAllow}
 	}
-	urls := extractOutboundHTTPURLs(p)
+	boundary := loadEffectiveBoundaryConfig(wsRoot)
+	urls := extractOutboundHTTPURLsForPolicy(p, boundary)
 	if len(urls) == 0 {
 		return HookDecision{Decision: hookDecisionAllow}
 	}
@@ -54,15 +55,13 @@ func evaluateOutboundEgressGuard(p *HookPayload, wsRoot string) HookDecision {
 			Reason:   "❌ [NOMOS INTERCEPT] Outbound Secret Airlock (Law 7): Credential token detected in outbound HTTP request is strictly prohibited.",
 		}
 	}
-	boundary := loadWorkspaceBoundaryConfig(wsRoot)
 	var gitEmail string
 	var loadedEmail bool
 	for _, rawURL := range urls {
-		parsed, err := url.Parse(rawURL)
-		if err != nil || parsed.Host == "" {
+		host := extractURLHostname(rawURL)
+		if host == "" {
 			continue
 		}
-		host := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
 		if isBlockedMetadataHost(host) {
 			return HookDecision{
 				Decision: hookDecisionDeny,
@@ -87,6 +86,33 @@ func evaluateOutboundEgressGuard(p *HookPayload, wsRoot string) HookDecision {
 		}
 	}
 	return HookDecision{Decision: hookDecisionAllow}
+}
+
+func extractOutboundHTTPURLsForPolicy(p *HookPayload, boundary config.BoundaryConfig) []string {
+	mode := boundary.EffectiveEgressMode()
+	if mode == config.EgressModeOffline || mode == config.EgressModeAllowlist || len(boundary.BlockedEgressDomains) > 0 {
+		return extractAllCandidateURLs(p)
+	}
+	return extractOutboundHTTPURLs(p)
+}
+
+func extractAllCandidateURLs(p *HookPayload) []string {
+	var out []string
+	if u := strings.TrimSpace(p.TargetURL); strings.HasPrefix(strings.ToLower(u), "http://") || strings.HasPrefix(strings.ToLower(u), "https://") {
+		out = append(out, u)
+	}
+	if cmd := strings.TrimSpace(p.CommandLine); cmd != "" {
+		out = append(out, httpURLTokenRe.FindAllString(cmd, -1)...)
+	}
+	return out
+}
+
+func extractURLHostname(rawURL string) string {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || parsed.Host == "" {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(parsed.Hostname()))
 }
 
 func extractOutboundHTTPURLs(p *HookPayload) []string {
@@ -176,6 +202,21 @@ func loadWorkspaceBoundaryConfig(wsRoot string) config.BoundaryConfig {
 		return config.BoundaryConfig{}
 	}
 	return cfg.Governance.Boundary
+}
+
+func loadEffectiveBoundaryConfig(wsRoot string) config.BoundaryConfig {
+	boundary := loadWorkspaceBoundaryConfig(wsRoot)
+	pol := loadContainerSandboxPolicy()
+	if boundary.EgressMode == "" && pol.EgressMode != "" {
+		boundary.EgressMode = pol.EgressMode
+	}
+	if len(pol.AllowedEgressDomains) > 0 {
+		boundary.AllowedEgressDomains = append(boundary.AllowedEgressDomains, pol.AllowedEgressDomains...)
+	}
+	if len(pol.BlockedEgressDomains) > 0 {
+		boundary.BlockedEgressDomains = append(boundary.BlockedEgressDomains, pol.BlockedEgressDomains...)
+	}
+	return boundary
 }
 
 func resolveWorkspaceGitEmail(wsRoot string) string {

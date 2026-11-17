@@ -25,6 +25,9 @@ const (
 
 var (
 	containerVerifierRoots = []string{
+		"/etc/nomos",
+		"/opt/nomos",
+		"/root/.nomos-bin",
 		"/logs/verifier",
 		"/solution",
 		"/tests",
@@ -38,7 +41,7 @@ var (
 		"/proc/self/environ",
 	}
 	embeddedVerifierRootRe = regexp.MustCompile(
-		`(?:^|[\s"'` + "`" + `=:(,\[\{<>])((?:/logs/verifier|/solution|/tests|/verifier|/grading|/eval|/harness|/oracle|/proc/1/environ|/proc/1/cmdline|/proc/self/environ)(?:/[^\s"'` + "`" + `),\]\};]*)?)(?:[\s"'` + "`" + `),\]\};]|$)`,
+		`(?:^|[\s"'` + "`" + `=:(,\[\{<>])((?:/etc/nomos|/opt/nomos|/root/.nomos-bin|/logs/verifier|/solution|/tests|/verifier|/grading|/eval|/harness|/oracle|/proc/1/environ|/proc/1/cmdline|/proc/self/environ)(?:/[^\s"'` + "`" + `),\]\};]*)?)(?:[\s"'` + "`" + `),\]\};]|$)`,
 	)
 	rootSweepCommandRe  = regexp.MustCompile(`(?i)(?:^|[;&|]\s*)(?:find\s+/(?:\s|$)|(?:grep|rg)\b[^\n;|&]*\s+/(?:\s|$))`)
 	shellMutationHintRe = regexp.MustCompile(`(?:>|>>|\btee\s+|\bsed\s+-i|\bperl\s+-i|\brm\s+|\bmv\s+|\bcp\s+|\btruncate\s+)`)
@@ -82,7 +85,24 @@ func EvaluateContainerPreToolHookWithProfile(p *HookPayload, profile HookAdvisor
 	if dec := evaluateCapabilityFlowGuard(p, baseCwd); dec.Decision == hookDecisionDeny {
 		return dec
 	}
+	if dec := evaluateContainerSandboxPolicies(p, baseCwd); dec.Decision == hookDecisionDeny {
+		return dec
+	}
 	return EvaluateLoopCircuitBreakerWithStrikes(p, "", profile.LoopStrikes)
+}
+
+func evaluateContainerSandboxPolicies(p *HookPayload, baseCwd string) HookDecision {
+	pol := loadContainerSandboxPolicy()
+	if dec := evaluateContainerPolicyGuards(p, baseCwd, pol); dec.Decision == hookDecisionDeny {
+		return dec
+	}
+	if dec := evaluateContainerMCPAndTrustGuard(p, baseCwd, pol); dec.Decision == hookDecisionDeny {
+		return dec
+	}
+	if dec := evaluateContainerSupplyChainEgress(p, pol); dec.Decision == hookDecisionDeny {
+		return dec
+	}
+	return evaluateContainerAutonomousSafetyGuard(p, baseCwd, pol)
 }
 
 func evaluateContainerCommandGuard(cmdLine, baseCwd string) HookDecision {
@@ -151,10 +171,10 @@ func evaluateSingleContainerTarget(p *HookPayload, baseCwd string) HookDecision 
 		}
 	}
 	resolved := normalizeCanonicalPath(p.TargetFile, baseCwd)
-	if isProtectedContainerVerifierPath(resolved) {
+	if isProtectedContainerVerifierPath(resolved) || isProtectedContainerHookConfigPath(resolved) {
 		return HookDecision{
 			Decision: hookDecisionDeny,
-			Reason:   fmt.Sprintf("Anti-Reward-Hacking Violation (Law 2 & Law 3): Access to protected verifier/oracle path '%s' is strictly prohibited.", resolved),
+			Reason:   fmt.Sprintf("Anti-Reward-Hacking Violation (Law 2 & Law 3): Access to protected verifier/policy path '%s' is strictly prohibited.", resolved),
 		}
 	}
 	if !isReadOnlyTool(p.ToolName) && p.WrittenContent != "" {
@@ -262,10 +282,13 @@ func tokenizeShellWords(cmdLine string) []string {
 // EvaluateContainerPostToolHook runs sub-15ms in-memory syntax and AST verification
 // across edited container files while avoiding host-only LOC noise on non-Nomos repos.
 func EvaluateContainerPostToolHook(p *HookPayload) string {
-	if p == nil || p.IsPostInvoke || p.TargetFile == "" {
+	if p == nil || p.IsPostInvoke {
 		return ""
 	}
-	if p.CommandLine != "" || capbac.IsMCPToolName(p.ToolName) || isReadOnlyTool(p.ToolName) {
+	if carrierMsg := evaluateContainerUntrustedCarrierAdvisory(p); carrierMsg != "" {
+		return carrierMsg
+	}
+	if p.TargetFile == "" || p.CommandLine != "" || capbac.IsMCPToolName(p.ToolName) || isReadOnlyTool(p.ToolName) {
 		return ""
 	}
 	baseCwd := firstNonEmpty(p.Cwd, resolveHookWorkspaceDir(p, ""))
