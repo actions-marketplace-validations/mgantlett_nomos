@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
 )
 
 func TestHookContainerSandbox_AntiRewardHackingAndSysadminParity(t *testing.T) {
@@ -256,5 +258,101 @@ func TestHookContainerSandbox_GeminiCliBeforeAndAfterToolParity(t *testing.T) {
 	})
 	if !strings.Contains(afterOut, "additionalContext") || strings.Contains(afterOut, "PostToolUse") {
 		t.Fatalf("expected Gemini AfterTool additionalContext without Claude PostToolUse tag, got %q", afterOut)
+	}
+}
+
+func runLoopTestStep(t *testing.T, sandbox, srcPath, content, cmd string) hookcmd.HookDecision {
+	t.Helper()
+	if writeErr := os.WriteFile(srcPath, []byte(content), 0600); writeErr != nil {
+		t.Fatal(writeErr)
+	}
+	out := executeHookCmd(t, []string{"pre-tool", "--container-sandbox"}, map[string]any{
+		"cwd":        sandbox,
+		"tool_name":  "Bash",
+		"tool_input": map[string]any{"command": cmd},
+	})
+	return parseDecision(t, out)
+}
+
+func TestHookLoopBreaker_ContentSHA256PingPongAndFlipFlop(t *testing.T) {
+	t.Setenv("NOMOS_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	sandbox := t.TempDir()
+	solFile := filepath.Join(sandbox, "solution.py")
+	pyTestCmd := "python3 tests/test_solution.py"
+
+	// Overwriting solution.py with identical bytes does not reset the loop breaker.
+	for i := 1; i <= 3; i++ {
+		dec := runLoopTestStep(t, sandbox, solFile, "def solve():\n    return 1\n", pyTestCmd)
+		if i < 3 && dec.Decision != "allow" {
+			t.Fatalf("identical overwrite strike %d should allow, got %+v", i, dec)
+		}
+		if i == 3 && (dec.Decision != "deny" || !strings.Contains(dec.Reason, "Loop Circuit-Breaker (Law 1)")) {
+			t.Fatalf("expected 3rd python-test on identical bytes to deny, got %+v", dec)
+		}
+	}
+
+	// Genuine content edit allows once, and A/B/A flip-flop trips when returning to stale stateA (3rd run on stateA).
+	sandboxFF := t.TempDir()
+	solFF := filepath.Join(sandboxFF, "solution.py")
+	stateA := "def f(): return 1\n"
+	stateB := "def f(): return 2\n"
+	ffSteps := []struct {
+		src string
+		cmd string
+	}{
+		{stateA, pyTestCmd + " -q"},
+		{stateB, pyTestCmd + " -v"},
+		{stateA, pyTestCmd + " -vv"},
+		{stateB, pyTestCmd + " --tb=short"},
+	}
+	for _, st := range ffSteps {
+		if dec := runLoopTestStep(t, sandboxFF, solFF, st.src, st.cmd); dec.Decision != "allow" {
+			t.Fatalf("expected flip-flop warmup step (%s) to allow, got %+v", st.cmd, dec)
+		}
+	}
+	if dec := runLoopTestStep(t, sandboxFF, solFF, stateA, pyTestCmd); dec.Decision != "deny" || !strings.Contains(dec.Reason, "python-test") {
+		t.Fatalf("expected 3rd test execution against stateA flip-flop to deny with python-test reason, got %+v", dec)
+	}
+}
+
+func TestHookContainerSandbox_WorkspaceTestWriteLockAndAntiShim(t *testing.T) {
+	t.Setenv("NOMOS_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("NOMOS_PROTECT_WORKSPACE_TESTS", "1")
+
+	for _, allowed := range []map[string]any{
+		{"cwd": "/app", "tool_name": "Read", "tool_input": map[string]any{"file_path": "/app/tests/test_api.py"}},
+		{"cwd": "/app", "tool_name": "Bash", "tool_input": map[string]any{"command": "pytest ./tests/test_api.py"}},
+	} {
+		out := executeHookCmd(t, []string{"pre-tool", "--container-sandbox"}, allowed)
+		if dec := parseDecision(t, out); dec.Decision != "allow" {
+			t.Fatalf("expected workspace test read/run allow, got %+v", dec)
+		}
+	}
+
+	for _, denied := range []map[string]any{
+		{"cwd": "/app", "tool_name": "Write", "tool_input": map[string]any{"file_path": "/app/tests/test_api.py"}},
+		{"cwd": "/app", "tool_name": "Bash", "tool_input": map[string]any{"command": "echo '' > ./tests/test_api.py"}},
+	} {
+		out := executeHookCmd(t, []string{"pre-tool", "--container-sandbox"}, denied)
+		if dec := parseDecision(t, out); dec.Decision != "deny" || !strings.Contains(dec.Reason, "test") {
+			t.Fatalf("expected workspace test mutation deny, got %+v", dec)
+		}
+	}
+
+	sandbox := t.TempDir()
+	shimPy := filepath.Join(sandbox, "solution.py")
+	if err := os.WriteFile(shimPy, []byte("def solve():\n    pass\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	postOut := executeHookCmd(t, []string{"post-tool", "--container-sandbox"}, map[string]any{
+		"cwd":        sandbox,
+		"tool_name":  "Write",
+		"tool_input": map[string]any{"file_path": shimPy},
+	})
+	if !strings.Contains(postOut, "Nomos Anti-Shim Radar") {
+		t.Fatalf("expected container PostToolUse anti-shim advisory without nomos.yaml, got %q", postOut)
 	}
 }

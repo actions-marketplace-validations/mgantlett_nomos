@@ -16,14 +16,19 @@ import (
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
 )
 
-const loopBreakerReason = "Loop Circuit-Breaker (Law 1): Identical tool call repeated 3 consecutive times without workspace state change. Alter parameters or inspect workspace state before retrying."
+const (
+	loopBreakerReason       = "Loop Circuit-Breaker (Law 1): Identical tool call repeated 3 consecutive times without workspace state change. Alter parameters or inspect workspace state before retrying."
+	maxDigestFileBytes      = 262144
+	maxTrackedRunnerDigests = 16
+)
 
 type loopBreakerState struct {
-	Fingerprint       string `json:"fingerprint"`
-	WorkspaceDigest   string `json:"workspace_digest"`
-	ConsecutiveCount  int    `json:"consecutive_count"`
-	RunnerFamily      string `json:"runner_family,omitempty"`
-	NoEditRunnerCount int    `json:"no_edit_runner_count,omitempty"`
+	Fingerprint       string         `json:"fingerprint"`
+	WorkspaceDigest   string         `json:"workspace_digest"`
+	ConsecutiveCount  int            `json:"consecutive_count"`
+	RunnerFamily      string         `json:"runner_family,omitempty"`
+	NoEditRunnerCount int            `json:"no_edit_runner_count,omitempty"`
+	TestedDigests     map[string]int `json:"tested_digests,omitempty"`
 }
 
 // EvaluateLoopCircuitBreaker enforces the identical-failure and no-edit runner circuit-breaker
@@ -55,7 +60,7 @@ func EvaluateLoopCircuitBreakerWithStrikes(p *HookPayload, hermeticDir string, s
 			Reason:   formatLoopBreakerReason(threshold),
 		}
 	}
-	if runner != "" && next.NoEditRunnerCount >= threshold {
+	if runner != "" && (next.NoEditRunnerCount >= threshold || next.TestedDigests[wsDigest] >= threshold) {
 		return HookDecision{
 			Decision: "deny",
 			Reason:   formatNoEditRunnerBreakerReason(runner, threshold),
@@ -64,15 +69,28 @@ func EvaluateLoopCircuitBreakerWithStrikes(p *HookPayload, hermeticDir string, s
 	return HookDecision{Decision: "allow"}
 }
 
+func copyTestedDigests(prev map[string]int) map[string]int {
+	out := make(map[string]int, len(prev)+1)
+	if len(prev) >= maxTrackedRunnerDigests {
+		return out
+	}
+	for k, v := range prev {
+		out[k] = v
+	}
+	return out
+}
+
 func advanceLoopBreakerState(prev loopBreakerState, fp, wsDigest, runner string) loopBreakerState {
 	next := loopBreakerState{
 		Fingerprint:      fp,
 		WorkspaceDigest:  wsDigest,
 		ConsecutiveCount: 1,
 		RunnerFamily:     runner,
+		TestedDigests:    copyTestedDigests(prev.TestedDigests),
 	}
 	if runner != "" {
 		next.NoEditRunnerCount = 1
+		next.TestedDigests[wsDigest]++
 	}
 	if prev.WorkspaceDigest != wsDigest {
 		return next
@@ -86,29 +104,48 @@ func advanceLoopBreakerState(prev loopBreakerState, fp, wsDigest, runner string)
 	return next
 }
 
+var verificationRunnerRules = []struct {
+	family   string
+	patterns []string
+}{
+	{family: "pytest", patterns: []string{"pytest", "py.test"}},
+	{family: "unittest", patterns: []string{"unittest"}},
+	{family: "go-test", patterns: []string{"go test"}},
+	{family: "cargo-test", patterns: []string{"cargo test"}},
+	{family: "js-test", patterns: []string{"vitest", "jest", "npm test", "pnpm test", "yarn test", "bun test"}},
+	{family: "ctest", patterns: []string{"ctest"}},
+}
+
 func detectVerificationRunnerFamily(cmdLine string) string {
 	lower := strings.ToLower(strings.TrimSpace(cmdLine))
 	if lower == "" {
 		return ""
 	}
-	switch {
-	case strings.Contains(lower, "pytest") || strings.Contains(lower, "py.test"):
-		return "pytest"
-	case strings.Contains(lower, "unittest"):
-		return "unittest"
-	case strings.Contains(lower, "go test"):
-		return "go-test"
-	case strings.Contains(lower, "cargo test"):
-		return "cargo-test"
-	case strings.Contains(lower, "vitest") || strings.Contains(lower, "jest") ||
-		strings.Contains(lower, "npm test") || strings.Contains(lower, "pnpm test") ||
-		strings.Contains(lower, "yarn test") || strings.Contains(lower, "bun test"):
-		return "js-test"
-	case strings.Contains(lower, "ctest"):
-		return "ctest"
-	default:
-		return ""
+	for _, rule := range verificationRunnerRules {
+		if containsAnyRunnerToken(lower, rule.patterns) {
+			return rule.family
+		}
 	}
+	if isPythonTestScriptCmd(lower) {
+		return "python-test"
+	}
+	return ""
+}
+
+func containsAnyRunnerToken(lower string, patterns []string) bool {
+	for _, tok := range patterns {
+		if strings.Contains(lower, tok) {
+			return true
+		}
+	}
+	return false
+}
+
+func isPythonTestScriptCmd(lower string) bool {
+	if !strings.Contains(lower, "python") {
+		return false
+	}
+	return strings.Contains(lower, "test_") || strings.Contains(lower, "_test.py") || strings.Contains(lower, "tests/")
 }
 
 func formatLoopBreakerReason(threshold int) string {
@@ -210,6 +247,16 @@ func saveLoopBreakerState(path string, st loopBreakerState) {
 	}
 }
 
+func hashWorkspaceFileStamp(path string, info os.FileInfo) string {
+	if info.Size() <= maxDigestFileBytes && info.Mode().IsRegular() {
+		if data, err := os.ReadFile(path); err == nil {
+			sum := sha256.Sum256(data)
+			return fmt.Sprintf("%d:%x", info.Size(), sum[:8])
+		}
+	}
+	return fmt.Sprintf("%d:%d", info.Size(), info.ModTime().UnixNano())
+}
+
 func computeWorkspaceMtimeDigest(rootDir string) string {
 	cleanRoot := filepath.Clean(rootDir)
 	if gitDigest, ok := computeGitWorkspaceDigest(cleanRoot); ok {
@@ -235,7 +282,7 @@ func computeWorkspaceMtimeDigest(rootDir string) string {
 			if rErr != nil {
 				rel = path
 			}
-			records = append(records, fmt.Sprintf("%s:%d:%d", filepath.ToSlash(rel), info.Size(), info.ModTime().UnixNano()))
+			records = append(records, fmt.Sprintf("%s:%s", filepath.ToSlash(rel), hashWorkspaceFileStamp(path, info)))
 		}
 		return nil
 	})
@@ -269,7 +316,7 @@ func computeGitWorkspaceDigest(cleanRoot string) (string, bool) {
 		}
 		full := filepath.Join(cleanRoot, filepath.FromSlash(rel))
 		if info, sErr := os.Stat(full); sErr == nil {
-			records = append(records, fmt.Sprintf("%s:%d:%d", line, info.Size(), info.ModTime().UnixNano()))
+			records = append(records, fmt.Sprintf("%s:%s", line, hashWorkspaceFileStamp(full, info)))
 		} else {
 			records = append(records, line+":deleted")
 		}

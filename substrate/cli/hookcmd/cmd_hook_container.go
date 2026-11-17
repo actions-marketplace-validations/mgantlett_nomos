@@ -3,6 +3,7 @@
 package hookcmd
 
 import (
+	"context"
 	"fmt"
 	"go/parser"
 	"go/token"
@@ -10,12 +11,17 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/capbac"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/treesitter"
 )
 
-const containerDefaultWorkdir = "/app"
+const (
+	containerDefaultWorkdir  = "/app"
+	envProtectWorkspaceTests = "NOMOS_PROTECT_WORKSPACE_TESTS"
+)
 
 var (
 	containerVerifierRoots = []string{
@@ -34,7 +40,8 @@ var (
 	embeddedVerifierRootRe = regexp.MustCompile(
 		`(?:^|[\s"'` + "`" + `=:(,\[\{<>])((?:/logs/verifier|/solution|/tests|/verifier|/grading|/eval|/harness|/oracle|/proc/1/environ|/proc/1/cmdline|/proc/self/environ)(?:/[^\s"'` + "`" + `),\]\};]*)?)(?:[\s"'` + "`" + `),\]\};]|$)`,
 	)
-	rootSweepCommandRe = regexp.MustCompile(`(?i)(?:^|[;&|]\s*)(?:find\s+/(?:\s|$)|(?:grep|rg)\b[^\n;|&]*\s+/(?:\s|$))`)
+	rootSweepCommandRe  = regexp.MustCompile(`(?i)(?:^|[;&|]\s*)(?:find\s+/(?:\s|$)|(?:grep|rg)\b[^\n;|&]*\s+/(?:\s|$))`)
+	shellMutationHintRe = regexp.MustCompile(`(?:>|>>|\btee\s+|\bsed\s+-i|\bperl\s+-i|\brm\s+|\bmv\s+|\bcp\s+|\btruncate\s+)`)
 )
 
 // EvaluateContainerPreToolHook enforces disposable benchmark container guardrails:
@@ -109,6 +116,12 @@ func evaluateContainerCommandGuard(cmdLine, baseCwd string) HookDecision {
 			Reason:   "❌ [NOMOS INTERCEPT] Anti-Reward-Hacking Violation (Law 2 & Law 3): Root-wide filesystem discovery sweeps targeting '/' are prohibited; scope searches to the task directory (e.g., '/app' or '.').",
 		}
 	}
+	if isMutatingWorkspaceTestShellCmd(cmdLine, baseCwd) {
+		return HookDecision{
+			Decision: hookDecisionDeny,
+			Reason:   "❌ [NOMOS INTERCEPT] Anti-Reward-Hacking Violation (Law 2 & Law 7): Shell mutation targeting workspace test files is strictly prohibited.",
+		}
+	}
 	return evaluateInteractiveCommandGuard(cmdLine)
 }
 
@@ -152,7 +165,54 @@ func evaluateSingleContainerTarget(p *HookPayload, baseCwd string) HookDecision 
 			}
 		}
 	}
+	if protectWorkspaceTestsEnabled() && !isReadOnlyTool(p.ToolName) && isWorkspaceTestPath(resolved, baseCwd) {
+		return HookDecision{
+			Decision: hookDecisionDeny,
+			Reason:   fmt.Sprintf("Anti-Reward-Hacking Violation (Law 2 & Law 7): Modifying workspace test file '%s' is prohibited under test-plane separation.", resolved),
+		}
+	}
 	return evaluateBinaryReadGuard(p, true)
+}
+
+func protectWorkspaceTestsEnabled() bool {
+	return os.Getenv(envProtectWorkspaceTests) == "1"
+}
+
+func isWorkspaceTestPath(resolved, baseCwd string) bool {
+	rel := filepath.ToSlash(resolved)
+	if base := filepath.ToSlash(filepath.Clean(baseCwd)); base != "" && base != "/" {
+		if after, ok := strings.CutPrefix(rel, base+"/"); ok {
+			rel = after
+		}
+	}
+	lower := strings.ToLower(strings.TrimPrefix(rel, "/"))
+	if strings.HasPrefix(lower, "tests/") || strings.HasPrefix(lower, "test/") ||
+		strings.Contains(lower, "/tests/") || strings.Contains(lower, "/test/") {
+		return true
+	}
+	baseName := filepath.Base(lower)
+	return strings.HasPrefix(baseName, "test_") ||
+		strings.HasSuffix(baseName, "_test.py") ||
+		strings.HasSuffix(baseName, "_test.go") ||
+		strings.HasSuffix(baseName, ".test.ts") ||
+		strings.HasSuffix(baseName, ".spec.ts")
+}
+
+func isMutatingWorkspaceTestShellCmd(cmdLine, baseCwd string) bool {
+	if !protectWorkspaceTestsEnabled() || !shellMutationHintRe.MatchString(cmdLine) {
+		return false
+	}
+	for _, rawTok := range tokenizeShellWords(cmdLine) {
+		cleaned := strings.Trim(rawTok, "\"'`();|&<>")
+		if cleaned == "" || strings.HasPrefix(cleaned, "-") {
+			continue
+		}
+		resolved := normalizeCanonicalPath(cleaned, baseCwd)
+		if isWorkspaceTestPath(resolved, baseCwd) {
+			return true
+		}
+	}
+	return false
 }
 
 func isProtectedContainerVerifierPath(resolved string) bool {
@@ -222,10 +282,40 @@ func EvaluateContainerPostToolHook(p *HookPayload) string {
 	if goMsg := validateGoSyntaxInMemory(resolved); goMsg != "" {
 		return goMsg
 	}
+	if shimMsg := evaluateContainerAntiShimInMemory(resolved, baseCwd); shimMsg != "" {
+		return shimMsg
+	}
 	if hasExplicitNomosConfig(resolved, baseCwd) {
 		return evaluateFastRadarInMemory(resolved, baseCwd)
 	}
 	return ""
+}
+
+func evaluateContainerAntiShimInMemory(resolved, baseCwd string) string {
+	if isWorkspaceTestPath(resolved, baseCwd) {
+		return ""
+	}
+	ext := strings.ToLower(filepath.Ext(resolved))
+	switch ext {
+	case ".py", ".go", ".ts", ".tsx", ".js", ".jsx", ".rs", ".rb", ".c":
+	default:
+		return ""
+	}
+	data, err := os.ReadFile(resolved)
+	if err != nil || len(data) == 0 {
+		return ""
+	}
+	engine, engErr := treesitter.GetDefaultEngine()
+	if engErr != nil || engine == nil {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	rep, pErr := engine.ParseAndEvaluate(ctx, filepath.Base(resolved), data)
+	if pErr != nil || rep == nil || rep.Passed || len(rep.EmptyBlocks) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("🚨 [Nomos Anti-Shim Radar] %s: placeholder/empty block detected (%s)", filepath.Base(resolved), rep.EmptyBlocks[0])
 }
 
 func validateContainerFileVerifierClean(resolved string) string {
