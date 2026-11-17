@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 512" width="940" height="512" role="img" aria-labelledby="heroTitle heroDesc">
-  <title id="heroTitle">Nomos Deterministic Execution Substrate - Day-0 Brownfield X-Ray and Runtime AST Governance</title>
-  <desc id="heroDesc">Two-stage terminal workflow: Left pane audits a brownfield repository with nomos xray in 412ms and freezes existing debt with nomos init --baseline. Right pane blocks direct commits on main, catches an untested AST stub and swallowed error during nomos verify, and releases cleanly via nomos task sync with a SHA-256 Git Notes receipt.</desc>
+  <title id="heroTitle">Nomos Deterministic Execution Substrate - Day-0 Brownfield X-Ray and Branch Guard AST Pre-Commit</title>
+  <desc id="heroDesc">Two-stage terminal workflow: Left pane audits a brownfield repository with nomos xray in 412ms and auto-baselines existing debt with nomos init. Right pane shows Branch Guard blocking direct commits on main, catching an untested AST stub, t.Skip, and unchecked error during git commit in 24ms, and distilling verified fixes into SQLite mneme.db.</desc>
 
   <defs>
     <linearGradient id="outerBg" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -165,21 +165,21 @@
         <rect x="0" y="213" width="418" height="1.5" fill="url(#horizonRule)"/>
 
         <!-- Next Actions -->
-        <text x="4" y="232" class="mono-sm"><tspan class="c-purple">◈</tspan> <tspan class="c-alabaster bold">Next:</tspan> <tspan class="c-cmd">nomos init --baseline</tspan> <tspan class="c-muted">(Freeze Day 0)</tspan></text>
+        <text x="4" y="232" class="mono-sm"><tspan class="c-purple">◈</tspan> <tspan class="c-alabaster bold">Next:</tspan> <tspan class="c-cmd">nomos init</tspan> <tspan class="c-muted">(Auto-Baseline + Guard)</tspan></text>
       </g>
 
-      <!-- Prompt 2: nomos init baseline -->
+      <!-- Prompt 2: nomos init -->
       <g transform="translate(0, 314)">
-        <text x="0" y="0" class="mono"><tspan class="c-elec">❯</tspan> <tspan class="c-alabaster bold">nomos init --baseline</tspan></text>
+        <text x="0" y="0" class="mono"><tspan class="c-elec">❯</tspan> <tspan class="c-alabaster bold">nomos init</tspan> <tspan class="c-muted"># or --local for stealth</tspan></text>
         <text x="6" y="22" class="mono-sm"><tspan class="c-mint">✓</tspan> <tspan class="c-value">Saved</tspan> <tspan class="c-cmd">nomos.yaml</tspan><tspan class="c-value">,</tspan> <tspan class="c-cmd">AGENTS.md</tspan> <tspan class="c-value">&amp;</tspan> <tspan class="c-cmd">nomos.baseline.json</tspan></text>
         <text x="6" y="42" class="mono-sm"><tspan class="c-mint">✓</tspan> <tspan class="c-value">Froze</tspan> <tspan class="c-alabaster bold">312-file</tspan> <tspan class="c-value">debt (0 upfront fixes needed)</tspan></text>
-        <text x="6" y="62" class="mono-sm"><tspan class="c-mint">✓</tspan> <tspan class="c-value">Locked</tspan> <tspan class="c-alabaster bold">main</tspan> <tspan class="c-value">read-only · diff ratchet active</tspan></text>
+        <text x="6" y="62" class="mono-sm"><tspan class="c-mint">✓</tspan> <tspan class="c-value">Branch Guard on</tspan> <tspan class="c-alabaster bold">main</tspan> <tspan class="c-value">· feat/* ready</tspan></text>
       </g>
     </g>
   </g>
 
   <!-- ===================================================================== -->
-  <!-- RIGHT TERMINAL PANE: DAY 1+ AGENT GUARDRAIL & 2PC RELEASE (x=482..928) -->
+  <!-- RIGHT TERMINAL PANE: BRANCH GUARD & AST PRE-COMMIT (x=482..928)       -->
   <!-- ===================================================================== -->
   <g transform="translate(482, 42)">
     <rect x="0" y="0" width="446" height="458" rx="10" fill="url(#paneBg)" stroke="#1e293b" stroke-width="1"/>
@@ -189,7 +189,7 @@
     <circle cx="16" cy="17.5" r="4.5" fill="#f87171" fill-opacity="0.85"/>
     <circle cx="30" cy="17.5" r="4.5" fill="#fbbf24" fill-opacity="0.85"/>
     <circle cx="44" cy="17.5" r="4.5" fill="#34d399" fill-opacity="0.85"/>
-    <text x="60" y="21.5" class="mono-sm bold" fill="#f8fafc">2. AGENT GUARDRAIL &amp; 2PC SYNC</text>
+    <text x="60" y="21.5" class="mono-sm bold" fill="#f8fafc">2. BRANCH GUARD &amp; AST PRE-COMMIT</text>
     <rect x="336" y="8" width="98" height="19" rx="4" fill="#06281e" stroke="#34d399" stroke-opacity="0.38"/>
     <text x="385" y="21" text-anchor="middle" class="mono-xs bold" fill="#34d399">FAIL-CLOSED</text>
 
@@ -197,42 +197,42 @@
     <g transform="translate(14, 57)">
       <!-- Step A: Blocked direct commit on main -->
       <text x="0" y="0" class="mono"><tspan class="c-elec">❯</tspan> <tspan class="c-alabaster bold">git commit -m "add refund"</tspan> <tspan class="c-muted"># on main</tspan></text>
-      <text x="6" y="20" class="mono-sm"><tspan class="c-coral">✗ [ERR_BOUNDARY]</tspan> <tspan class="c-value">main is read-only (Law 3)</tspan></text>
-      <text x="18" y="38" class="mono-xs"><tspan class="c-amber">Remedy:</tspan> <tspan class="c-cmd">nomos task chore "Add refund"</tspan> <tspan class="c-muted">-&gt; SUB-1</tspan></text>
+      <text x="6" y="20" class="mono-sm"><tspan class="c-coral">✗ [ERR_BOUNDARY]</tspan> <tspan class="c-value">main is read-only (Branch Guard)</tspan></text>
+      <text x="18" y="38" class="mono-xs"><tspan class="c-amber">Remedy:</tspan> <tspan class="c-cmd">git switch -c feat/refund</tspan> <tspan class="c-muted">-&gt; normal git</tspan></text>
 
-      <!-- Step B: Agent writes lazy stub + swallowed error -> nomos verify catches it -->
+      <!-- Step B: Agent writes lazy stub + t.Skip + swallowed error -> pre-commit catches it -->
       <g transform="translate(0, 67)">
-        <text x="0" y="0" class="mono"><tspan class="c-elec">❯</tspan> <tspan class="c-alabaster bold">nomos verify</tspan> <tspan class="c-muted"># stub + ignored error</tspan></text>
+        <text x="0" y="0" class="mono"><tspan class="c-elec">❯</tspan> <tspan class="c-alabaster bold">git commit -m "feat: refund"</tspan> <tspan class="c-muted"># feat/refund</tspan></text>
 
         <g transform="translate(0, 23)">
           <path d="M 6 -9.5 L 11 -7.5 L 11 -2 C 11 1.5 8.5 3.5 6 4.5 C 3.5 3.5 1 1.5 1 -2 L 1 -7.5 Z" fill="none" stroke="#38bdf8" stroke-width="1.5"/>
-          <text x="16" y="0" class="mono-sm bold" fill="url(#brandTitleGrad)">Nomos · Definition of Done</text>
-          <rect x="236" y="-12.5" width="48" height="17" rx="3" fill="#2c0b14" stroke="#f87171" stroke-opacity="0.45"/>
-          <text x="260" y="0" text-anchor="middle" class="mono-xs c-coral">FAIL</text>
+          <text x="16" y="0" class="mono-sm bold" fill="url(#brandTitleGrad)">Nomos · Pre-Commit AST Check</text>
+          <rect x="246" y="-12.5" width="48" height="17" rx="3" fill="#2c0b14" stroke="#f87171" stroke-opacity="0.45"/>
+          <text x="270" y="0" text-anchor="middle" class="mono-xs c-coral">FAIL</text>
           <rect x="0" y="8" width="418" height="1.5" fill="url(#horizonRule)"/>
         </g>
 
-        <text x="6" y="49" class="mono-sm c-coral">✗ Failed · 40/42 Gates Passed (28ms)</text>
+        <text x="6" y="49" class="mono-sm c-coral">✗ Pre-Commit Blocked · 40/42 Checks (24ms)</text>
 
-        <text x="12" y="70" class="mono-sm"><tspan class="c-coral">! [Anti-Shim Gate]</tspan> <tspan class="c-value">charge.go:88 empty stub</tspan></text>
-        <text x="26" y="87" class="mono-xs"><tspan class="c-amber">Remedy:</tspan> <tspan class="c-value">implement Refund() body &amp; return</tspan></text>
+        <text x="12" y="70" class="mono-sm"><tspan class="c-coral">! [AntiShimGate]</tspan> <tspan class="c-value">charge.go:88 stub + t.Skip</tspan></text>
+        <text x="26" y="87" class="mono-xs"><tspan class="c-amber">Remedy:</tspan> <tspan class="c-value">implement Refund() &amp; keep assertion</tspan></text>
 
-        <text x="12" y="108" class="mono-sm"><tspan class="c-coral">! [Unchecked Err]</tspan> <tspan class="c-value">charge.go:104 tx.Save()</tspan></text>
+        <text x="12" y="108" class="mono-sm"><tspan class="c-coral">! [UncheckedErr]</tspan> <tspan class="c-value">charge.go:104 tx.Save()</tspan></text>
         <text x="26" y="125" class="mono-xs"><tspan class="c-amber">Remedy:</tspan> <tspan class="c-value">handle returned err + keep &gt;=0% cov</tspan></text>
 
         <rect x="0" y="137" width="418" height="1.5" fill="url(#horizonRule)"/>
       </g>
 
-      <!-- Step C: Agent self-heals from Remedy -> 1-turn atomic 2PC release -->
+      <!-- Step C: Agent self-heals from Remedy -> clean feature commit + mneme distillation -->
       <g transform="translate(0, 234)">
-        <text x="0" y="0" class="mono"><tspan class="c-elec">❯</tspan> <tspan class="c-alabaster bold">nomos task sync SUB-1 -m "feat: refund"</tspan></text>
+        <text x="0" y="0" class="mono"><tspan class="c-elec">❯</tspan> <tspan class="c-alabaster bold">git commit -m "feat: refund"</tspan> <tspan class="c-muted"># retry fix</tspan></text>
 
         <g transform="translate(0, 21)">
           <rect x="0" y="-10" width="418" height="138" rx="6" fill="#071318" stroke="#1e293b" stroke-width="1"/>
 
           <!-- Row 1 -->
-          <text x="12" y="10" class="mono-sm c-label">7-Law Matrix</text>
-          <text x="136" y="10" class="mono-sm c-muted">[21/21 Cells]</text>
+          <text x="12" y="10" class="mono-sm c-label">AST &amp; Native</text>
+          <text x="136" y="10" class="mono-sm c-muted">[42/42 Checks]</text>
           <rect x="262" y="-3" width="44" height="16" rx="3" fill="#06281e" stroke="#34d399" stroke-opacity="0.4"/>
           <text x="284" y="9" text-anchor="middle" class="mono-xs c-mint">PASS</text>
           <text x="316" y="10" class="mono-xs c-muted">(394ms)</text>
@@ -245,7 +245,7 @@
           <text x="316" y="31" class="mono-xs c-muted">(charge.go)</text>
 
           <!-- Row 3 -->
-          <text x="12" y="52" class="mono-sm c-label">Mutation Test</text>
+          <text x="12" y="52" class="mono-sm c-label">Mutation Diff</text>
           <text x="136" y="52" class="mono-sm c-muted">6/6 Killed</text>
           <rect x="262" y="39" width="44" height="16" rx="3" fill="#06281e" stroke="#34d399" stroke-opacity="0.4"/>
           <text x="284" y="51" text-anchor="middle" class="mono-xs c-mint">PASS</text>
@@ -253,9 +253,9 @@
 
           <line x1="12" y1="65" x2="406" y2="65" stroke="#1e293b" stroke-width="1"/>
 
-          <text x="12" y="84" class="mono-sm c-mint">✓ All Laws Enforced · 42/42 Gates Satisfied</text>
-          <text x="12" y="103" class="mono-sm"><tspan class="c-mint">✓ Merged to main</tspan> <tspan class="c-muted">&amp; pruned worktree SUB-1</tspan></text>
-          <text x="12" y="121" class="mono-xs"><tspan class="c-cyan">◈ SHA-256:</tspan> <tspan class="c-value">9f4c2e8a</tspan> <tspan class="c-muted">-&gt; refs/notes/nomos/releases</tspan></text>
+          <text x="12" y="84" class="mono-sm c-mint">✓ [feat/refund 9f4c2e8] 42/42 Checks Clean</text>
+          <text x="12" y="103" class="mono-sm"><tspan class="c-mint">✓ Distilled 2 fixes</tspan> <tspan class="c-muted">&amp; updated SQLite mneme.db</tspan></text>
+          <text x="12" y="121" class="mono-xs"><tspan class="c-cyan">◈ Scale up:</tspan> <tspan class="c-value">nomos init --ci | --worktrees</tspan></text>
         </g>
       </g>
     </g>

@@ -37,42 +37,51 @@ nomos init --local                       #    (Or run a stealth solo trial in .g
 git switch -c feat/auth                  # 3. Code & git commit normally; main stays locked and verified
 ```
 
+What happens the next time an agent tries taking a shortcut on a feature branch:
+
+```text
+$ git commit -m "fix: resolve flaky billing test"
+✗ [AntiShimGate]    billing_test.go:42  skipped test (t.Skip) + 2 deleted assertions
+✗ [UncheckedErr]    billing.go:108      discarded error return on ledger.Charge()
+✗ [ProtectedRubric] .golangci.yml       linter config modified on feature branch
+-> Commit blocked in 24ms (0 LLM tokens). Fix billing.go without weakening billing_test.go.
+```
+
 ---
 
-## ✨ Progressive Governance Out of the Box (100% Apache 2.0 Open-Core)
+## Progressive Governance Out of the Box (100% Apache 2.0 Open-Core)
 
 Every single-repository governance capability ships locally in the open-source `nomos` binary with zero crippled commands, and you adopt complexity only as your repo grows:
 
 ### 1. Zero-Init Brownfield X-Ray & Auto-Baseline (`nomos xray`, `nomos init`)
-- **Sub-Second Git-Aware Audit (`nomos xray . [--markdown]`):** Walks your Git index (`git ls-files --cached --others --exclude-standard`, honoring `.gitignore` automatically) across 11 languages to compute an `AI Hangover Score` (`0-100`, `Grade A-F`), structural clones, `>400 LOC` monoliths, oversized functions, high-arity (`>8` params) and deep-nesting (`>5` levels) signatures, magic-string duplication clusters, empty/TODO stubs, skipped tests, swallowed errors, secret/host-path leaks, CWE security sinks, and ready-to-lock hexagonal `architecture_boundaries` with **zero repository writes**.
-- **Drop Into `200k+ LOC` Legacy Repos With Zero Flags (`nomos init`):** Bare `nomos init` scans your repo automatically and freezes observed Day-0 debt bounds in `nomos.baseline.json` (`strict_mode: false`) when legacy debt exists, keeping greenfield repos strict (`nomos init --strict` forces strict mode anywhere). Every file an agent touches is ratcheted (`<= 0` added cyclomatic/cognitive/arity debt, `>= 0` test coverage delta, `0` new structural clones, swallowed errors, or secret/path leaks).
-- **Zero-Footprint Stealth Trial (`nomos init --local`):** Want to test Nomos on your team's repo before opening a PR? `--local` registers all generated contracts and agent hooks in `.git/info/exclude` instead of touching `.gitignore`, keeping `git status` clean and making zero commits on `main`. Run `nomos init` later to promote cleanly.
-- **Self-Hosted Dogfood Proof (`0/100 Grade A`):** `nomos` enforces `strict_mode: true` across its own Go codebase with `0` clones, `0` monoliths, `0` high-arity or deep-nesting violations, `0` empty stubs, and `0` swallowed errors.
+- **Sub-Second Git-Aware Audit (`nomos xray . [--markdown]`):** Walks `git ls-files` across 11 languages for an `AI Hangover Score` (`0-100`, `Grade A-F`), clones, monoliths (`>400 LOC`), stubs, swallowed errors, secret/host-path leaks, CWE sinks, and ready-to-lock `architecture_boundaries` with **zero repository writes**.
+- **Drop Into `200k+ LOC` Legacy Repos (`nomos init`):** Automatically freezes Day-0 debt bounds in `nomos.baseline.json` (`strict_mode: false` on brownfield, strict anywhere via `--strict`) and ratchets only touched files (`<= 0` added complexity/debt, `>= 0` coverage delta, `0` new clones or swallowed errors). Self-hosted `nomos` holds `0/100 Grade A` under `strict_mode: true`.
+- **Zero-Footprint Stealth Trial (`nomos init --local`):** Registers generated configs and hooks in `.git/info/exclude` instead of `.gitignore`, leaving `git status` clean until you promote with `nomos init`.
 
 ### 2. Branch Guard First, Isolated Worktrees When Ready (`branch` vs `nomos init --worktrees`)
-- **Protected `main`, Normal `feat/*` Workflow:** Out of the box, `nomos init` configures `isolation_mode: "branch"`. Direct agent writes or commits on `main`/`master` and tampering with `nomos.yaml`, `nomos.baseline.json`, or `.git/hooks/*` fail closed, while edits and plain `git commit` calls on `feat/*` branches work normally behind automated `42`-gate `pre-commit` verification.
-- **Upgrade Without Friction (`nomos init --worktrees`):** Whenever you want parallel multi-agent sandboxes, cross-branch collision radar, or strict spec-before-code separation, add `--worktrees` (detailed in the expandable architecture reference below).
+- **Protected `main`, Normal `feat/*` Workflow:** Default `isolation_mode: "branch"` fails closed on direct `main`/`master` writes and config/hook tampering (`nomos.yaml`, `nomos.baseline.json`, `.git/hooks/*`), while plain `git commit` on `feat/*` branches runs `42`-gate `pre-commit` verification automatically.
+- **Upgrade on Demand (`nomos init --worktrees`):** Switch to parallel per-task `git worktree` sandboxes, cross-branch collision radar, and causal spec-before-code separation anytime (see the Architecture Blueprint below).
 
 ### 3. 42 Polyglot Anti-Cheat AST Gates, SARIF & PR Mutation Proofs (`nomos verify`)
-- **11 Languages in `~460ms` (`~24ms` Single-File Radar, `0` LLM Judge Tokens):** Built-in AST, `.scm` query, `wazero` WASM, and native toolchain/coverage probes across **Go, TypeScript/Svelte, Python, Rust, Ruby, C/C++, Java, Kotlin, and C#**.
-- **Diff-Scoped AST Mutation, OASIS SARIF 2.1.0 & Zero-Trust PR Receipts (`nomos verify --pr --mutate-diff`, `--sarif`):** Mutates newly added conditionals and return values across Go, TypeScript/JS, and Python to prove modified tests actually fail when logic breaks (blocking tautological `assert True` tests), emits OASIS SARIF 2.1.0 (`nomos xray --sarif` / `nomos verify --sarif`) for GitHub Code Scanning, and publishes GitHub PR proof receipts via `action.yml`.
-- **Anti-Reward-Hacking & Architectural Obligations:** Blocks deleted or skipped tests (`t.Skip`, `@pytest.mark.skip`, `#[ignore]`, `xit`, `@Disabled`, `[Fact(Skip=...)]`), hollow stubs (`todo!()`, `pass`, `NotImplementedError`), functions `> 60 LOC` (`400 LOC` file ceiling), directional `architecture_boundaries`, `strict_types`, and 1-turn remediation.
+- **11 Languages in `~460ms` (`~24ms` Single-File Radar, `0` LLM Tokens):** Built-in AST, `.scm` queries, `wazero` WASM (Java/C#), and native coverage probes across **Go, TypeScript/Svelte, Python, Rust, Ruby, C/C++, Java, Kotlin, and C#**.
+- **Diff Mutation, SARIF 2.1.0 & PR Receipts (`nomos verify --pr --mutate-diff`, `--sarif`):** Mutates added conditionals/returns across Go, TS/JS, and Python so tautological tests fail closed, emits OASIS SARIF 2.1.0 for GitHub Code Scanning, and posts PR receipts via `action.yml`.
+- **Anti-Reward-Hacking Obligations:** Blocks deleted/skipped tests (`t.Skip`, `@pytest.mark.skip`, `#[ignore]`, `xit`, `@Disabled`, `[Fact(Skip=...)]`), hollow stubs (`todo!()`, `pass`, `NotImplementedError`), functions `> 60 LOC` (`400 LOC` file ceiling), directional `architecture_boundaries`, and `strict_types`.
 
 ### 4. `~4ms` Pre-Tool Security Airlock & Loop Circuit-Breaker (`nomos hook`)
-- **Host Credential & SSRF Firewall:** Blocks agent reads of `~/.ssh`, `~/.aws`, `~/.kube`, `~/.gnupg`, `~/.config/gcloud`, `.netrc`, `.npmrc`, and `.pypirc`, blocks cloud metadata SSRF (`169.254.169.254`), and tracks multi-turn compositional taint across web ingress and egress/MCP tools.
-- **Anti-Phantom Stop & 3-Strike Circuit-Breaker:** Prevents agents from claiming "tests pass" on a feature branch or worktree without a verified exit code and halts 3 consecutive non-progressing failures before burning context budgets.
+- **Host Credential & SSRF Firewall:** Denies reads of `~/.ssh`, `~/.aws`, `~/.kube`, `~/.gnupg`, `~/.config/gcloud`, `.netrc`, `.npmrc`, `.pypirc`, blocks cloud metadata SSRF (`169.254.169.254`), and tracks multi-turn ingress-to-egress taint.
+- **Anti-Phantom Stop & 3-Strike Breaker:** Rejects unverified "tests pass" claims and halts 3 consecutive non-progressing tool failures before burning context windows.
 
-### 5. Receipt-Gated Episodic Memory (`nomos mem` / `mneme.db`)
-- **Zero-Cloud Local SQLite Recall (`<50ms`):** Pure-Go SQLite WAL store combining AST directory-scoped pitfalls/patterns with 64-dim subword hashing, lexical ranking, and optional local neural embeddings (`LOCAL_EMBEDDING_URL`).
-- **Automatic Feature-Branch Distillation (`post-commit`):** In Branch Guard mode, `.git/hooks/post-commit` promotes resolved gate traps and verified commit patterns after passing `git commit` checks (and on 2PC merges in worktree mode) so failed runs never pollute repository memory.
+### 5. Receipt-Gated Episodic Memory & Read-Only MCP (`nomos mem`, `nomos mcp` / `mneme.db`)
+- **Zero-Cloud SQLite Recall & `stdio` MCP (`<50ms`):** Pure-Go `mneme.db` (WAL) pairs AST-scoped pitfalls/patterns with 64-dim subword hashing, lexical ranking, optional local embeddings (`LOCAL_EMBEDDING_URL`), and read-only JSON-RPC 2.0 exposure via `nomos mcp`.
+- **Verified-Only Distillation (`post-commit`):** `.git/hooks/post-commit` (and 2PC sync in worktree mode) promotes trap-to-fix lessons only after checks pass so broken attempts never poison future runs.
 
 ### 6. Auto-Detected Hooks & Clean 2-Tier CLI (`nomos --help`)
-- **Zero Unwanted Dot-Dir Bloat:** `nomos init` detects which agents you actually have installed or configured (**Claude Code**, **Cursor**, **OpenCode**, **Gemini CLI**, or **Antigravity**) or accepts `--agents claude,cursor`, scaffolds compact `AGENTS.md` instructions (`~15` lines in Branch Guard mode), and installs native lifecycle hooks + `pre-commit` / `commit-msg` / `post-commit` / `pre-push` Git guards.
-- **Uncluttered CLI Surface:** Default `nomos --help` focuses on everyday developer workflows (`xray`, `init`, `verify`, `status`, `task`, `mem`, `issue`, `update`); run `nomos --help-agent` anytime to inspect internal agent-harness RPCs (`hook`, `handshake`, `directive`, `capabilities`, `physics`, `session`).
+- **Zero Unwanted Dot-Dir Bloat:** `nomos init` auto-detects installed agents (**Claude Code**, **Cursor**, **OpenCode**, **Gemini CLI**, **Windsurf**, or **Antigravity**; or `--agents claude,cursor`), scaffolds compact `AGENTS.md` instructions (`~15` lines), and wires native lifecycle + Git hooks.
+- **Uncluttered CLI Surface:** `nomos --help` highlights everyday commands (`xray`, `init`, `verify`, `status`, `task`, `mem`, `issue`, `update`); `nomos --help-agent` reveals agent-harness RPCs (`hook`, `handshake`, `directive`, `capabilities`, `physics`, `session`, `mcp`).
 
 ---
 
-## ⚡ Quick Start (Under 60 Seconds)
+## Quick Start (Under 60 Seconds)
 
 ### 1. Install `nomos`
 
@@ -132,29 +141,29 @@ nomos init --worktrees
 # Enforce zero-trust PR mutation proofs in GitHub Actions:
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }
-- uses: mgantlett/nomos@v4.21.1
+- uses: mgantlett/nomos@v4.22.1
   with:
     base-ref: origin/main
     mutate-diff: 'true'
 ```
 
-> **💡 Cheap Workhorse Stack (`OpenCode` + `OpenRouter` / Local `16GB` GPU):** Because `.opencode/plugins/nomos.ts` enforces frontier merge rules in local compiled Go (`0` middleman token tax), `14B-32B` open-weight models jump from `27.8%` to **`86.1%`** brownfield resolution (`3.1x` lift) while cutting token spend `-43%` to `-57%`.
+> **Cheap Workhorse Stack (`OpenCode` + `OpenRouter` / Local `16GB` GPU):** Because `.opencode/plugins/nomos.ts` enforces frontier merge rules in local compiled Go (`0` middleman token tax), `14B-32B` open-weight models jump from `27.8%` to **`86.1%`** brownfield resolution (`3.1x` lift) while cutting token spend `-43%` to `-57%`.
 
 ---
 
-## 🧩 Why Nomos Is a New Layer of the Stack
+## Why Nomos Is a New Layer of the Stack
 
 | What Nomos Is *Not* | Why Existing Tools Leave `main` Exposed | What the Nomos Transaction Layer Adds |
 | :--- | :--- | :--- |
 | **Not Another Coding Agent** | Switching models or IDEs does not stop a stochastic optimizer from cutting corners at 70% context. | Keep your favorite agent; Nomos enforces sandbox isolation and merge rules underneath it. |
-| **Not a Linter or Post-Hoc CI** | Traditional linters assume honest humans *after* a branch is dirty; agents edit configs or add ignore comments. | Evaluates isolated `git worktree` diffs against `main` while locking `nomos.yaml`, specs, and assertions outside agent write scope. |
+| **Not a Linter or Post-Hoc CI** | Traditional linters assume honest humans *after* a branch is dirty; agents edit configs or add ignore comments. | Evaluates `feat/*` branch or isolated `git worktree` diffs against `main` while locking `nomos.yaml`, baselines, specs, and assertions outside agent write scope. |
 | **Not a `.cursorrules` Prompt Pack** | Markdown rules decay past 60% context, and unverified agent notes poison future sessions. | Enforces compiled Go exit codes (`exit 1`) outside context windows and records `mneme.db` lessons only after verified merges. |
 
 ---
 
-## 📊 Verified Benchmarks & Runtime Footprint
+## Verified Benchmarks & Runtime Footprint
 
-> **🔬 Reproduce locally in one command:** `go -C substrate test ./cli -run "TestTraceTrialBench|TestCleanroomPolyglotObligation|TestCleanroomDownstreamVectors" -v`
+> **Reproduce locally in one command:** `go -C substrate test ./cli -run "TestTraceTrialBench|TestCleanroomPolyglotObligation|TestCleanroomDownstreamVectors" -v`
 
 | Engineering Metric | Verified Result | Proof / Suite |
 | :--- | :--- | :--- |
@@ -165,7 +174,7 @@ nomos init --worktrees
 | **Footprint & Gate Latency** | **`~20 MB` binary (`CGO_ENABLED=0`) · `~4ms` hook · `~24ms` `--fast-file`** | `860+` automated tests across `16` packages + `7/7` adversarial fail-closed vectors ([`cleanroom_tracetrial_bench_test.go`](substrate/cli/cleanroom_tracetrial_bench_test.go)) |
 
 <details>
-<summary><b>🔬 Expand Full Per-Model Benchmark Tables (108-Run GPU Matrix, 1,541-Run Security/OSS Audit, Harbor & TraceTrial-Bench)</b></summary>
+<summary><b>Expand Full Per-Model Benchmark Tables (108-Run GPU Matrix, 1,541-Run Security/OSS Audit, Harbor & TraceTrial-Bench)</b></summary>
 
 <br />
 
@@ -198,7 +207,7 @@ Across `108` paired zero-hint brownfield episodes (`54` Stock vs. `54` Nomos `v4
 </details>
 
 <details>
-<summary><b>🏗️ Expand Architecture Blueprint, Worktrees (`INT`/`SUB`), CLI Surface & Specifications</b></summary>
+<summary><b>Expand Architecture Blueprint, Worktrees (`INT`/`SUB`), CLI Surface & Specifications</b></summary>
 
 <br />
 
@@ -217,14 +226,14 @@ When your team scales beyond single-branch workflows (`nomos init --worktrees`):
 | **Worktrees, `MTPO` Collision Radar, DAG & 2PC** | `nomos task chore \| pair \| create \| start \| edit \| review \| dag \| sync`, `nomos physics` | [`nomos_hermetic_worktree_spec.md`](intent/architecture/specs/nomos_hermetic_worktree_spec.md) · [`task_lifecycle_cli_spec.md`](intent/architecture/specs/task_lifecycle_cli_spec.md) · [`software_physics_engine_spec.md`](intent/architecture/specs/software_physics_engine_spec.md) |
 | **42-Gate AST, PR Receipts & Mutation Proofs** | `nomos verify [--pr] [--mutate-diff]`, `nomos verify proof`, `nomos status` | [`tree_sitter_ast_gate_spec.md`](intent/architecture/specs/tree_sitter_ast_gate_spec.md) · [`nomos_intent_traceability_spec.md`](intent/architecture/specs/nomos_intent_traceability_spec.md) |
 | **NCTE-100 Directives & Config SSoT** | `nomos directive [--lint \| --lexicon]`, `nomos --help` (`nomos.schema.json`) | [`nomos_controlled_technical_english_spec.md`](intent/architecture/specs/nomos_controlled_technical_english_spec.md) · [`go_ssot_and_json_schema_spec.md`](intent/architecture/specs/go_ssot_and_json_schema_spec.md) |
-| **Receipt-Gated Episodic Memory** | `nomos mem save \| recall \| list \| dismiss`, `nomos issue` | [`mneme_memory_spec.md`](intent/architecture/specs/mneme_memory_spec.md) |
+| **Receipt-Gated Episodic Memory** | `nomos mem save \| recall \| list \| dismiss`, `nomos mcp`, `nomos issue` | [`mneme_memory_spec.md`](intent/architecture/specs/mneme_memory_spec.md) |
 
 - **Scope of Proof:** Nomos verifies `<5ms` compiled structural and traceability invariants (import boundaries, contract field parity, anti-shim AST checks, `TC-*` test bindings, and SHA-256 spec digests) rather than LLM-as-a-Judge critics or formal theorem provers (`Coq`, `Lean`, `TLA+`); runtime semantics remain governed by your test suite.
 
 </details>
 
 <details>
-<summary><b>🛡️ Expand The 7 Laws of Nomos (42-Gate Invariant Matrix)</b></summary>
+<summary><b>Expand The 7 Laws of Nomos (42-Gate Invariant Matrix)</b></summary>
 
 <br />
 
@@ -244,7 +253,7 @@ Full 42-gate matrix in [`nomos_intent_traceability_spec.md`](intent/architecture
 
 ---
 
-## 🧭 Open-Core Boundary
+## Open-Core Boundary
 
 Nomos Community Edition is **100% open-source under Apache 2.0** with zero telemetry, zero cloud account requirements, and zero crippled CLI commands. Every single-developer and single-repository governance capability runs locally out of the box (see [`LICENSE`](LICENSE), [`NOTICE`](NOTICE), and [`intent/intent.md`](intent/intent.md)):
 
@@ -262,7 +271,7 @@ Nomos Community Edition is **100% open-source under Apache 2.0** with zero telem
 
 ---
 
-## 🤝 Community & License
+## Community & License
 
 - **Community & Governance:** Join [GitHub Discussions](https://github.com/mgantlett/nomos/discussions) for setup Q&A, `nomos.yaml` tuning, and feature ideas. See [`CONTRIBUTING.md`](CONTRIBUTING.md), [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md), and [`SECURITY.md`](SECURITY.md).
 - **License:** Licensed under the **Apache License, Version 2.0**. See [`LICENSE`](LICENSE), [`NOTICE`](NOTICE), and [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
