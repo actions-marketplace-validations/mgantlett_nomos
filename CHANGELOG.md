@@ -8,9 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [v4.24.0] - 2026-11-17
 
-> Add polyglot design-slop, coverage-exclusion, manifest ImportError fallback, and wrapper-fragmentation AST sensors; Track Bash file mutations natively across PostToolUse and Stop hooks and surface manifest/module hull in SessionStart (Apache 2.0)
+> Add polyglot design-slop, coverage-exclusion, manifest ImportError fallback, and wrapper-fragmentation AST sensors; Track Bash file mutations natively across PostToolUse and Stop hooks, surface manifest/module hull in SessionStart, harden NormativeSurfaceDelta Go AST extraction, and codify v4.24.0 specs (Apache 2.0)
+
+### Intent & Specifications (`intent/architecture/specs/`)
+- **Codify v4.24.0 polyglot design-slop sensors, shell hook tracking, and surface delta invariants (`INT-2104`)**: Document 2nd-gen exception gaming, comment-aware coverage exclusions, manifest ImportError fallbacks, wrapper fragmentation, Bash content-digest tracking across `PostToolUse`/`Stop`, `SessionStart` hull injection, and `NormativeSurfaceDelta` extraction rules (`TC-TS-19`..`21`, `TC-CMT-009`, `TC-BG-08`).
 
 ### Verification & AST Gates (`nomos verify`)
+- **Harden `NormativeSurfaceDelta` Go AST extraction and v4.24.0 AST edge cases (`SUB-3203`, Twin: `INT-2104`)**: Extend `ParseGoSurfaceFingerprintForPath` to track exported Go functions/types, exported struct `json` tags, `@intent` bindings, and `verify`/`hookcmd` diagnostic/banner literals with balanced intra-package split cancellation; collapse multi-line Python `except (...)` tuples, raise design-slop workspace corpus scanning to `512` files with fail-open skip when exceeded, detect compatibility/legacy/deprecated/checkpoint public pass-through shims with 0 callers, and bind `TC-TS-19`..`21`, `TC-CMT-009`, and `TC-BG-08` `@verifies` test vectors.
 - **Enforce 2nd-gen exception gaming, coverage exclusion, and design-slop AST sensors (`SUB-3200`)**: Detect >=3-type bug-masking `except` tuples and silent fallback returns across broad/boundary catches, reject comment-level coverage exclusion directives (`pragma: no cover`, `istanbul/v8/c8 ignore`, `#[coverage(off)]`), reject multi-statement `except ImportError` fallbacks when libraries are declared in manifests or stdlib, catch 0-caller private pass-through wrappers, flag >=3 single-use 1-line wrapper fragmentation, detect inline `isinstance` guard ladders and same-variable `if ==` chains, and enforce polyglot control-flow nesting depth across `verify` and `FastFileRadar`.
 
 ### CLI, Distribution & Hooks (`nomos hook`)

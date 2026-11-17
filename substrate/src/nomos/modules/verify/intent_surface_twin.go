@@ -91,12 +91,26 @@ func InspectWorktreeNormativeSurface(worktreeDir string) NormativeSurfaceDelta {
 	for _, rel := range changedPaths {
 		inspectChangedNormativeFile(worktreeDir, baseRef, rel, cliSet, cfgSet, govSet, tplSet)
 	}
+	cancelBalancedIntraPackageMoves(govSet)
 
 	return NormativeSurfaceDelta{
 		CLISurface:      sortedSetKeys(cliSet),
 		ConfigSchema:    sortedSetKeys(cfgSet),
 		GovernanceRules: sortedSetKeys(govSet),
 		TemplateAssets:  sortedSetKeys(tplSet),
+	}
+}
+
+func cancelBalancedIntraPackageMoves(set map[string]bool) {
+	for k := range set {
+		if !strings.HasPrefix(k, "+") {
+			continue
+		}
+		counterpart := "-" + strings.TrimPrefix(k, "+")
+		if set[counterpart] {
+			delete(set, k)
+			delete(set, counterpart)
+		}
 	}
 }
 
@@ -117,8 +131,8 @@ func inspectChangedNormativeFile(worktreeDir, baseRef, rel string, cliSet, cfgSe
 	if !strings.HasSuffix(normRel, ".go") || strings.HasSuffix(normRel, "_test.go") {
 		return
 	}
-	baseFP := astdebt.ParseGoSurfaceFingerprint(readGitRevisionBytes(worktreeDir, baseRef, normRel))
-	currFP := astdebt.ParseGoSurfaceFingerprint(readWorktreeDiskBytes(filepath.Join(worktreeDir, filepath.FromSlash(normRel))))
+	baseFP := astdebt.ParseGoSurfaceFingerprintForPath(normRel, readGitRevisionBytes(worktreeDir, baseRef, normRel))
+	currFP := astdebt.ParseGoSurfaceFingerprintForPath(normRel, readWorktreeDiskBytes(filepath.Join(worktreeDir, filepath.FromSlash(normRel))))
 	astdebt.MergeSymmetricDiff(cliSet, baseFP.CLITokens, currFP.CLITokens)
 	astdebt.MergeSymmetricDiff(cfgSet, baseFP.YAMLFields, currFP.YAMLFields)
 	astdebt.MergeSymmetricDiff(govSet, baseFP.GovTokens, currFP.GovTokens)

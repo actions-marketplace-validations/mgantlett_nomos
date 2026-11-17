@@ -3,7 +3,6 @@ package astdebt
 
 import (
 	"go/ast"
-	"go/parser"
 	"go/token"
 	"reflect"
 	"strconv"
@@ -51,42 +50,22 @@ var cobraDirectFlagMethods = map[string]bool{
 
 // ParseGoSurfaceFingerprint executes deterministic astdebt verification logic (@intent tree_sitter_ast_gate_spec.md).
 func ParseGoSurfaceFingerprint(src []byte) GoSurfaceFingerprint {
-	fp := GoSurfaceFingerprint{
-		CLITokens:  make(map[string]bool),
-		YAMLFields: make(map[string]bool),
-		GovTokens:  make(map[string]bool),
-	}
-	if len(src) == 0 {
-		return fp
-	}
-	fset := token.NewFileSet()
-	node, err := parser.ParseFile(fset, "surface.go", src, 0)
-	if err != nil || node == nil {
-		return fp
-	}
-	for _, decl := range node.Decls {
-		if gd, ok := decl.(*ast.GenDecl); ok {
-			inspectGenDeclSurface(gd, &fp)
-		}
-	}
-	ast.Inspect(node, func(n ast.Node) bool {
-		switch x := n.(type) {
-		case *ast.CompositeLit:
-			inspectCobraCommandLit(x, fp.CLITokens)
-		case *ast.CallExpr:
-			inspectSurfaceCallExpr(x, &fp)
-		}
-		return true
-	})
-	return fp
+	return ParseGoSurfaceFingerprintForPath("", src)
 }
 
-func inspectGenDeclSurface(gd *ast.GenDecl, fp *GoSurfaceFingerprint) {
+func inspectGenDeclSurface(gd *ast.GenDecl, pkgScope string, fp *GoSurfaceFingerprint) {
 	for _, spec := range gd.Specs {
 		switch s := spec.(type) {
 		case *ast.TypeSpec:
 			if st, ok := s.Type.(*ast.StructType); ok {
-				collectStructYAMLFields(s.Name.Name, st, fp.YAMLFields)
+				collectStructTaggedFields("", s.Name.Name, st, "yaml", "", fp.YAMLFields)
+				if pkgScope != "" && s.Name.IsExported() {
+					collectStructTaggedFields(pkgScope, s.Name.Name, st, "json", "json_field:", fp.GovTokens)
+				}
+			}
+			if pkgScope != "" && s.Name != nil && s.Name.IsExported() {
+				fp.GovTokens["export_type:"+pkgScope+"."+s.Name.Name] = true
+				collectCommentGroupIntentRefs(gd.Doc, s.Doc, pkgScope, s.Name.Name, fp.GovTokens)
 			}
 		case *ast.ValueSpec:
 			collectGovernanceValueSpec(s, fp.GovTokens)
@@ -94,9 +73,13 @@ func inspectGenDeclSurface(gd *ast.GenDecl, fp *GoSurfaceFingerprint) {
 	}
 }
 
-func collectStructYAMLFields(typeName string, st *ast.StructType, out map[string]bool) {
+func collectStructTaggedFields(pkgScope, typeName string, st *ast.StructType, tagKey, prefix string, out map[string]bool) {
 	if st == nil || st.Fields == nil {
 		return
+	}
+	scopedType := typeName
+	if pkgScope != "" {
+		scopedType = pkgScope + "." + typeName
 	}
 	for _, f := range st.Fields.List {
 		if f.Tag == nil {
@@ -106,15 +89,15 @@ func collectStructYAMLFields(typeName string, st *ast.StructType, out map[string
 		if err != nil {
 			continue
 		}
-		yamlVal := reflect.StructTag(rawTag).Get("yaml")
-		if yamlVal == "" {
+		tagVal := reflect.StructTag(rawTag).Get(tagKey)
+		if tagVal == "" {
 			continue
 		}
-		yamlName := strings.TrimSpace(strings.Split(yamlVal, ",")[0])
-		if yamlName == "" || yamlName == "-" {
+		fieldName := strings.TrimSpace(strings.Split(tagVal, ",")[0])
+		if fieldName == "" || fieldName == "-" {
 			continue
 		}
-		out[typeName+"."+yamlName] = true
+		out[prefix+scopedType+"."+fieldName] = true
 	}
 }
 

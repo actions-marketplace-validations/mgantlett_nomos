@@ -12,6 +12,7 @@ import (
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/handshake"
 )
 
+// @verifies TC-BG-08
 func TestBranchGuard_BashShellMutationPostToolAndStopRearm(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	repoDir := setupBranchGuardTestRepo(t)
@@ -75,6 +76,7 @@ func TestBranchGuard_BashShellMutationPostToolAndStopRearm(t *testing.T) {
 	}
 }
 
+// @verifies TC-BG-08
 func TestPlainHandshakeBannerWithRoot_ManifestAndWorkspaceHull(t *testing.T) {
 	t.Setenv("NOMOS_HOME", t.TempDir())
 	t.Setenv("NOMOS_NO_UPDATE_CHECK", "1")

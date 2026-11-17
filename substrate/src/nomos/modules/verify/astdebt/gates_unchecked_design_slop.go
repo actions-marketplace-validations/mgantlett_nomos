@@ -9,6 +9,7 @@ import (
 
 var (
 	pyExceptClauseRe          = regexp.MustCompile(`^(\s*)except(?:\s+([^:]+?))?\s*:(.*)$`)
+	pyExceptMultiOpenRe       = regexp.MustCompile(`^(\s*)except\s*\((.*)$`)
 	pyAsAliasSuffixRe         = regexp.MustCompile(`\s+as\s+[A-Za-z_][A-Za-z0-9_]*\s*$`)
 	braceEmptyFallbackCatchRe = regexp.MustCompile(`\bcatch\s*(?:\([^)]*\))?\s*\{\s*return(?:\s+(?:null|undefined|false|\{\s*\}|\[\s*\]|""|''))?\s*;?\s*\}`)
 
@@ -57,30 +58,129 @@ var (
 	}
 )
 
+type pyExceptHeader struct {
+	startLine int
+	endIdx    int
+	indent    int
+	clause    string
+	tail      string
+}
+
 func scanPythonExceptionGaming(relPath, text string) []string {
 	lines := strings.Split(text, "\n")
 	var out []string
 	for i := 0; i < len(lines); i++ {
-		m := pyExceptClauseRe.FindStringSubmatch(lines[i])
-		if len(m) == 0 {
+		hdr, ok := parsePythonExceptHeaderAt(lines, i)
+		if !ok {
 			continue
 		}
-		tail := strings.TrimSpace(m[3])
-		if strings.Contains(tail, "#") {
+		i = hdr.endIdx
+		if strings.Contains(hdr.tail, "#") {
 			continue
 		}
-		indent := countLeadingIndentCols(m[1])
-		clause := strings.TrimSpace(m[2])
-		types := parsePythonExceptTypes(clause)
-		if msg := checkBugMaskingExceptTuple(relPath, i+1, types); msg != "" {
+		types := parsePythonExceptTypes(hdr.clause)
+		if msg := checkBugMaskingExceptTuple(relPath, hdr.startLine, types); msg != "" {
 			out = append(out, msg)
 			continue
 		}
-		if isBroadOrMultiBoundaryCatch(clause, types) && isPythonSilentFallbackReturnBlock(lines, i+1, indent, tail) {
-			out = append(out, fmt.Sprintf("%s:%d: silent fallback return in broad or multi-exception handler swallows boundary failure", relPath, i+1))
+		if isBroadOrMultiBoundaryCatch(hdr.clause, types) && isPythonSilentFallbackReturnBlock(lines, hdr.endIdx+1, hdr.indent, hdr.tail) {
+			out = append(out, fmt.Sprintf("%s:%d: silent fallback return in broad or multi-exception handler swallows boundary failure", relPath, hdr.startLine))
 		}
 	}
 	return out
+}
+
+func parsePythonExceptHeaderAt(lines []string, idx int) (pyExceptHeader, bool) {
+	if multi := pyExceptMultiOpenRe.FindStringSubmatch(lines[idx]); len(multi) == 3 {
+		if hdr, ok := collapseMultiLineExceptHeader(lines, idx, multi[1], multi[2]); ok {
+			return hdr, true
+		}
+		return pyExceptHeader{}, false
+	}
+	single := pyExceptClauseRe.FindStringSubmatch(lines[idx])
+	if len(single) == 0 {
+		return pyExceptHeader{}, false
+	}
+	return pyExceptHeader{
+		startLine: idx + 1,
+		endIdx:    idx,
+		indent:    countLeadingIndentCols(single[1]),
+		clause:    strings.TrimSpace(single[2]),
+		tail:      strings.TrimSpace(single[3]),
+	}, true
+}
+
+func collapseMultiLineExceptHeader(lines []string, idx int, rawIndent, firstSeg string) (pyExceptHeader, bool) {
+	depth := 1
+	var parts []string
+	limit := minIntVal(len(lines), idx+17)
+	for j := idx; j < limit; j++ {
+		seg := lines[j]
+		if j == idx {
+			seg = firstSeg
+		}
+		part, closeCol, nextDepth := scanParenTupleLine(seg, depth)
+		depth = nextDepth
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			parts = append(parts, trimmed)
+		}
+		if depth != 0 {
+			continue
+		}
+		rest := seg[closeCol+1:]
+		colon := findColonOutsideHash(rest)
+		if colon < 0 {
+			return pyExceptHeader{}, false
+		}
+		clause := "(" + strings.Join(parts, " ") + ")"
+		if alias := strings.TrimSpace(rest[:colon]); alias != "" {
+			clause += " " + alias
+		}
+		return pyExceptHeader{
+			startLine: idx + 1,
+			endIdx:    j,
+			indent:    countLeadingIndentCols(rawIndent),
+			clause:    clause,
+			tail:      strings.TrimSpace(rest[colon+1:]),
+		}, true
+	}
+	return pyExceptHeader{}, false
+}
+
+func scanParenTupleLine(seg string, depth int) (string, int, int) {
+	for i := 0; i < len(seg); i++ {
+		switch seg[i] {
+		case '#':
+			return seg[:i], -1, depth
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 {
+				return seg[:i], i, 0
+			}
+		}
+	}
+	return seg, -1, depth
+}
+
+func findColonOutsideHash(rest string) int {
+	for i := 0; i < len(rest); i++ {
+		if rest[i] == '#' {
+			return -1
+		}
+		if rest[i] == ':' {
+			return i
+		}
+	}
+	return -1
+}
+
+func minIntVal(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func parsePythonExceptTypes(clause string) []string {

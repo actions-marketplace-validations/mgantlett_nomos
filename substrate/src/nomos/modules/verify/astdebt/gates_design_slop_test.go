@@ -7,6 +7,7 @@ import (
 	"testing"
 )
 
+// @verifies TC-TS-19
 func TestCheckPolyglotUncheckedErrors_SecondGenGaming(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -19,6 +20,9 @@ func TestCheckPolyglotUncheckedErrors_SecondGenGaming(t *testing.T) {
 		{"BugMaskingTuple", ExtPy, "db.py", "def q():\n    try:\n        return run()\n    except (OSError, KeyError, TypeError):\n        log_err()\n", 1, "catch-all exception tuple"},
 		{"BroadExceptionReturnDict", ExtPy, "cfg.py", "def load():\n    try:\n        return read_cfg()\n    except Exception:\n        return {}\n", 1, "silent fallback return"},
 		{"MultiBoundaryReturnNone", ExtPy, "cfg.py", "def load():\n    try:\n        return read_cfg()\n    except (OSError, yaml.YAMLError):\n        return None\n", 1, "silent fallback return"},
+		{"MultiLineBlackFormattedTuple", ExtPy, "db.py", "def q():\n    try:\n        return run()\n    except (\n        sqlite3.Error,\n        KeyError,\n        TypeError,\n    ) as exc:\n        log_err(exc)\n", 1, "catch-all exception tuple"},
+		{"MultiLineTupleInlineCommentMask", ExtPy, "db.py", "def q():\n    try:\n        return run()\n    except (\n        OSError,\n        KeyError,  # note: bug mask\n        TypeError,\n    ):\n        log_err()\n", 1, "catch-all exception tuple"},
+		{"MultiLineBoundarySilentFallback", ExtPy, "cfg.py", "def load():\n    try:\n        return read_cfg()\n    except (\n        OSError,\n        yaml.YAMLError,\n    ) as exc:\n        return None\n", 1, "silent fallback return"},
 		{"CommentedBoundaryReturnAllowed", ExtPy, "cfg.py", "def load():\n    try:\n        return read_cfg()\n    except Exception:\n        # optional overlay absent\n        return {}\n", 0, ""},
 		{"NarrowValueErrorReturnNoneAllowed", ExtPy, "parse.py", "def to_int(s):\n    try:\n        return int(s)\n    except ValueError:\n        return None\n", 0, ""},
 		{"TSCatchReturnNull", ExtTS, "api.ts", "export function load() { try { return read(); } catch (e) { return null; } }\n", 1, "empty/null fallback"},
@@ -37,6 +41,7 @@ func TestCheckPolyglotUncheckedErrors_SecondGenGaming(t *testing.T) {
 	}
 }
 
+// @verifies TC-TS-20
 func TestCheckCoverageExclusionDirectives_CommentsVsStrings(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -62,6 +67,7 @@ func TestCheckCoverageExclusionDirectives_CommentsVsStrings(t *testing.T) {
 	}
 }
 
+// @verifies TC-TS-20
 func TestCheckManifestImportFallbacks_ManifestAndStdlib(t *testing.T) {
 	dir := t.TempDir()
 	pyproject := "[project]\nname = \"demo\"\ndependencies = [\"pyyaml>=6.0\", \"click>=8.1\"]\n"
@@ -82,6 +88,7 @@ func TestCheckManifestImportFallbacks_ManifestAndStdlib(t *testing.T) {
 	}
 }
 
+// @verifies TC-TS-21
 func TestDetectPolyglotDesignSlop_AndNesting(t *testing.T) {
 	dir := t.TempDir()
 	testFile := "from app import _unused_pass\n"
@@ -127,4 +134,41 @@ def prop_alias(self):
 	if nHits := EvaluatePolyglotNestingViolations("deep.py", []byte(deepPy), 5); len(nHits) != 1 {
 		t.Fatalf("expected 1 nesting depth violation, got %v", nHits)
 	}
+
+	t.Run("PublicCompatibilityFossilVsNormalPublicFunction", func(t *testing.T) {
+		pubDir := t.TempDir()
+		pubSrc := `def load_config(args):
+    """Compatibility helper for callers loading a Part 1 config."""
+    return parse_config(args)
+
+def run_cli(args):
+    """Execute primary CLI entrypoint."""
+    return execute(args)
+`
+		pubHits := DetectPolyglotDesignSlop(pubDir, map[string][]byte{"rejector.py": []byte(pubSrc)})
+		if len(pubHits) != 1 || !strings.Contains(pubHits[0], `dead pass-through wrapper "load_config"`) {
+			t.Fatalf("expected only compatibility fossil load_config flagged, got %v", pubHits)
+		}
+	})
+
+	t.Run("CorpusFileCapSkipsCrossFileWrappersWhenExceeded", func(t *testing.T) {
+		capDir := t.TempDir()
+		m1Src := "def _shared_helper(x):\n    return compute(x)\n"
+		for name, body := range map[string]string{
+			"m1.py": m1Src,
+			"m2.py": "VAL_A = 1\n",
+			"m3.py": "VAL_B = 2\n",
+			"m4.py": "def run():\n    return _shared_helper(10)\n",
+		} {
+			if err := os.WriteFile(filepath.Join(capDir, name), []byte(body), 0644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if truncatedHits := detectPolyglotDesignSlopWithLimit(capDir, map[string][]byte{"m1.py": []byte(m1Src)}, 3); len(truncatedHits) != 0 {
+			t.Fatalf("expected >cap repo to skip cross-file wrapper checks, got %v", truncatedHits)
+		}
+		if fullHits := DetectPolyglotDesignSlop(capDir, map[string][]byte{"m1.py": []byte(m1Src)}); len(fullHits) != 0 {
+			t.Fatalf("expected 512-file limit to count m4.py caller and produce 0 hits, got %v", fullHits)
+		}
+	})
 }
