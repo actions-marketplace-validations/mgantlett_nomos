@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v4.23.0] - 2026-11-17
+
+> Document HarnessSecurity-Bench 46-container paired audit in README; Container mechanism policies, symlink path isolation, and token-aware runner loop detection; Fix content-hash loop breaker and container test-plane write guard in hookcmd; Tighten README conversion flow and sync Branch Guard hero terminal SVG (Apache 2.0)
+
+### Intent & Specifications (`README.md`)
+- **Document HarnessSecurity-Bench 46-container paired audit in README (`INT-2099`)**: Add HarnessSecurity-Bench 46-container paired audit to benchmark matrix.
+- **Tighten README conversion flow and sync Branch Guard hero terminal SVG (`INT-2089`)**: Tighten Open-Core README conversion, add mobile-legible 24ms catch block, remove section emojis, update Action pin to v4.22.1, and align hero SVG with Branch Guard.
+
+### CLI, Distribution & Hooks (`nomos cli`, `nomos hook`)
+- **Enforce container mechanism policies, symlink path isolation, and token-aware runner loop detection (`SUB-3181`)**: Add container sandbox policies, symlink escape guard, and IFC sink enforcement.
+- **Fix content-hash loop breaker and container test-plane write guard in hookcmd (`SUB-3180`)**: Switch loop-breaker workspace digests from mtime to content SHA-256 with per-digest runner strike tracking, detect python test scripts, run unconditional container anti-shim checks, and support NOMOS_PROTECT_WORKSPACE_TESTS=1 write-locking.
+
+---
+
 ## [v4.22.1] - 2026-11-16
 
 > Skip vendors/third_party dirs and separate `path_leaks` from `secret_leaks`; Emit stderr interactive hint when nomos mcp runs on a TTY; Add GitHub Marketplace Action badge to `README.md` (Apache 2.0)
