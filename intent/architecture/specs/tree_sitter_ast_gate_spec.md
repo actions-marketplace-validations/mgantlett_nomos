@@ -384,6 +384,8 @@ func ScanRepository(rootDir string, opts XrayScanOptions) (*XrayReport, error)
 
 `DetectPolyglotDesignSlop` rejects zero-caller private functions, compatibility-annotated shims, zero-caller one-line class methods, and modules with three-plus single-use return helpers. Cross-file caller counting scans up to `512` files while excluding `venv`, `.venv`, and `site-packages` trees. The gate also flags three or more consecutive `if var ==` or standalone `if isinstance(var, ...)` branches lacking `elif`. `EvaluatePolyglotNestingViolations` enforces `MaxFunctionNesting` (`5`) across Go, Python, JS/TS, and Rust functions inside `nomos verify` and `FastFileRadar`.
 
+`EvaluatePolyglotCognitiveViolations` enforces `MaxFunctionCognitiveComplexity` (`15`) using nesting-weighted control-flow scoring across non-test polyglot functions. `DetectPolyglotDesignSlop` also rejects Python `(val, err)` tuple-return functions, three-plus empty `Exception` subclasses, and `if/return` boolean ceremony. Multi-caller one-line domain helpers remain permitted.
+
 ---
 
 ## 5. Table-Driven Verification Vectors
@@ -419,6 +421,7 @@ The following table-driven verification vectors validate the Tree-sitter AST Gat
 | `TC-TS-19` | `polyglot` | Multi-type `except (OSError, KeyError, TypeError)` or broad `except Exception: return {}` | Exception tuple and fallback return classified | Logic-bug mask or silent fallback | `FAIL` | Second-generation exception gaming rejected across Python and TS |
 | `TC-TS-20` | `polyglot` | Comment `# pragma: no cover` vs string literal, plus `pyproject.toml` `ImportError` shim | Lexical comments and manifest deps resolved | Comment pragma and manifest shim flagged | `FAIL` | Coverage pragmas and declared-package `ImportError` shims fail closed |
 | `TC-TS-21` | `python` | Dead `_fossil` wrapper, three 1-line helpers, `isinstance` ladder, `if ==` chain, depth `6` | Call counts, guard chains, and nesting measured | Wrapper slop and depth `> 5` flagged | `FAIL` | Design-slop fragmentation and deep control-flow nesting rejected |
+| `TC-TS-22` | `python` | Cognitive > 15, `(val, err)` tuple return, empty Exceptions, bool if-return | Nesting-weighted score, tuple returns, empty classes, bool returns | Cog > 15 and idiom breaches flagged | `FAIL` | Universal cognitive and Python anti-slop invariants enforced |
 | `TC-XRAY-01` | `polyglot` | Uninitialized Go, Python, and TS fixture with clones and stubs | `xray.ScanRepository` aggregates polyglot metrics and hotspots | Non-zero `HangoverScore` and `BaselineEnvelope` | `PASS` | Read-only scan writes zero files or SQLite rows |
 | `TC-XRAY-02` | `polyglot` | `XrayReport` serialized via JSON and Markdown formatters | Relative hotspot paths emitted | Zero host home-directory literals | `PASS` | Law 5 path scrubbing holds across `XrayReport` outputs |
 | `TC-MUT-02` | `go` | Modified Go function tested with boundary assertions | `prproof.EvaluateDiffMutations` flips AST operators | `KillScorePct == 100` | `PASS` | Boundary tests kill every diff AST mutant |

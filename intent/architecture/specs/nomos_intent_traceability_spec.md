@@ -410,6 +410,9 @@ func FormatPRProofMarkdown(receipt *PRProofReceipt) string
    - Surviving behavioral mutants reject execution, catching tautological assertions that pass unchanged when branch predicates flip.
    - `nomos verify --pr` emits Markdown or `--json` `PRProofReceipt` digests sealing 42-gate posture, plane separation, `xray` debt delta, and SHA-256 provenance.
    - `EvaluateContainerPreToolHook` blocks shell and file snooping against `/tests`, `/solution`, `/logs/verifier`, `/verifier`, `/grading`, `/eval`, `/harness`, `/oracle`, and `/proc/1/environ`.
+10. **Scratch Regression Suite Discovery (`TC-COV-005`):**
+   - `TDDGate`, `PolyglotToolchainGate`, and `CoverageGate` discover `.tmp/tests/` suites alongside `tests/` and include `requirements.txt` in manifest checks.
+   - Python runners pass `.tmp/tests` explicitly to `pytest` and `unittest` so untracked suites enforce `>= 80%` statement coverage.
 
 ---
 
@@ -452,6 +455,7 @@ func FormatPRProofMarkdown(receipt *PRProofReceipt) string
 | `TC-COV-002` | `CoverageGate` | Statement coverage drops below `55%` statutory floor | Fails closed with test coverage remedy | Law 2 & Law 7 |
 | `TC-COV-003` | `ThresholdIntegrityGate` | Worktree `nomos.yaml` relaxes `max_cyclomatic_complexity > 15` | Rejects threshold relaxation under `strict_mode: true` | Law 7 |
 | `TC-COV-004` | `ThresholdIntegrityGate` | Worktree downgrades `strict_mode` or `boundary.enforce` from trunk | Rejects governance downgrade against trunk baseline | Law 1 & Law 7 |
+| `TC-COV-005` | `TDDGate`, `CoverageGate` | Python repo with `requirements.txt` and `.tmp/tests/test_app.py` | Enforces strict TDD and >= 80% trace coverage via `.tmp/tests` | Law 2 & Law 7 |
 | `TC-PRF-01` | `ProofReport` (Vector 1) | Synthetic AST defect injection across active gates | Asserts `MutationScore == 100%` (all defects killed) | Law 2 |
 | `TC-PRF-02` | `ProofReport` (Vector 2) | Clean reference fixture evaluation | Asserts `FalsePositiveRate == 0%` across all gates | Law 2 |
 | `TC-PRF-03` | `ProofReport` (Vector 3) | Non-vacuity probe audit across 42 gates | Asserts `NonVacuousGates == TotalGatesEvaluated` | Law 2 |

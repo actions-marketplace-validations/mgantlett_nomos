@@ -266,6 +266,8 @@ Session Sentinel (`CHARTER-4-BOUNDARY`) evaluates candidate workspace roots stru
 
 `ParseGoSurfaceFingerprintForPath` extracts exported Go symbols, struct `json` tags, `@intent` bindings, and `verify`/`hookcmd` rule literals into `NormativeSurfaceDelta.GovernanceRules`. `InspectWorktreeNormativeSurface` cancels balanced intra-package moves so file splits pass untwinned while net-new rules require `Twin: INT-<N>`. `nomos hook post-tool` and `nomos hook stop` track `<size>:<sha256_8>` `Bash` digests and evaluate `DirtyUnverifiedEdits` without penalizing post-verify reads. Under `--container-sandbox`, `nomos hook stop` enforces four-strike retries (`StopBlockStrikes`) with inline `FastFileRadar` diagnostics until `nomos verify` passes. `FormatPlainHandshakeBannerWithRoot` appends `Manifest Deps` and `Workspace Modules` summaries during `SessionStart`.
 
+`HookSessionTrace` sets `DirtyBehavioralEdits` when source mutations occur inside a workspace lacking discovered unit tests. `nomos hook stop` blocks exit until unit tests pass under `nomos verify` or post-edit execution succeeds. `FormatPlainHandshakeBannerWithRoot` emits `.tmp/tests/` regression-suite guidance when executable sources lack committed tests.
+
 ---
 
 ## 6. Table-Driven Verification Vectors
@@ -320,6 +322,7 @@ Session Sentinel (`CHARTER-4-BOUNDARY`) evaluates candidate workspace roots stru
 | `TC-BG-05` | Branch Guard Git hook commit pass | `pre-commit` + `commit-msg` on `feat/auth` with plain message | `"Permits raw git commit after nomos verify without [SUB-N] trailers."` | PASS |
 | `TC-BG-06` | Branch Guard CommitSchemaGate pass | `CommitSchemaGate` evaluates feature-branch commits in `branch` mode | `"Accepts Jira, Linear, or plain subjects while rejecting canned shims."` | PASS |
 | `TC-BG-08` | Bash digest tracking & SessionStart hull | `Bash` file write across `post-tool` and `--container-sandbox` `stop`, plus `SessionStart` banner | `"Triggers AST radar, blocks unverified Stop, and renders Manifest Deps hull."` | PASS |
+| `TC-BG-09` | Post-edit behavioral Stop gate and testless hull guidance | Source edit without tests followed by Stop vs post-edit run | `"Blocks un-executed source edits and clears after behavioral run."` | PASS |
 
 ---
 
