@@ -122,10 +122,13 @@ func evaluatePostToolHostHealth(p *HookPayload, hermeticDir, style string) strin
 // JIT directory-scoped Mneme pitfall recall on mutated worktree files (@intent mneme_memory_spec.md).
 // It returns an empty string (100% silent) on Bash/Read/MCP channels and clean mutations without matching pitfalls.
 func EvaluatePostToolHook(p *HookPayload, hermeticDir string) string {
-	if p == nil || p.IsPostInvoke || p.TargetFile == "" {
+	if p == nil || p.IsPostInvoke || capbac.IsMCPToolName(p.ToolName) {
 		return ""
 	}
-	if p.CommandLine != "" || capbac.IsMCPToolName(p.ToolName) || isReadOnlyTool(p.ToolName) {
+	if p.CommandLine != "" {
+		return evaluateShellMutatedPaths(p, hermeticDir, false)
+	}
+	if p.TargetFile == "" || isReadOnlyTool(p.ToolName) {
 		return ""
 	}
 	baseCwd := resolveHookWorkspaceDir(p, hermeticDir)
@@ -151,7 +154,19 @@ func isPostToolTargetInScope(resolved, hermeticDir string) bool {
 		canonRoot := normalizeCanonicalPath(hermeticDir, "/")
 		return resolved == canonRoot || strings.HasPrefix(resolved, canonRoot+"/")
 	}
-	return strings.Contains(resolved, "/worktrees/")
+	if strings.Contains(resolved, "/worktrees/") {
+		return true
+	}
+	repoRoot, cfg, branch, isBranch := ResolveBranchGuardContext(resolved)
+	if !isBranch || IsProtectedTrunkForConfig(branch, cfg) {
+		return false
+	}
+	canonRoot := filepath.ToSlash(filepath.Clean(repoRoot))
+	canonTarget := filepath.ToSlash(filepath.Clean(resolved))
+	if canonTarget != canonRoot && !strings.HasPrefix(canonTarget, canonRoot+"/") {
+		return false
+	}
+	return !isProtectedGovernanceTarget(canonTarget, canonRoot)
 }
 
 func validateStructuredFileInMemory(resolved string) string {

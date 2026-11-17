@@ -30,9 +30,11 @@ type HookSessionTrace struct {
 	WarnedChurn150       bool     `json:"warned_churn_150,omitempty"`
 	WarnedReadSpiral12   bool     `json:"warned_read_spiral_12,omitempty"`
 	WarnedReadSpiral20   bool     `json:"warned_read_spiral_20,omitempty"`
-	MutatedFiles         []string `json:"mutated_files,omitempty"`
-	RecalledPitfallDirs  []string `json:"recalled_pitfall_dirs,omitempty"`
-	ImpactedFiles        []string `json:"impacted_files,omitempty"`
+	MutatedFiles         []string          `json:"mutated_files,omitempty"`
+	RecalledPitfallDirs  []string          `json:"recalled_pitfall_dirs,omitempty"`
+	ImpactedFiles        []string          `json:"impacted_files,omitempty"`
+	ObservedDigests      map[string]string `json:"observed_digests,omitempty"`
+	PendingShellRadar    []string          `json:"pending_shell_radar,omitempty"`
 }
 
 var standaloneVerifyCmdRe = regexp.MustCompile(`(?i)^\s*(?:cd\s+\S+\s*&&\s*)?(?:\S+/)?nomos\s+(?:verify|task\s+review|task\s+sync)(?:\s|$)`)
@@ -84,6 +86,7 @@ func evaluateWorktreeChurnAdvisory(p *HookPayload, hermeticDir, style string) st
 			tr.DirtyUnverifiedEdits = true
 		} else {
 			resetWorktreeChurnCounters(&tr)
+			refreshTraceObservedDigests(wsRoot, &tr)
 		}
 		saveHookSessionTrace(path, tr)
 		return ""
@@ -132,6 +135,7 @@ func MarkWorktreeVerificationPassed(worktreeDir string) {
 		return
 	}
 	resetWorktreeChurnCounters(tr)
+	refreshTraceObservedDigests(wsRoot, tr)
 	saveHookSessionTrace(path, *tr)
 }
 
@@ -199,6 +203,9 @@ func recordPostToolSessionTrace(p *HookPayload, hermeticDir string) {
 		tr.ToolCallsCount = 1
 	}
 	recordTracePayloadDetails(&tr, p, wsRoot)
+	if p.CommandLine != "" && isPotentialMutatingShellCommand(p.CommandLine) {
+		discoverShellMutatedFiles(wsRoot, &tr)
+	}
 	if isNomosVerificationCommand(p.CommandLine) && hasFailedVerificationResponse(p.ToolResponseText) {
 		tr.DirtyUnverifiedEdits = true
 	}
@@ -237,6 +244,12 @@ func recordTracePayloadDetails(tr *HookSessionTrace, p *HookPayload, wtRoot stri
 		}
 		tr.MutatedFiles = appendUniqueBounded(tr.MutatedFiles, rel, 64)
 		tr.DirtyUnverifiedEdits = true
+		if dig := computeFileContentDigest(resolved); dig != "" {
+			if tr.ObservedDigests == nil {
+				tr.ObservedDigests = make(map[string]string, 8)
+			}
+			tr.ObservedDigests[rel] = dig
+		}
 	}
 }
 

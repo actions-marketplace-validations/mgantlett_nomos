@@ -73,13 +73,15 @@ func EvaluateStopHook(p *HookPayload, hermeticDir string, containerSandbox bool)
 		return HookDecision{Decision: hookDecisionAllow}
 	}
 	if containerSandbox && hermeticDir == "" {
-		return evaluateContainerStopHook(p)
+		if dec := evaluateContainerStopHook(p); dec.Decision == hookDecisionBlock {
+			return dec
+		}
 	}
 	traceKey, wsRoot, branchLabel := resolveTraceScopeAndWorkspace(p, hermeticDir)
 	if traceKey == "" {
 		return HookDecision{Decision: hookDecisionAllow}
 	}
-	tr := loadHookSessionTrace(traceKey)
+	tr := loadOrSyncStopTrace(traceKey, wsRoot)
 	if tr == nil || len(tr.MutatedFiles) == 0 {
 		return HookDecision{Decision: hookDecisionAllow}
 	}

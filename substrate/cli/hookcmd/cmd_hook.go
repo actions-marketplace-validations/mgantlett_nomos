@@ -288,6 +288,7 @@ func FormatPlainHandshakeBannerWithRoot(ev *handshake.HandshakeEvent, hookRoot s
 		b.WriteString(fmt.Sprintf("  Ready Wavefront   : [%s]\n", strings.Join(ev.ReadyWavefront, ", ")))
 	}
 	appendPlainUpdateAndDriftAdvisories(&b, hookRoot, allowUpdateCheck, rootVersion)
+	appendPlainWorkspaceHull(&b, hookRoot)
 	appendPlainTurnZeroTelemetry(&b, ev)
 	return b.String()
 }

@@ -288,7 +288,13 @@ func EvaluateContainerPostToolHook(p *HookPayload) string {
 	if carrierMsg := evaluateContainerUntrustedCarrierAdvisory(p); carrierMsg != "" {
 		return carrierMsg
 	}
-	if p.TargetFile == "" || p.CommandLine != "" || capbac.IsMCPToolName(p.ToolName) || isReadOnlyTool(p.ToolName) {
+	if capbac.IsMCPToolName(p.ToolName) {
+		return ""
+	}
+	if p.CommandLine != "" {
+		return evaluateShellMutatedPaths(p, "", true)
+	}
+	if p.TargetFile == "" || isReadOnlyTool(p.ToolName) {
 		return ""
 	}
 	baseCwd := firstNonEmpty(p.Cwd, resolveHookWorkspaceDir(p, ""))
@@ -296,22 +302,7 @@ func EvaluateContainerPostToolHook(p *HookPayload) string {
 		baseCwd = containerDefaultWorkdir
 	}
 	resolved := normalizeCanonicalPath(p.TargetFile, baseCwd)
-	if snoopMsg := validateContainerFileVerifierClean(resolved); snoopMsg != "" {
-		return snoopMsg
-	}
-	if syntaxMsg := validateStructuredFileInMemory(resolved); syntaxMsg != "" {
-		return syntaxMsg
-	}
-	if goMsg := validateGoSyntaxInMemory(resolved); goMsg != "" {
-		return goMsg
-	}
-	if shimMsg := evaluateContainerAntiShimInMemory(resolved, baseCwd); shimMsg != "" {
-		return shimMsg
-	}
-	if hasExplicitNomosConfig(resolved, baseCwd) {
-		return evaluateFastRadarInMemory(resolved, baseCwd)
-	}
-	return ""
+	return inspectMutatedFilePath(resolved, baseCwd, "", true)
 }
 
 func evaluateContainerAntiShimInMemory(resolved, baseCwd string) string {
