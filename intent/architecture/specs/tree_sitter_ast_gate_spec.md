@@ -171,7 +171,7 @@ For any function node $F$, the engine computes cyclomatic complexity as:
 
 $$M(F) = 1 + \sum_{b \in F} \mathbb{I}(b \in \text{Branches})$$
 
-Language-specific `@branch` S-expression queries capture all branch nodes. Go functions pass `Cell 1.1 (complexity)` when $M(F) \le \text{thresholds.max\_complexity}$ (default: `15`, accounting for explicit `if err != nil` propagation). Non-Go polyglot functions default to `MaxPolyglotCyclomaticComplexity` (`10`) whenever `thresholds.max_complexity` remains at the Go statutory default (`15`), while honoring explicit configuration overrides and brownfield baseline ratchets.
+Language-specific `@branch` S-expression queries capture all branch nodes. Go and brace-language functions pass `Cell 1.1 (complexity)` when $M(F) \le \text{thresholds.max\_complexity}$ (default: `15`). Python and Ruby indent-language functions default to `MaxPolyglotCyclomaticComplexity` (`10`) when `thresholds.max_complexity` remains `15`. Explicit overrides and brownfield baseline ratchets remain honored across all languages.
 
 #### 2. Docstring Adjacency & Density
 A function possesses a valid docstring when a comment node precedes the declaration within vertical distance $\Delta \text{line} \le 1$.
@@ -384,7 +384,7 @@ func ScanRepository(rootDir string, opts XrayScanOptions) (*XrayReport, error)
 
 `DetectPolyglotDesignSlop` rejects dead private shims, compatibility wrappers, dead one-line methods, single-caller middleman wrappers, and modules with two-plus single-use return helpers. Cross-file caller counting scans up to `512` files while excluding `venv`, `.venv`, and `site-packages` trees. The gate also rejects three-plus per-function or five-plus per-module inline `isinstance`-`raise` guards. The gate also rejects four-plus `if ...: raise` ladders and three-plus consecutive same-variable `if` branches lacking `elif`. `EvaluatePolyglotNestingViolations` enforces `MaxFunctionNesting` (`5`) across Go, Python, JS/TS, and Rust functions inside `nomos verify` and `FastFileRadar`.
 
-`EvaluatePolyglotCognitiveViolations` enforces `MaxFunctionCognitiveComplexity` (`10`) across non-test polyglot functions using nesting-weighted control flow. Scoring adds `1 + depth` for Python `if ... else` ternaries and comprehension `if` filters. In brownfield mode, `nomos verify` enforces net-new clone, arity, nesting, cognitive, and design-slop checks on changed files across any directory layout. Untouched baseline files remain exempted. `DetectPolyglotDesignSlop` also rejects Python `(val, err)` tuple-return functions, three-plus empty `Exception` subclasses, and `if/return` boolean ceremony. Multi-caller non-middleman one-line domain helpers remain permitted.
+`EvaluatePolyglotCognitiveViolations` enforces `10` on Python/Ruby indent languages and `15` on brace languages using nesting-weighted control flow. Scoring adds `1 + depth` for Python `if ... else` ternaries and comprehension `if` filters. In brownfield mode, `nomos verify` enforces net-new clone, arity, nesting, cognitive, and design-slop checks on changed files across any directory layout. Untouched baseline files remain exempted. `DetectPolyglotDesignSlop` also rejects Python `(val, err)` tuple-return functions, three-plus empty `Exception` subclasses, and `if/return` boolean ceremony. Multi-caller non-middleman one-line domain helpers remain permitted.
 
 ---
 
