@@ -290,7 +290,7 @@ func loadOrSyncStopTrace(traceKey, wsRoot string) *HookSessionTrace {
 		}
 		return nil
 	}
-	if tr != nil && !tr.DirtyUnverifiedEdits && tr.UnverifiedCalls == 0 && wsRoot != "" && len(tr.ObservedDigests) > 0 {
+	if tr != nil && wsRoot != "" {
 		if changed := discoverShellMutatedFiles(wsRoot, tr); len(changed) > 0 {
 			if path := resolveTraceStateFilePath(traceKey); path != "" {
 				saveHookSessionTrace(path, *tr)
@@ -298,4 +298,34 @@ func loadOrSyncStopTrace(traceKey, wsRoot string) *HookSessionTrace {
 		}
 	}
 	return tr
+}
+
+func collectStopInlineRadarSummary(wsRoot string, mutated []string) string {
+	if wsRoot == "" || len(mutated) == 0 {
+		return ""
+	}
+	var breaches []string
+	checked := 0
+	for _, rel := range mutated {
+		if checked >= maxShellRadarFiles {
+			break
+		}
+		absPath := filepath.Join(wsRoot, filepath.FromSlash(rel))
+		if !hasExplicitNomosConfig(absPath, wsRoot) {
+			continue
+		}
+		checked++
+		radarOut := evaluateFastRadarInMemory(absPath, wsRoot)
+		for _, line := range strings.Split(radarOut, "\n") {
+			if strings.Contains(line, "Radar Breach") {
+				breaches = append(breaches, line)
+			}
+		}
+	}
+	joined := strings.Join(breaches, "\n")
+	const maxRadarBytes = 1600
+	if len(joined) > maxRadarBytes {
+		return joined[:maxRadarBytes] + "\n..."
+	}
+	return joined
 }

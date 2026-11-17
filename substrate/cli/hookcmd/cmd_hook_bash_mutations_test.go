@@ -95,3 +95,70 @@ func TestPlainHandshakeBannerWithRoot_ManifestAndWorkspaceHull(t *testing.T) {
 		}
 	}
 }
+
+// @verifies TC-BG-08
+func TestContainerStop_PreToolFailingBashWriteMultiStrikeAndPostVerifyRead(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	repoDir := setupBranchGuardTestRepo(t)
+	if out, err := workspace.SafeGitCommand(repoDir, "checkout", "-b", "feat/scb").CombinedOutput(); err != nil {
+		t.Fatalf("git checkout feat/scb: %v (%s)", err, string(out))
+	}
+
+	executeHookCmd(t, []string{"pre-tool", "--container-sandbox"}, map[string]any{
+		"session_id":      "scb-fail-write",
+		"hook_event_name": "PreToolUse",
+		"cwd":             repoDir,
+		"tool_name":       "Bash",
+		"tool_input":      map[string]any{"command": "cat > etl.py && python etl.py"},
+	})
+	badPy := "def route(op):\n    if op == 'a': return 1\n    if op == 'b': return 2\n    if op == 'c': return 3\n    return 0\n"
+	if err := os.WriteFile(filepath.Join(repoDir, "etl.py"), []byte(badPy), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	stop1 := executeHookCmd(t, []string{"stop", "--container-sandbox"}, map[string]any{
+		"hook_event_name": "Stop",
+		"cwd":             repoDir,
+	})
+	if dec1 := parseDecision(t, stop1); dec1.Decision != "block" || !strings.Contains(dec1.Reason, "attempt 1/4") || !strings.Contains(dec1.Reason, "Nomos Radar Breach") {
+		t.Fatalf("expected strike 1 block with inline radar breach, got %+v (%s)", dec1, stop1)
+	}
+
+	for attempt := 2; attempt <= 4; attempt++ {
+		stopRetry := executeHookCmd(t, []string{"stop", "--container-sandbox"}, map[string]any{
+			"hook_event_name":  "Stop",
+			"cwd":              repoDir,
+			"stop_hook_active": true,
+		})
+		if dec := parseDecision(t, stopRetry); dec.Decision != "block" {
+			t.Fatalf("expected strike %d/4 to stay blocked under container sandbox, got %+v", attempt, dec)
+		}
+	}
+	stopCap := executeHookCmd(t, []string{"stop", "--container-sandbox"}, map[string]any{
+		"hook_event_name":  "Stop",
+		"cwd":              repoDir,
+		"stop_hook_active": true,
+	})
+	if stopCap != "{}" {
+		t.Fatalf("expected container stop cap after 4 strikes to allow {}, got %s", stopCap)
+	}
+
+	if err := os.WriteFile(filepath.Join(repoDir, "etl.py"), []byte("def route(op):\n    return 0\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	hookcmd.MarkWorktreeVerificationPassed(repoDir)
+	executeHookCmd(t, []string{"post-tool", "--container-sandbox"}, map[string]any{
+		"session_id":      "scb-fail-write",
+		"hook_event_name": "PostToolUse",
+		"cwd":             repoDir,
+		"tool_name":       "Bash",
+		"tool_input":      map[string]any{"command": "git status --short"},
+	})
+	cleanStop := executeHookCmd(t, []string{"stop", "--container-sandbox"}, map[string]any{
+		"hook_event_name": "Stop",
+		"cwd":             repoDir,
+	})
+	if cleanStop != "{}" {
+		t.Fatalf("expected read-only Bash after nomos verify pass to allow Stop {}, got %s", cleanStop)
+	}
+}

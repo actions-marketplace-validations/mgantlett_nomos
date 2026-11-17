@@ -140,7 +140,7 @@ func collectRangePolyglotFiles(ctx *VerifyContext) map[string]bool {
 	}
 	modified := make(map[string]bool)
 	for _, rel := range ResolveUnattestedRangeFiles(ctx, dir) {
-		if IsSupportedPolyglotSourceFile(rel) {
+		if !IsExcludedPolyglotDir(rel) && IsSupportedPolyglotSourceFile(rel) {
 			modified[filepath.Join(dir, rel)] = true
 		}
 	}

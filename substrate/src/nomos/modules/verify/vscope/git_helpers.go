@@ -13,12 +13,17 @@ import (
 
 const SepArrow = " -> "
 
-var excludedPolyglotSegments = []string{"/build/", "/dist/", "/.svelte-kit/", "/node_modules/", "/.vitepress/", "/cache/"}
+var excludedPolyglotSegments = []string{
+	"/build/", "/dist/", "/.svelte-kit/", "/node_modules/", "/.vitepress/", "/cache/",
+	"/.venv/", "/venv/", "/site-packages/", "/__pycache__/", "/vendor/",
+	"/.pytest_cache/", "/.mypy_cache/", "/.ruff_cache/", "/.tox/", "/.evaluation_tests/",
+}
 
 // IsExcludedPolyglotDir executes deterministic vscope verification logic (@intent nomos_intent_traceability_spec.md).
 func IsExcludedPolyglotDir(clean string) bool {
+	norm := "/" + strings.TrimPrefix(filepath.ToSlash(strings.TrimSpace(clean)), "/")
 	for _, seg := range excludedPolyglotSegments {
-		if strings.Contains(clean, seg) {
+		if strings.Contains(norm, seg) {
 			return true
 		}
 	}
@@ -135,7 +140,7 @@ func CollectTaskCommitPolyglotFiles(dir, taskID string, modified map[string]bool
 	}
 	for _, line := range strings.Split(string(out), "\n") {
 		line = strings.TrimSpace(line)
-		if line != "" && IsSupportedPolyglotSourceFile(line) {
+		if line != "" && !IsExcludedPolyglotDir(line) && IsSupportedPolyglotSourceFile(line) {
 			modified[filepath.Join(dir, line)] = true
 		}
 	}
@@ -156,7 +161,7 @@ func collectUncommittedPolyglotFiles(dir string, modified map[string]bool) {
 			parts := strings.Split(relPath, SepArrow)
 			relPath = parts[len(parts)-1]
 		}
-		if IsSupportedPolyglotSourceFile(relPath) {
+		if !IsExcludedPolyglotDir(relPath) && IsSupportedPolyglotSourceFile(relPath) {
 			modified[filepath.Join(dir, relPath)] = true
 		}
 	}

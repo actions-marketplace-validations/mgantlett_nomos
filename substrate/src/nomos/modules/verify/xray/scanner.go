@@ -31,7 +31,7 @@ var (
 		".git": true, ".hg": true, ".svn": true, ".tmp": true,
 		"worktrees": true, "node_modules": true, "vendor": true,
 		"vendors": true, "third_party": true, "third-party": true, "3rdparty": true,
-		".venv": true, "venv": true, "env": true, "dist": true,
+		".venv": true, "venv": true, "env": true, "site-packages": true, "dist": true,
 		"webdist": true, "build": true, "out": true, "target": true,
 		"__pycache__": true, ".tox": true, ".mypy_cache": true,
 		".pytest_cache": true, ".ruff_cache": true, ".next": true,

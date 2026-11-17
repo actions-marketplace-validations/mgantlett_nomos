@@ -14,6 +14,7 @@ var (
 	pyAnyDefRe           = regexp.MustCompile(`^(\s*)(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(`)
 	pyIsinstanceIfRe     = regexp.MustCompile(`^if\s+not\s+isinstance\s*\(`)
 	pyIfEqVarRe          = regexp.MustCompile(`^(\s*)if\s+([A-Za-z_][A-Za-z0-9_\.]*)\s*==\s*`)
+	pyIfIsinstanceVarRe  = regexp.MustCompile(`^(\s*)if\s+isinstance\s*\(\s*([A-Za-z_][A-Za-z0-9_\.]*)\s*,`)
 	pyElseOrElifPrefixRe = regexp.MustCompile(`^(?:elif|else)\b`)
 )
 
@@ -92,8 +93,8 @@ func scanPythonFuncLadders(relPath, text string) []string {
 		if guards := countInlineIsinstanceRaiseGuards(body); guards >= 4 {
 			out = append(out, fmt.Sprintf("%s:%d: function %s contains %d inline 'if not isinstance(...): raise' guards; validate input schema once at boundary instead of repeating inline type-guard ladders", relPath, i+1, m[2], guards))
 		}
-		if chainLine, runLen, varName := findConsecutiveIfEqChain(body, i+2); runLen > 0 {
-			out = append(out, fmt.Sprintf("%s:%d: %d consecutive 'if %s ==' checks at same indent without elif or dispatch table; use elif, match, or a lookup dict", relPath, chainLine, runLen, varName))
+		for _, chain := range findConsecutiveBranchChains(body, i+2) {
+			out = append(out, fmt.Sprintf("%s:%d: %d %s at same indent without elif or dispatch table; use elif, match, or a lookup dict", relPath, chain.startLine, chain.length, chain.label))
 		}
 	}
 	return out

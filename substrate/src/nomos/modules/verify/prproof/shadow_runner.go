@@ -104,7 +104,7 @@ func runShadowGoTestPasses(shadowDir, pkgRel string) bool {
 
 func isSkippedShadowDir(name string) bool {
 	switch name {
-	case ".git", "worktrees", "node_modules", ".tmp", "dist", "build":
+	case ".git", "worktrees", "node_modules", ".tmp", "dist", "build", ".venv", "venv", "site-packages", "__pycache__":
 		return true
 	default:
 		return false

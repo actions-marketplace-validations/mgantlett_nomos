@@ -171,4 +171,42 @@ def run_cli(args):
 			t.Fatalf("expected 512-file limit to count m4.py caller and produce 0 hits, got %v", fullHits)
 		}
 	})
+
+	t.Run("Returning3BranchChainAndDeadClassMethodAndComprehensionWrapper", func(t *testing.T) {
+		slopPy := `class Parser:
+    def ident(self, msg):
+        return msg
+
+    def alias(self):
+        return self.ident("Expected alias")
+
+def _comp_a(xs): return [x for x in xs if x]
+def _comp_b(xs): return "a" if xs else "b"
+def _comp_c(xs): return [y + 1 for y in xs]
+
+def dispatch(kind, v):
+    if kind == "a": return 1
+    if kind == "b": return 2
+    if kind == "c": return 3
+    if isinstance(v, bool):
+        return ("b", v)
+    if isinstance(v, int):
+        return ("i", v)
+    if isinstance(v, str):
+        return ("s", v)
+    return _comp_a([1]) + _comp_b(1) + _comp_c([1])
+`
+		hits := DetectPolyglotDesignSlop(t.TempDir(), map[string][]byte{"parser.py": []byte(slopPy)})
+		joined := strings.Join(hits, "\n")
+		for _, want := range []string{
+			`dead pass-through method "alias"`,
+			"excessive trivial wrapper fragmentation",
+			"consecutive 'if kind ==' checks",
+			"consecutive 'if isinstance(v, ...)' checks",
+		} {
+			if !strings.Contains(joined, want) {
+				t.Fatalf("expected %q in hits:\n%s", want, joined)
+			}
+		}
+	})
 }

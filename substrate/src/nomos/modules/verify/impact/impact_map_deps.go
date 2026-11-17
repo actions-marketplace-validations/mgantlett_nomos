@@ -213,7 +213,7 @@ func HasInlineRustTestModule(absPath string) bool {
 func IsSkippableSecurityDir(name string) bool {
 	skip := map[string]bool{
 		".git": true, "node_modules": true, ".tmp": true, "worktrees": true,
-		"vendor": true, ".venv": true, "dist": true, "__pycache__": true,
+		"vendor": true, ".venv": true, "venv": true, "site-packages": true, "dist": true, "__pycache__": true,
 		".svelte-kit": true, ".next": true, ".nuxt": true, ".output": true,
 		".turbo": true, ".parcel-cache": true, ".vitepress": true,
 	}
@@ -223,7 +223,7 @@ func IsSkippableSecurityDir(name string) bool {
 // IsSkippedObligationDir executes deterministic impact verification logic (@intent nomos_intent_traceability_spec.md).
 func IsSkippedObligationDir(name string) bool {
 	switch name {
-	case ".git", "node_modules", "worktrees", "vendor", ".svelte-kit", "dist", "build", "intent":
+	case ".git", "node_modules", "worktrees", "vendor", ".venv", "venv", "site-packages", "__pycache__", ".svelte-kit", "dist", "build", "intent":
 		return true
 	default:
 		return false

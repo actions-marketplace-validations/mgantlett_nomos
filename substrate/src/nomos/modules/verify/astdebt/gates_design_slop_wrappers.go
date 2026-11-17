@@ -16,9 +16,15 @@ const (
 )
 
 var (
-	pyTopDefRe            = regexp.MustCompile(`^(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(`)
-	pyBranchKeywordRe     = regexp.MustCompile(`\b(?:if|else|for|while)\b`)
-	pyFossilNoteRe        = regexp.MustCompile(`(?i)\b(?:compatibility|backwards?[- ]compatible|legacy|deprecated|checkpoint)\b`)
+	pyTopDefRe               = regexp.MustCompile(`^(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(`)
+	pyClassMethodDefRe       = regexp.MustCompile(`^([ \t]+)(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*self\b`)
+	pyFossilNoteRe           = regexp.MustCompile(`(?i)\b(?:compatibility|backwards?[- ]compatible|legacy|deprecated|checkpoint)\b`)
+	excludedClassMethodNames = map[string]bool{
+		"default": true, "format": true, "read": true, "write": true, "close": true,
+		"get": true, "set": true, "keys": true, "items": true, "values": true,
+		"copy": true, "reset": true, "run": true, "parse": true, "execute": true,
+		"main": true, "to_dict": true, "from_dict": true, "peek": true, "clear": true,
+	}
 	designSlopCorpusExts  = map[string]bool{ExtPy: true, ExtJS: true, ExtJSX: true, ExtTS: true, ExtTSX: true}
 	designSlopSkipDirName = map[string]bool{
 		".git": true, ".venv": true, "venv": true, "node_modules": true,
@@ -148,7 +154,54 @@ func scanPythonFileWrappers(relPath, text string, corpusCounts map[string]int) [
 	if len(trivialSingles) >= 3 {
 		out = append(out, fmt.Sprintf("%s: excessive trivial wrapper fragmentation (%d single-use 1-line return helpers: %s); inline 1-line single-caller wrappers instead of fragmenting module (Law 6)", relPath, len(trivialSingles), strings.Join(trivialSingles, ", ")))
 	}
+	return append(out, scanPythonDeadClassMethods(relPath, text, corpusCounts)...)
+}
+
+func scanPythonDeadClassMethods(relPath, text string, corpusCounts map[string]int) []string {
+	lines := strings.Split(text, "\n")
+	var out []string
+	for i := 0; i < len(lines); i++ {
+		msg, nextIdx := checkClassMethodBlockAt(relPath, lines, i, corpusCounts)
+		if msg != "" {
+			out = append(out, msg)
+		}
+		i = nextIdx
+	}
 	return out
+}
+
+func checkClassMethodBlockAt(relPath string, lines []string, i int, corpusCounts map[string]int) (string, int) {
+	m := pyClassMethodDefRe.FindStringSubmatchIndex(lines[i])
+	if len(m) != 6 {
+		return "", i
+	}
+	indent := countLeadingIndentCols(lines[i][m[2]:m[3]])
+	name := lines[i][m[4]:m[5]]
+	end := findPythonBlockEnd(lines, i+1, indent)
+	if isSkippableClassMethod(name) {
+		return "", end - 1
+	}
+	decorated, leadFossil := inspectPrecedingDefMeta(lines, i)
+	if decorated {
+		return "", end - 1
+	}
+	body := lines[i+1 : end]
+	execLines, bodyFossil := extractPythonExecBodyInfo(body)
+	hasSingleReturn := len(execLines) == 1 && strings.HasPrefix(execLines[0], "return ")
+	if !hasSingleReturn || (!strings.Contains(execLines[0], "(") && !leadFossil && !bodyFossil) {
+		return "", end - 1
+	}
+	extRefs := corpusCounts[name] - (countWordInLines(name, body) + 1)
+	if extRefs <= 0 {
+		return fmt.Sprintf("%s:%d: dead pass-through method %q has 0 callers (checkpoint fossil); inline call at callsite (Law 6)", relPath, i+1, name), end - 1
+	}
+	return "", end - 1
+}
+
+func isSkippableClassMethod(name string) bool {
+	return (strings.HasPrefix(name, "__") && strings.HasSuffix(name, "__")) ||
+		strings.HasPrefix(name, "visit_") ||
+		excludedClassMethodNames[name]
 }
 
 func isSkippablePyWrapper(fn pyFuncBlock) bool {
@@ -160,7 +213,7 @@ func classifyTrivialTopWrapper(fn pyFuncBlock, corpusCounts map[string]int) (boo
 		return false, false
 	}
 	execLines, bodyFossil := extractPythonExecBodyInfo(fn.bodyLines)
-	if len(execLines) != 1 || !strings.HasPrefix(execLines[0], "return ") || pyBranchKeywordRe.MatchString(execLines[0]) {
+	if len(execLines) != 1 || !strings.HasPrefix(execLines[0], "return ") {
 		return false, false
 	}
 	extRefs := corpusCounts[fn.name] - (countWordInLines(fn.name, fn.bodyLines) + 1)

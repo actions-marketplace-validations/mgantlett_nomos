@@ -99,7 +99,7 @@ func findCodebaseGoFiles(root string) []string {
 		}
 		if info.IsDir() {
 			name := info.Name()
-			if strings.HasPrefix(name, ".") || name == "worktrees" || name == "vendor" || name == "node_modules" {
+			if strings.HasPrefix(name, ".") || name == "worktrees" || name == "vendor" || name == "node_modules" || name == "venv" || name == "site-packages" || name == "__pycache__" {
 				return filepath.SkipDir
 			}
 			return nil

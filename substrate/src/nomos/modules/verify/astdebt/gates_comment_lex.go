@@ -1,7 +1,10 @@
 // Package astdebt provides comment-only lexical extractors and same-variable branch-chain scanners.
 package astdebt
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 type pyHashScanState struct {
 	docDelim string
@@ -154,15 +157,16 @@ func (c *slashCommentCursor) stepCodeToken(line string, idx int, ch byte) (int, 
 }
 
 type ifChainRun struct {
-	indent          int
-	varName         string
-	startLine       int
-	length          int
-	hasNonReturning bool
+	indent    int
+	chainKey  string
+	label     string
+	startLine int
+	length    int
 }
 
-func findConsecutiveIfEqChain(body []string, startLineBase int) (int, int, string) {
+func findConsecutiveBranchChains(body []string, startLineBase int) []ifChainRun {
 	var cur *ifChainRun
+	var chains []ifChainRun
 	for i := 0; i < len(body); i++ {
 		trimmed := strings.TrimSpace(body[i])
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
@@ -174,31 +178,39 @@ func findConsecutiveIfEqChain(body []string, startLineBase int) (int, int, strin
 		}
 		next, nextIdx, found := stepIfChainLine(body, i, indent, trimmed, startLineBase, cur)
 		if found != nil {
-			return found.startLine, found.length, found.varName
+			chains = append(chains, *found)
 		}
 		cur = next
 		i = nextIdx
 	}
 	if isFlaggedIfChain(cur) {
-		return cur.startLine, cur.length, cur.varName
+		chains = append(chains, *cur)
 	}
-	return 0, 0, ""
+	return chains
+}
+
+func matchSameVarBranchHeader(line string) (string, string, bool) {
+	if m := pyIfEqVarRe.FindStringSubmatch(line); len(m) == 3 {
+		return "eq:" + m[2], fmt.Sprintf("consecutive 'if %s ==' checks", m[2]), true
+	}
+	if m := pyIfIsinstanceVarRe.FindStringSubmatch(line); len(m) == 3 {
+		return "is:" + m[2], fmt.Sprintf("consecutive 'if isinstance(%s, ...)' checks", m[2]), true
+	}
+	return "", "", false
 }
 
 func stepIfChainLine(body []string, i, indent int, trimmed string, startLineBase int, cur *ifChainRun) (*ifChainRun, int, *ifChainRun) {
-	if m := pyIfEqVarRe.FindStringSubmatch(body[i]); len(m) == 3 {
+	if key, label, ok := matchSameVarBranchHeader(body[i]); ok {
 		blockEnd := findPythonBlockEnd(body, i+1, indent)
-		nonRet := !pythonIfBlockEndsInJump(body[i:blockEnd])
-		if cur != nil && cur.indent == indent && cur.varName == m[2] {
+		if cur != nil && cur.indent == indent && cur.chainKey == key {
 			cur.length++
-			cur.hasNonReturning = cur.hasNonReturning || nonRet
 			return cur, blockEnd - 1, nil
 		}
 		var flagged *ifChainRun
 		if isFlaggedIfChain(cur) {
 			flagged = cur
 		}
-		return &ifChainRun{indent: indent, varName: m[2], startLine: startLineBase + i, length: 1, hasNonReturning: nonRet}, blockEnd - 1, flagged
+		return &ifChainRun{indent: indent, chainKey: key, label: label, startLine: startLineBase + i, length: 1}, blockEnd - 1, flagged
 	}
 	if cur != nil && indent == cur.indent && pyElseOrElifPrefixRe.MatchString(trimmed) {
 		return nil, findPythonBlockEnd(body, i+1, indent) - 1, nil
@@ -210,7 +222,7 @@ func stepIfChainLine(body []string, i, indent int, trimmed string, startLineBase
 }
 
 func isFlaggedIfChain(cur *ifChainRun) bool {
-	return cur != nil && (cur.length >= 4 || (cur.length >= 3 && cur.hasNonReturning))
+	return cur != nil && cur.length >= 3
 }
 
 func pythonIfBlockEndsInJump(block []string) bool {

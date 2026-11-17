@@ -26,6 +26,14 @@ var defaultIntermediateDirs = []string{
 	".svelte-kit",
 	".vitepress",
 	"cache",
+	".venv",
+	"venv",
+	"site-packages",
+	"__pycache__",
+	".pytest_cache",
+	".mypy_cache",
+	".ruff_cache",
+	".tox",
 }
 
 // IsDefaultIntermediateDir checks if a directory name matches standard engine or dependency build trees.

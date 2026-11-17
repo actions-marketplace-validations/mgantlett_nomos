@@ -14,11 +14,12 @@ import (
 )
 
 const (
-	hookDecisionBlock    = "block"
-	hookDecisionContinue = "continue"
-	agyNormalStopReason  = "NO_TOOL_CALL"
-	maxStopAuditFiles    = 128
-	containerAppWorkdir  = "/app"
+	hookDecisionBlock      = "block"
+	hookDecisionContinue   = "continue"
+	agyNormalStopReason    = "NO_TOOL_CALL"
+	maxStopAuditFiles      = 128
+	maxContainerStopBlocks = 4
+	containerAppWorkdir    = "/app"
 )
 
 var skippedStopAuditDirs = map[string]bool{
@@ -64,46 +65,62 @@ func newHookStopCmd(hermeticDir *string, containerSandbox *bool) *cobra.Command 
 }
 
 // EvaluateStopHook blocks premature agent turn exits when an active worktree holds
-// unverified file modifications or when container-sandbox files fail syntax/snooping checks.
+// unverified file modifications or when container-sandbox files fail syntax/snooping checks
+// (@intent nomos_hermetic_worktree_spec.md).
 func EvaluateStopHook(p *HookPayload, hermeticDir string, containerSandbox bool) HookDecision {
-	if p == nil || p.StopHookActive {
+	if p == nil || (!containerSandbox && p.StopHookActive) {
 		return HookDecision{Decision: hookDecisionAllow}
 	}
 	if p.TerminationReason != "" && p.TerminationReason != agyNormalStopReason {
 		return HookDecision{Decision: hookDecisionAllow}
 	}
-	if containerSandbox && hermeticDir == "" {
+	if containerSandbox && hermeticDir == "" && !p.StopHookActive {
 		if dec := evaluateContainerStopHook(p); dec.Decision == hookDecisionBlock {
 			return dec
 		}
 	}
+	return evaluateTracedStopHook(p, hermeticDir, containerSandbox)
+}
+
+func evaluateTracedStopHook(p *HookPayload, hermeticDir string, containerSandbox bool) HookDecision {
 	traceKey, wsRoot, branchLabel := resolveTraceScopeAndWorkspace(p, hermeticDir)
 	if traceKey == "" {
 		return HookDecision{Decision: hookDecisionAllow}
 	}
 	tr := loadOrSyncStopTrace(traceKey, wsRoot)
-	if tr == nil || len(tr.MutatedFiles) == 0 {
+	if tr == nil || len(tr.MutatedFiles) == 0 || !tr.DirtyUnverifiedEdits {
 		return HookDecision{Decision: hookDecisionAllow}
 	}
-	if tr.DirtyUnverifiedEdits || tr.UnverifiedCalls > 0 {
-		if branchLabel != "" {
-			return HookDecision{
-				Decision: hookDecisionBlock,
-				Reason: fmt.Sprintf(
-					"❌ [Nomos Anti-Phantom Gate] Active branch '%s' has %d modified file(s) without a clean post-edit verification pass. Run 'nomos verify' before ending your turn (Law 2).",
-					branchLabel, len(tr.MutatedFiles),
-				),
-			}
-		}
-		return HookDecision{
-			Decision: hookDecisionBlock,
-			Reason: fmt.Sprintf(
-				"❌ [Nomos Anti-Phantom Gate] Active worktree '%s' has %d modified file(s) without a clean post-edit verification pass. Run 'nomos verify' inside the worktree before ending your turn (Law 2).",
-				filepath.Base(wsRoot), len(tr.MutatedFiles),
-			),
-		}
+	if p.StopHookActive && tr.StopBlockStrikes >= maxContainerStopBlocks {
+		return HookDecision{Decision: hookDecisionAllow}
 	}
-	return HookDecision{Decision: hookDecisionAllow}
+	tr.StopBlockStrikes++
+	if path := resolveTraceStateFilePath(traceKey); path != "" {
+		saveHookSessionTrace(path, *tr)
+	}
+	radarNote := collectStopInlineRadarSummary(wsRoot, tr.MutatedFiles)
+	return buildUnverifiedStopDecision(wsRoot, branchLabel, len(tr.MutatedFiles), tr.StopBlockStrikes, containerSandbox, radarNote)
+}
+
+func buildUnverifiedStopDecision(wsRoot, branchLabel string, fileCount, strike int, containerSandbox bool, radarNote string) HookDecision {
+	strikePrefix := "❌ [Nomos Anti-Phantom Gate]"
+	if containerSandbox {
+		strikePrefix = fmt.Sprintf("❌ [Nomos Anti-Phantom Gate (attempt %d/%d)]", strike, maxContainerStopBlocks)
+	}
+	reason := fmt.Sprintf(
+		"%s Active worktree '%s' has %d modified file(s) without a clean post-edit verification pass. Run 'nomos verify' inside the worktree before ending your turn (Law 2).",
+		strikePrefix, filepath.Base(wsRoot), fileCount,
+	)
+	if branchLabel != "" {
+		reason = fmt.Sprintf(
+			"%s Active branch '%s' has %d modified file(s) without a clean post-edit verification pass. Run 'nomos verify' before ending your turn (Law 2).",
+			strikePrefix, branchLabel, fileCount,
+		)
+	}
+	if radarNote != "" {
+		reason += "\n" + radarNote
+	}
+	return HookDecision{Decision: hookDecisionBlock, Reason: reason}
 }
 
 func evaluateContainerStopHook(p *HookPayload) HookDecision {

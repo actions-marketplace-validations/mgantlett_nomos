@@ -55,7 +55,7 @@ func isSkippedTDDDirName(name string, skipCmdDir bool) bool {
 		return true
 	}
 	switch name {
-	case "testdata", "vendor", "node_modules":
+	case "testdata", "vendor", "node_modules", "venv", "site-packages", "__pycache__":
 		return true
 	case "cmd":
 		return skipCmdDir
