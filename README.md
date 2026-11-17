@@ -169,6 +169,7 @@ nomos init --worktrees
 | :--- | :--- | :--- |
 | **Workhorse Brownfield Lift (`N = 108` Paired)** | **`86.1%` (`31/36`) vs. `27.8%` Stock (`3.1x` lift) · `-43%` to `-57%` Tokens** | `14B-32B` models across Python/TS/Go; `100%` hexagonal purity vs. `0%` Stock ([`cleanroom_obligation_polyglot_stress_test.go`](substrate/cli/cleanroom_obligation_polyglot_stress_test.go)) |
 | **Prompt-Injection & Security (`1,481` Traces)** | **`0.00%` ASR (`0/949` `AgentDojo` · `0/200` `SecBench-Live`) · `85.04%` UA** | Official `AgentDojo v1.2.2` (`-0.53 pp` benign delta) + 4-model `SecBench-Live 1.0` (`-2.6%` turns, [Dispatch D-11](https://sophialabs.ca/dispatches/paired-security-and-brownfield-ablation-v417)) |
+| **CLI Harness Security ([`HarnessSecurity-Bench`](https://arxiv.org/abs/2610.07639))** | **`13.0%` ASR (`3/23`) vs. `60.9%` Control (`14/23`) · `-35.2%` Cost** | `46` paired `Claude Code 2.1.252 + Sonnet 5.5` containers across `9` mechanisms (`92.0%` non-`ro` utility, [Dispatch D-14](https://sophialabs.ca/dispatches/harness-security-bench-paired-audit)) |
 | **`233k`-LOC Mature OSS Brownfield Ratchet** | **`6/6` `42`-Gate Clean · `2x` Debt-Free · `-14.7%` Tokens** | Zero-hint refactors across `sqlglot` (`152k` LOC), `commander.js`, `go-chi`, and `BurntSushi/toml` (blocked `+26` hidden complexity debt) |
 | **`Terminal-Bench 2.0` (`k=5` · `445` Docker Runs)** | **`76.40%` `Pass@1` (`340/445`) · `92.13%` `Pass@5` (`82/89` Tasks)** | Lightweight `Gemini Flash` across `89` tasks (`91.20%` cached tokens, [`nomos-harbor`](https://github.com/mgantlett/nomos-harbor)) |
 | **Footprint & Gate Latency** | **`~20 MB` binary (`CGO_ENABLED=0`) · `~4ms` hook · `~24ms` `--fast-file`** | `860+` automated tests across `16` packages + `7/7` adversarial fail-closed vectors ([`cleanroom_tracetrial_bench_test.go`](substrate/cli/cleanroom_tracetrial_bench_test.go)) |
@@ -191,12 +192,13 @@ Across `108` paired zero-hint brownfield episodes (`54` Stock vs. `54` Nomos `v4
 | **`Qwen 3.8 27B IQ3_M`** (`Local RTX 4080 16GB`) | `50.0%` (`3/6`) | `0.0%` (`0/3`) | **`100.0%` (`6/6`)** | **`100%` (`3/3`)** | **`+50.0` pp** (`-43%` to `-57%` tokens) |
 | **`Qwen 3 32B`** (`Alibaba · 24GB`) | `22.2%` (`2/9`) | `0.0%` (`0/3`) | **`88.9%` (`8/9`)** | **`100%` (`3/3`)** | **`+66.7` pp** (`4.0x` lift) |
 
-#### 2. Zero-Trust Security & Real-Repo OSS Debt Containment (`1,541` Live Trajectories)
+#### 2. Zero-Trust Security & Real-Repo OSS Debt Containment (`1,587` Live Trajectories)
 
-| Benchmark Suite | Scale & Corpus | Ungoverned `Control` | `Nomos v4.17.0` Governed | Efficiency / Utility Delta |
+| Benchmark Suite | Scale & Corpus | Ungoverned `Control` | `Nomos v4.17.0+` Governed | Efficiency / Utility Delta |
 | :--- | :--- | :---: | :---: | :--- |
 | **Official `AgentDojo v1.2.2` (`4` Suites)** | `1,081` runs (`132` benign + `949` indirect prompt-injection tasks, `sha256:e0847020a2f5`) | Indirect tool-hijack exposure | **`0.00%` ASR (`0/949`) · `85.04%` UA** | Only **`-0.53 pp`** vs. `85.57%` Benign (`0` lockouts) |
 | **4-Model `SecBench-Live 1.0` (Rounds 1 - 5)** | `400` runs (`Claude Sonnet 5.5`, `Haiku 5.5`, `Gemini 3.8 Flash`, `Qwen 3.8 27B`, `sha256:7f671df45ed9`) | `9.0%` ASR (`18/200` compromised) | **`0.00%` ASR (`0/200`) · `92.5%` Utility** | **`-2.6%` fewer turns** (`304` -> `296` in Round 5) |
+| **[`HarnessSecurity-Bench`](https://github.com/TsingPig/HarnessSecurity-Benchmark) (`arXiv:2610.07639`)** | `46` containers (`23` tasks across `9` CLI mechanisms on `Claude Code 2.1.252 + Sonnet 5.5`) | `60.9%` ASR (`14/23` · `21/31` actions · `$3.88`) | **`13.0%` ASR (`3/23` · `3/31` actions) · `92.0%` Non-`ro` Utility** | **`-78.6%` relative ASR cut · `-35.2%` API spend** (`$2.52`, `1,234.2s` vs. `3,016.7s`) |
 | **`RealRepo-BrownfieldBench v2` (`233k` LOC)** | Zero-file-hint refactors across `sqlglot`, `commander.js`, `go-chi`, `BurntSushi/toml` | Leaked **`+26` `dCDS`** structural debt (`16.7%` clean) | **`6/6` `42`-gate clean · `2x` Debt-Free (`33.3%`)** | **`-14.7%` fewer tokens** (`1.58M` -> `1.35M`) |
 
 #### 3. `Terminal-Bench 2.0` Harbor Hub Trajectories & `TraceTrial-Bench` (`arXiv:2610.32285`)
