@@ -413,6 +413,7 @@ func FormatPRProofMarkdown(receipt *PRProofReceipt) string
 10. **Scratch Regression Suite Discovery (`TC-COV-005`):**
    - `TDDGate`, `PolyglotToolchainGate`, and `CoverageGate` discover `.tmp/tests/` suites alongside `tests/` and include `requirements.txt` in manifest checks.
    - Python runners pass `.tmp/tests` explicitly to `pytest` and `unittest` so untracked suites enforce `>= 80%` statement coverage.
+   - When Git scope contains modified Python sources, `CoverageGate` measures trace coverage strictly across modified non-test Python files.
 
 ---
 
