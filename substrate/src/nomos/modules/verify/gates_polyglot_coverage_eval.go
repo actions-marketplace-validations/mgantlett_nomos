@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -32,12 +33,16 @@ def collect_exec_lines(code_obj, out):
     for c in code_obj.co_consts:
         if hasattr(c, "co_lines"):
             collect_exec_lines(c, out)
-py_files = []
-for dp, dn, fn in os.walk(root):
-    dn[:] = [d for d in dn if not d.startswith(".") and d not in ("venv", ".venv", "node_modules", "tests", "test", "worktrees")]
-    for f in fn:
-        if f.endswith(".py") and not f.startswith("test_") and not f.endswith("_test.py"):
-            py_files.append(os.path.abspath(os.path.join(dp, f)))
+env_files = [os.path.abspath(p) for p in os.environ.get("NOMOS_PY_TRACE_FILES", "").splitlines() if p.strip()]
+if env_files:
+    py_files = [p for p in env_files if os.path.isfile(p)]
+else:
+    py_files = []
+    for dp, dn, fn in os.walk(root):
+        dn[:] = [d for d in dn if not d.startswith(".") and d not in ("venv", ".venv", "node_modules", "tests", "test", "worktrees")]
+        for f in fn:
+            if f.endswith(".py") and not f.startswith("test_") and not f.endswith("_test.py"):
+                py_files.append(os.path.abspath(os.path.join(dp, f)))
 if not py_files or len(py_files) > 60:
     sys.exit(0)
 def run_suite():
@@ -284,10 +289,14 @@ func runPythonStdlibCoverage(ctx *vscope.VerifyContext, root string) (float64, s
 	cmdCtx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
+	env := []string{polyrun.EnvPyNoBytecodeKV, polyrun.EnvToolchainGateKV}
+	if scopedFiles := resolveScopedPythonCoverageFiles(ctx, root); len(scopedFiles) > 0 {
+		env = append(env, "NOMOS_PY_TRACE_FILES="+strings.Join(scopedFiles, "\n"))
+	}
 	args := append([]string{"-B", "-c", pyStdlibTraceRunner, root}, targets...)
 	cmd := exec.CommandContext(cmdCtx, pyBin, args...)
 	cmd.Dir = root
-	cmd.Env = polyrun.SanitizedToolchainEnv(polyrun.EnvPyNoBytecodeKV, polyrun.EnvToolchainGateKV)
+	cmd.Env = polyrun.SanitizedToolchainEnv(env...)
 	out, runErr := cmd.CombinedOutput()
 	outStr := string(out)
 	if runErr != nil {
@@ -305,4 +314,47 @@ func runPythonStdlibCoverage(ctx *vscope.VerifyContext, root string) (float64, s
 		}
 	}
 	return 0, "", ""
+}
+
+func resolveScopedPythonCoverageFiles(ctx *vscope.VerifyContext, root string) []string {
+	hasGit := vscope.HasGitMetadata(root) || (ctx != nil && vscope.HasGitMetadata(ctx.RepoRoot))
+	if !hasGit {
+		return nil
+	}
+	modified := vscope.GetModifiedFilesInScope(ctx, root)
+	if len(modified) == 0 {
+		return nil
+	}
+	var out []string
+	for _, rel := range modified {
+		if isSkippedPyCoverageRel(rel) {
+			continue
+		}
+		absPath := filepath.Join(root, filepath.FromSlash(rel))
+		if info, err := os.Stat(absPath); err == nil && !info.IsDir() {
+			if resolved, aErr := filepath.Abs(absPath); aErr == nil {
+				out = append(out, resolved)
+			}
+		}
+	}
+	if len(out) == 0 || len(out) > 60 {
+		return nil
+	}
+	sort.Strings(out)
+	return out
+}
+
+func isSkippedPyCoverageRel(rel string) bool {
+	if !strings.EqualFold(filepath.Ext(rel), astdebt.ExtPy) || isPolyglotTestFilePath(rel) {
+		return true
+	}
+	for _, part := range strings.Split(filepath.ToSlash(filepath.Clean(rel)), "/") {
+		if part == "" || part == "." {
+			continue
+		}
+		if strings.HasPrefix(part, ".") || part == "venv" || part == "node_modules" || part == "site-packages" || part == "__pycache__" || part == "worktrees" {
+			return true
+		}
+	}
+	return false
 }

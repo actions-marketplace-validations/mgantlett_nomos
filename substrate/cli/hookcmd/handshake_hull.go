@@ -34,18 +34,20 @@ var (
 	hullSourceExts = map[string]bool{".py": true, ".ts": true, ".js": true, ".rs": true}
 )
 
-func appendPlainWorkspaceHull(b *strings.Builder, hookRoot string) {
+// @intent nomos_hermetic_worktree_spec.md
+func appendPlainWorkspaceHullWithMode(b *strings.Builder, hookRoot string, containerSandbox bool) {
 	if strings.TrimSpace(hookRoot) == "" {
 		return
 	}
 	if deps := discoverManifestDeps(hookRoot); len(deps) > 0 {
 		b.WriteString(fmt.Sprintf("  Manifest Deps     : %s\n", strings.Join(deps, ", ")))
 	}
-	if mods := discoverWorkspaceModuleHull(hookRoot); len(mods) > 0 {
+	mods := discoverWorkspaceModuleHull(hookRoot)
+	if len(mods) > 0 {
 		b.WriteString(fmt.Sprintf("  Workspace Modules : %s\n", strings.Join(mods, ", ")))
-		if !hasWorkspaceAutomatedTests(hookRoot) {
-			b.WriteString("  Regression Suite  : none detected - create stdlib unittest.TestCase tests in .tmp/tests/test_<module>.py so 'nomos verify' enforces >=80% coverage across turns without polluting git\n")
-		}
+	}
+	if (len(mods) > 0 || containerSandbox) && !hasWorkspaceAutomatedTests(hookRoot) {
+		b.WriteString("  Regression Suite  : none detected - create stdlib unittest.TestCase tests in .tmp/tests/test_<module>.py (keeps workspace git-clean while 'nomos verify' enforces >=80% coverage across turns)\n")
 	}
 }
 

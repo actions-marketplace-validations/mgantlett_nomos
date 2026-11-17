@@ -56,7 +56,7 @@ func (g *TDDGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error
 			GateName: g.Name(), ProbeID: "tdd", Law: 2, Ring: RingSyntactic,
 			Passed:  false,
 			Message: fmt.Sprintf("%d package(s) missing unit test suites: %s", len(untested), strings.Join(untested, ", ")),
-			Remedy:  "author table-driven unit tests (*_test.go, stdlib unittest.TestCase in tests/ or untracked .tmp/tests/test_*.py [or pytest when installed], *.test.ts, *_test.rb, #[cfg(test)], *Test.java, *Tests.cs)",
+			Remedy:  "author table-driven unit tests (*_test.go, stdlib unittest.TestCase in .tmp/tests/test_*.py or tests/ [or pytest when installed], *.test.ts, *_test.rb, #[cfg(test)], *Test.java, *Tests.cs)",
 		}, nil
 	}
 	return &vscope.GateResult{

@@ -49,7 +49,7 @@ Reads JSON hook payloads from stdin with zero external jq/bash/python dependenci
 	cmd.PersistentFlags().StringVar(&advFlags.advisoryProfile, "advisory-profile", "", "Model pacing preset: standard or carbon (default standard, env NOMOS_ADVISORY_PROFILE)")
 
 	cmd.AddCommand(
-		newHookSessionStartCmd(&hermeticDir, &budgetSec, rootVersion),
+		newHookSessionStartCmd(&hermeticDir, &containerSandbox, &budgetSec, rootVersion),
 		newHookPreToolCmd(&hermeticDir, &containerSandbox, &budgetSec, &advFlags),
 		newHookPostToolCmd(&hermeticDir, &containerSandbox, &budgetSec, &advFlags),
 		newHookStopCmd(&hermeticDir, &containerSandbox),
@@ -61,7 +61,7 @@ Reads JSON hook payloads from stdin with zero external jq/bash/python dependenci
 	return cmd
 }
 
-func newHookSessionStartCmd(hermeticDir *string, budgetSec *int, rootVersion string) *cobra.Command {
+func newHookSessionStartCmd(hermeticDir *string, containerSandbox *bool, budgetSec *int, rootVersion string) *cobra.Command {
 	return &cobra.Command{
 		Use:     "session-start",
 		Short:   "Execute SessionStart orientation handshake from JSON stdin payload",
@@ -92,7 +92,7 @@ func newHookSessionStartCmd(hermeticDir *string, budgetSec *int, rootVersion str
 				return writeEmptyJSON(cmd.OutOrStdout())
 			}
 
-			banner := FormatPlainHandshakeBannerWithRoot(ev, hookRoot, *hermeticDir == "", rootVersion)
+			banner := formatHandshakeBanner(ev, hookRoot, *hermeticDir == "" && !*containerSandbox, *containerSandbox, rootVersion)
 			if payload.IsCursorEvent {
 				return writeCursorSessionStartResponse(cmd.OutOrStdout(), banner)
 			}
@@ -274,6 +274,10 @@ func FormatPlainHandshakeBanner(ev *handshake.HandshakeEvent) string {
 // FormatPlainHandshakeBannerWithRoot renders a plain-text SessionStart handshake banner with optional drift/update checks.
 // @intent task_lifecycle_cli_spec.md
 func FormatPlainHandshakeBannerWithRoot(ev *handshake.HandshakeEvent, hookRoot string, allowUpdateCheck bool, rootVersion string) string {
+	return formatHandshakeBanner(ev, hookRoot, allowUpdateCheck, false, rootVersion)
+}
+
+func formatHandshakeBanner(ev *handshake.HandshakeEvent, hookRoot string, allowUpdateCheck, containerSandbox bool, rootVersion string) string {
 	var b strings.Builder
 	b.WriteString("🤝 Nomos JIT Session Handshake\n")
 	b.WriteString(fmt.Sprintf("  Active Repository : %s\n", ev.Repository))
@@ -288,7 +292,7 @@ func FormatPlainHandshakeBannerWithRoot(ev *handshake.HandshakeEvent, hookRoot s
 		b.WriteString(fmt.Sprintf("  Ready Wavefront   : [%s]\n", strings.Join(ev.ReadyWavefront, ", ")))
 	}
 	appendPlainUpdateAndDriftAdvisories(&b, hookRoot, allowUpdateCheck, rootVersion)
-	appendPlainWorkspaceHull(&b, hookRoot)
+	appendPlainWorkspaceHullWithMode(&b, hookRoot, containerSandbox)
 	appendPlainTurnZeroTelemetry(&b, ev)
 	return b.String()
 }

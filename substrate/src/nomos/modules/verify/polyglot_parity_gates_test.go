@@ -324,6 +324,16 @@ func TestSwitchableTDDAndCoverageModesAndLiveProbes(t *testing.T) {
 	})
 }
 
+func mustWriteVerifyFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // @verifies TC-COV-005
 func TestScratchTestsDirectoryDiscoveryAndCoverage(t *testing.T) {
 	t.Setenv(polyrun.EnvInToolchainGate, "")
@@ -333,52 +343,55 @@ func TestScratchTestsDirectoryDiscoveryAndCoverage(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "requirements.txt"), []byte("# stdlib only\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "app.py"), []byte("def compute(x):\n    if x > 0:\n        return x * 2\n    return 0\n"), 0644); err != nil {
-		t.Fatal(err)
+	mustWriteVerifyFile(t, filepath.Join(dir, "requirements.txt"), "# stdlib only\n")
+	mustWriteVerifyFile(t, filepath.Join(dir, "app.py"), "def compute(x):\n    if x > 0:\n        return x * 2\n    return 0\n")
+
+	ctx := &vscope.VerifyContext{RepoRoot: dir, WorktreePath: dir, Strict: true}
+	if tddFail, err := (&TDDGate{}).Evaluate(ctx); err != nil || tddFail.Passed {
+		t.Fatalf("expected strict TDDGate to fail on testless requirements.txt repo, got err=%v res=%+v", err, tddFail)
 	}
 
-	tdd := &TDDGate{}
-	tddFail, tddErr := tdd.Evaluate(&vscope.VerifyContext{RepoRoot: dir, WorktreePath: dir, Strict: true})
-	if tddErr != nil || tddFail.Passed {
-		t.Fatalf("expected strict TDDGate to fail on requirements.txt Python repo lacking tests, got err=%v res=%+v", tddErr, tddFail)
-	}
-
-	scratchDir := filepath.Join(dir, ".tmp", "tests")
-	if err := os.MkdirAll(scratchDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	testPath := filepath.Join(scratchDir, "test_app.py")
+	testPath := filepath.Join(dir, ".tmp", "tests", "test_app.py")
 	passSrc := "import unittest\nfrom app import compute\n\nclass AppTest(unittest.TestCase):\n    def test_compute(self):\n        self.assertEqual(compute(3), 6)\n        self.assertEqual(compute(-1), 0)\n"
-	if err := os.WriteFile(testPath, []byte(passSrc), 0644); err != nil {
-		t.Fatal(err)
+	mustWriteVerifyFile(t, testPath, passSrc)
+
+	if tddPass, err := (&TDDGate{}).Evaluate(ctx); err != nil || !tddPass.Passed {
+		t.Fatalf("expected strict TDDGate to pass with .tmp/tests/test_app.py, got err=%v res=%+v", err, tddPass)
+	}
+	if tcRes, err := (&GoToolchainGate{}).Evaluate(ctx); err != nil || !tcRes.Passed || !strings.Contains(tcRes.Message, "Python(") {
+		t.Fatalf("expected GoToolchainGate to run .tmp/tests/test_app.py cleanly, got err=%v res=%+v", err, tcRes)
+	}
+	if covRes, err := (&CoverageGate{}).Evaluate(ctx); err != nil || !covRes.Passed || !strings.Contains(covRes.Message, "Python(trace)") {
+		t.Fatalf("expected CoverageGate Python(trace) >=80%% via .tmp/tests, got err=%v res=%+v", err, covRes)
 	}
 
-	tddPass, tddPassErr := tdd.Evaluate(&vscope.VerifyContext{RepoRoot: dir, WorktreePath: dir, Strict: true})
-	if tddPassErr != nil || !tddPass.Passed {
-		t.Fatalf("expected strict TDDGate to pass with .tmp/tests/test_app.py, got err=%v res=%+v", tddPassErr, tddPass)
+	mustWriteVerifyFile(t, testPath, "import unittest\nfrom app import compute\n\nclass AppTest(unittest.TestCase):\n    def test_fail(self):\n        self.assertEqual(compute(3), 99)\n")
+	if covFail, err := (&CoverageGate{}).Evaluate(ctx); err != nil || covFail.Passed {
+		t.Fatalf("expected CoverageGate to fail on .tmp/tests/test_app.py failure, got err=%v res=%+v", err, covFail)
+	}
+}
+
+// @verifies TC-COV-005
+func TestDiffScopedPythonCoverageIgnoresUntouchedFixtures(t *testing.T) {
+	t.Setenv(polyrun.EnvInToolchainGate, "")
+	t.Setenv(polyrun.EnvSkipToolchainGate, "")
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not installed")
 	}
 
-	tcGate := &GoToolchainGate{}
-	tcRes, tcErr := tcGate.Evaluate(&vscope.VerifyContext{RepoRoot: dir, WorktreePath: dir, Strict: true})
-	if tcErr != nil || !tcRes.Passed || !strings.Contains(tcRes.Message, "Python(") {
-		t.Fatalf("expected GoToolchainGate to run .tmp/tests/test_app.py cleanly, got err=%v res=%+v", tcErr, tcRes)
+	gitRepo := initTestGitRepo(t)
+	mustWriteVerifyFile(t, filepath.Join(gitRepo, "nomos.yaml"), "project: scb-file-backup\ndefault_branch: main\ngovernance:\n  quality_gates:\n    strict_mode: true\n")
+	mustWriteVerifyFile(t, filepath.Join(gitRepo, "files", "sample_fixture.py"), "def unused_fixture_fn():\n"+strings.Repeat("    x = 1\n", 500)+"    return x\n")
+	commitAllTestGit(t, gitRepo, "chore: baseline fixture")
+	if out, err := workspace.SafeGitCommand(gitRepo, "checkout", "-b", "feat/scb").CombinedOutput(); err != nil {
+		t.Fatalf("git checkout -b feat/scb: %v (%s)", err, string(out))
 	}
+	mustWriteVerifyFile(t, filepath.Join(gitRepo, "app.py"), "def compute(x):\n    if x > 0:\n        return x * 2\n    return 0\n")
+	passSrc := "import unittest\nfrom app import compute\n\nclass AppTest(unittest.TestCase):\n    def test_compute(self):\n        self.assertEqual(compute(3), 6)\n        self.assertEqual(compute(-1), 0)\n"
+	mustWriteVerifyFile(t, filepath.Join(gitRepo, ".tmp", "tests", "test_app.py"), passSrc)
 
-	covGate := &CoverageGate{}
-	covRes, covErr := covGate.Evaluate(&vscope.VerifyContext{RepoRoot: dir, WorktreePath: dir, Strict: true})
-	if covErr != nil || !covRes.Passed || !strings.Contains(covRes.Message, "Python(trace)") {
-		t.Fatalf("expected CoverageGate Python(trace) >=80%% via .tmp/tests, got err=%v res=%+v", covErr, covRes)
-	}
-
-	failSrc := "import unittest\nfrom app import compute\n\nclass AppTest(unittest.TestCase):\n    def test_fail(self):\n        self.assertEqual(compute(3), 99)\n"
-	if err := os.WriteFile(testPath, []byte(failSrc), 0644); err != nil {
-		t.Fatal(err)
-	}
-	covFail, covFailErr := covGate.Evaluate(&vscope.VerifyContext{RepoRoot: dir, WorktreePath: dir, Strict: true})
-	if covFailErr != nil || covFail.Passed {
-		t.Fatalf("expected CoverageGate to fail when .tmp/tests/test_app.py assertion fails, got err=%v res=%+v", covFailErr, covFail)
+	scopedCov, err := (&CoverageGate{}).Evaluate(&vscope.VerifyContext{RepoRoot: gitRepo, WorktreePath: gitRepo, Strict: true})
+	if err != nil || !scopedCov.Passed || !strings.Contains(scopedCov.Message, "100.0%") {
+		t.Fatalf("expected diff-scoped Python(trace) 100.0%% ignoring untouched baseline files/sample_fixture.py, got err=%v res=%+v", err, scopedCov)
 	}
 }

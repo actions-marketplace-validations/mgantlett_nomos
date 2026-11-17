@@ -248,4 +248,16 @@ func TestBehavioralStopGate_AndTestlessHandshakeGuidance(t *testing.T) {
 	if strings.Contains(testedBanner, "Regression Suite  : none detected") {
 		t.Fatalf("expected Regression Suite guidance suppressed once .tmp/tests/test_etl.py exists, got:\n%s", testedBanner)
 	}
+
+	emptyDir := setupBranchGuardTestRepo(t)
+	if out, err := workspace.SafeGitCommand(emptyDir, "checkout", "-b", "feat/empty").CombinedOutput(); err != nil {
+		t.Fatalf("git checkout feat/empty: %v (%s)", err, string(out))
+	}
+	turnZeroOut := executeHookCmd(t, []string{"session-start", "--container-sandbox"}, map[string]any{
+		"hook_event_name": "SessionStart",
+		"cwd":             emptyDir,
+	})
+	if !strings.Contains(turnZeroOut, "Regression Suite  : none detected") || !strings.Contains(turnZeroOut, ".tmp/tests/test_") {
+		t.Fatalf("expected --container-sandbox Turn-0 SessionStart on empty repo to emit .tmp/tests/ guidance, got:\n%s", turnZeroOut)
+	}
 }
