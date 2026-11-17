@@ -268,8 +268,12 @@ func BuildEvaluationReport(filePath string, totalLines int, funcs []FunctionMetr
 	if cds > thresh.MaxCDS || totalLines > thresh.MaxFileLOC || len(emptyBlocks) > 0 {
 		passed = false
 	}
+	effMaxComp := thresh.MaxComplexity
+	if !strings.EqualFold(filepath.Ext(filePath), ".go") && effMaxComp == 15 {
+		effMaxComp = 10
+	}
 	for _, fn := range funcs {
-		if fn.Complexity > thresh.MaxComplexity || fn.LOC > thresh.MaxFuncLOC {
+		if fn.Complexity > effMaxComp || fn.LOC > thresh.MaxFuncLOC {
 			passed = false
 			break
 		}

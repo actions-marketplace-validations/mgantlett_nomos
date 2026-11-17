@@ -227,7 +227,28 @@ func ResolveScopedPytestTargets(ctx *vscope.VerifyContext, root string) ([]strin
 	if len(targets) == 0 {
 		return nil, false
 	}
-	return targets, true
+	return appendUniquePyTargets(targets, scratch), true
+}
+
+func appendUniquePyTargets(targets, extra []string) []string {
+	if len(extra) == 0 {
+		return targets
+	}
+	seen := make(map[string]bool, len(targets)+len(extra))
+	out := make([]string, 0, len(targets)+len(extra))
+	for _, t := range targets {
+		if !seen[t] {
+			seen[t] = true
+			out = append(out, t)
+		}
+	}
+	for _, e := range extra {
+		if !seen[e] {
+			seen[e] = true
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 func collectBrownfieldPyTargets(root string, modified []string) []string {
@@ -261,6 +282,7 @@ func addPairedPyCandidates(root, rel, stem string, targets map[string]struct{}) 
 		filepath.Join(".tmp", astdebt.DirTests, astdebt.PrefixPyTest+stem+astdebt.ExtPy),
 		filepath.Join(".tmp", astdebt.DirTests, stem+astdebt.SuffixPyTest),
 		filepath.Join(".tmp", astdebt.DirTest, astdebt.PrefixPyTest+stem+astdebt.ExtPy),
+		filepath.Join(".tmp", astdebt.DirTest, stem+astdebt.SuffixPyTest),
 		filepath.Join(filepath.Dir(rel), astdebt.PrefixPyTest+stem+astdebt.ExtPy),
 	} {
 		if _, err := os.Stat(filepath.Join(root, cand)); err == nil {

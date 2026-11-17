@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/mgantlett/nomos/substrate/src/nomos/core/types"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/handshake"
 )
 
@@ -90,6 +91,10 @@ func appendPlainBoundedList(b *strings.Builder, label, icon string, items []stri
 // appendPlainTurnZeroTelemetry injects deterministic AST impact, Mneme dead-ends/pitfalls,
 // verified blueprints, and HATEOAS next actions into the Turn-0 SessionStart prefix cache.
 func appendPlainTurnZeroTelemetry(b *strings.Builder, ev *handshake.HandshakeEvent) {
+	appendPlainTurnZeroTelemetryWithMode(b, ev, false)
+}
+
+func appendPlainTurnZeroTelemetryWithMode(b *strings.Builder, ev *handshake.HandshakeEvent, containerSandbox bool) {
 	if ev == nil {
 		return
 	}
@@ -106,10 +111,22 @@ func appendPlainTurnZeroTelemetry(b *strings.Builder, ev *handshake.HandshakeEve
 	}
 	appendPlainBoundedList(b, "Learned Pitfalls", "⚡", ev.LearnedPitfalls, 3)
 	appendPlainBoundedList(b, "Verified Patterns", "🧩", ev.VerifiedPatterns, 2)
-	if len(ev.NextActions) > 0 {
-		b.WriteString("  Next Actions      :\n")
-		for _, act := range ev.NextActions {
-			b.WriteString(fmt.Sprintf("    → %s (%s)\n", act.Command, act.Summary))
+	appendPlainNextActions(b, ev.NextActions, containerSandbox)
+}
+
+func appendPlainNextActions(b *strings.Builder, actions []types.ActionAffordance, containerSandbox bool) {
+	var filtered []types.ActionAffordance
+	for _, act := range actions {
+		if containerSandbox && strings.HasPrefix(strings.TrimSpace(act.Command), "git commit") {
+			continue
 		}
+		filtered = append(filtered, act)
+	}
+	if len(filtered) == 0 {
+		return
+	}
+	b.WriteString("  Next Actions      :\n")
+	for _, act := range filtered {
+		b.WriteString(fmt.Sprintf("    → %s (%s)\n", act.Command, act.Summary))
 	}
 }

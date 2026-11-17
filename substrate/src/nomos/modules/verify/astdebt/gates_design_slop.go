@@ -10,9 +10,14 @@ import (
 	"strings"
 )
 
+const (
+	minInlineIsinstanceGuardsFunc   = 3
+	minInlineIsinstanceGuardsModule = 5
+	minInlineRaiseGuardsFunc        = 4
+)
+
 var (
 	pyAnyDefRe           = regexp.MustCompile(`^(\s*)(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(`)
-	pyIsinstanceIfRe     = regexp.MustCompile(`^if\s+not\s+isinstance\s*\(`)
 	pyIfEqVarRe          = regexp.MustCompile(`^(\s*)if\s+([A-Za-z_][A-Za-z0-9_\.]*)\s*==\s*`)
 	pyIfIsinstanceVarRe  = regexp.MustCompile(`^(\s*)if\s+isinstance\s*\(\s*([A-Za-z_][A-Za-z0-9_\.]*)\s*,`)
 	pyElseOrElifPrefixRe = regexp.MustCompile(`^(?:elif|else)\b`)
@@ -83,36 +88,72 @@ func sortedSourceKeys(sources map[string][]byte) []string {
 func scanPythonFuncLadders(relPath, text string) []string {
 	lines := strings.Split(text, "\n")
 	var out []string
-	for i := 0; i < len(lines); i++ {
-		m := pyAnyDefRe.FindStringSubmatch(lines[i])
-		if len(m) != 3 {
-			continue
+	moduleIsinstanceGuards := 0
+	for _, fn := range collectDirectPythonFuncs(lines) {
+		isGuards, raiseGuards := countInlineIsinstanceAndRaiseGuards(fn.bodyLines)
+		moduleIsinstanceGuards += isGuards
+		if isGuards >= minInlineIsinstanceGuardsFunc {
+			out = append(out, fmt.Sprintf("%s:%d: function %s contains %d inline 'isinstance(...): raise' guards; validate input schema once at boundary instead of repeating inline type-guard ladders", relPath, fn.startLine, fn.name, isGuards))
+		} else if raiseGuards >= minInlineRaiseGuardsFunc {
+			out = append(out, fmt.Sprintf("%s:%d: function %s contains %d inline 'if ...: raise' guards; consolidate validation into a shared helper or lookup table", relPath, fn.startLine, fn.name, raiseGuards))
 		}
-		indent := countLeadingIndentCols(m[1])
-		end := findPythonBlockEnd(lines, i+1, indent)
-		body := lines[i+1 : end]
-		if guards := countInlineIsinstanceRaiseGuards(body); guards >= 4 {
-			out = append(out, fmt.Sprintf("%s:%d: function %s contains %d inline 'if not isinstance(...): raise' guards; validate input schema once at boundary instead of repeating inline type-guard ladders", relPath, i+1, m[2], guards))
-		}
-		for _, chain := range findConsecutiveBranchChains(body, i+2) {
+		for _, chain := range findConsecutiveBranchChains(fn.bodyLines, fn.startLine+1) {
 			out = append(out, fmt.Sprintf("%s:%d: %d %s at same indent without elif or dispatch table; use elif, match, or a lookup dict", relPath, chain.startLine, chain.length, chain.label))
 		}
+	}
+	if moduleIsinstanceGuards >= minInlineIsinstanceGuardsModule {
+		out = append(out, fmt.Sprintf("%s:1: module scatters %d inline 'isinstance(...): raise' guards across functions; centralize boundary validation into 1-2 shared validator helpers or a schema table", relPath, moduleIsinstanceGuards))
 	}
 	return out
 }
 
-func countInlineIsinstanceRaiseGuards(body []string) int {
-	guards := 0
+func countInlineIsinstanceAndRaiseGuards(body []string) (int, int) {
+	isGuards, raiseGuards := 0, 0
 	for i := 0; i < len(body); i++ {
 		trimmed := strings.TrimSpace(body[i])
-		if !pyIsinstanceIfRe.MatchString(trimmed) {
+		if !strings.HasPrefix(trimmed, "if ") && !strings.HasPrefix(trimmed, "if(") {
 			continue
 		}
-		if strings.Contains(trimmed, ": raise ") || nextExecLineStartsWithRaise(body, i+1, countLeadingIndentCols(body[i])) {
-			guards++
+		cleaned := stripInlineStringsAndHashComment(trimmed)
+		if !pyIfHeaderImmediatelyRaises(body, i, cleaned) {
+			continue
+		}
+		raiseGuards++
+		if strings.Contains(cleaned, "isinstance(") {
+			isGuards++
 		}
 	}
-	return guards
+	return isGuards, raiseGuards
+}
+
+func pyIfHeaderImmediatelyRaises(body []string, idx int, cleaned string) bool {
+	suite, hasColon := splitPyTopLevelColonTail(cleaned)
+	if !hasColon {
+		return false
+	}
+	if suite != "" {
+		return strings.HasPrefix(suite, "raise ") || suite == "raise" || strings.HasPrefix(suite, "raise(")
+	}
+	return nextExecLineStartsWithRaise(body, idx+1, countLeadingIndentCols(body[idx]))
+}
+
+func splitPyTopLevelColonTail(line string) (string, bool) {
+	depth := 0
+	for i := 0; i < len(line); i++ {
+		switch line[i] {
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			if depth > 0 {
+				depth--
+			}
+		case ':':
+			if depth == 0 {
+				return strings.TrimSpace(line[i+1:]), true
+			}
+		}
+	}
+	return "", false
 }
 
 func nextExecLineStartsWithRaise(lines []string, idx, ifIndent int) bool {

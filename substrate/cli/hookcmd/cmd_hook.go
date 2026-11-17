@@ -293,7 +293,7 @@ func formatHandshakeBanner(ev *handshake.HandshakeEvent, hookRoot string, allowU
 	}
 	appendPlainUpdateAndDriftAdvisories(&b, hookRoot, allowUpdateCheck, rootVersion)
 	appendPlainWorkspaceHullWithMode(&b, hookRoot, containerSandbox)
-	appendPlainTurnZeroTelemetry(&b, ev)
+	appendPlainTurnZeroTelemetryWithMode(&b, ev, containerSandbox)
 	return b.String()
 }
 

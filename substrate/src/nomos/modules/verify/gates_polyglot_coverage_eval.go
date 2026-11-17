@@ -23,7 +23,7 @@ import (
 const probeIDCoverage = "coverage"
 
 const pyStdlibTraceRunner = `import importlib.util, inspect, io, os, sys, trace, unittest
-root = os.path.abspath(sys.argv[1])
+root = os.path.realpath(sys.argv[1])
 targets = sys.argv[2:]
 sys.path.insert(0, root)
 def collect_exec_lines(code_obj, out):
@@ -33,7 +33,7 @@ def collect_exec_lines(code_obj, out):
     for c in code_obj.co_consts:
         if hasattr(c, "co_lines"):
             collect_exec_lines(c, out)
-env_files = [os.path.abspath(p) for p in os.environ.get("NOMOS_PY_TRACE_FILES", "").splitlines() if p.strip()]
+env_files = [os.path.realpath(p) for p in os.environ.get("NOMOS_PY_TRACE_FILES", "").splitlines() if p.strip()]
 if env_files:
     py_files = [p for p in env_files if os.path.isfile(p)]
 else:
@@ -42,7 +42,7 @@ else:
         dn[:] = [d for d in dn if not d.startswith(".") and d not in ("venv", ".venv", "node_modules", "tests", "test", "worktrees")]
         for f in fn:
             if f.endswith(".py") and not f.startswith("test_") and not f.endswith("_test.py"):
-                py_files.append(os.path.abspath(os.path.join(dp, f)))
+                py_files.append(os.path.realpath(os.path.join(dp, f)))
 if not py_files or len(py_files) > 60:
     sys.exit(0)
 def run_suite():
@@ -73,14 +73,18 @@ def run_suite():
             else:
                 suite.addTests(loader.loadTestsFromName(t))
     else:
-        start = os.path.join(root, "tests") if os.path.isdir(os.path.join(root, "tests")) else root
-        for dp2, dn2, fn2 in sorted(os.walk(start)):
-            dn2[:] = [d for d in dn2 if not d.startswith(".") and d not in ("venv", ".venv", "node_modules", "__pycache__")]
-            for f2 in sorted(fn2):
-                if (f2.startswith("test_") and f2.endswith(".py")) or f2.endswith("_test.py"):
-                    py_tests.append(os.path.join(dp2, f2))
-        top = root if (start == root or os.path.isfile(os.path.join(start, "__init__.py"))) else None
-        suite = loader.discover(start, pattern="test*.py", top_level_dir=top)
+        starts = [os.path.join(root, d) for d in ("tests", os.path.join(".tmp", "tests"), os.path.join(".tmp", "test")) if os.path.isdir(os.path.join(root, d))]
+        if not starts:
+            starts = [root]
+        suite = unittest.TestSuite()
+        for start in starts:
+            for dp2, dn2, fn2 in sorted(os.walk(start)):
+                dn2[:] = [d for d in dn2 if not d.startswith(".") and d not in ("venv", ".venv", "node_modules", "__pycache__")]
+                for f2 in sorted(fn2):
+                    if (f2.startswith("test_") and f2.endswith(".py")) or f2.endswith("_test.py"):
+                        py_tests.append(os.path.join(dp2, f2))
+            top = root if (start == root or os.path.isfile(os.path.join(start, "__init__.py"))) else None
+            suite.addTests(loader.discover(start, pattern="test*.py", top_level_dir=top))
     res = unittest.TextTestRunner(stream=io.StringIO()).run(suite)
     if not res.wasSuccessful():
         sys.exit(2)
@@ -102,7 +106,11 @@ def run_suite():
         sys.exit(2)
 tracer = trace.Trace(count=1, trace=0)
 tracer.runfunc(run_suite)
-counts = tracer.results().counts
+norm_counts = {}
+for (fn, ln), c in tracer.results().counts.items():
+    if c > 0 and fn:
+        k = (os.path.realpath(fn), ln)
+        norm_counts[k] = norm_counts.get(k, 0) + c
 tot, hit = 0, 0
 for p in py_files:
     try:
@@ -112,7 +120,7 @@ for p in py_files:
         collect_exec_lines(co, lines)
         for ln in lines:
             tot += 1
-            if counts.get((p, ln), 0) > 0:
+            if norm_counts.get((p, ln), 0) > 0:
                 hit += 1
     except Exception:
         pass

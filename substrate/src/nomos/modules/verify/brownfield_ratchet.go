@@ -170,39 +170,43 @@ func parseBaselineFunctions(absPath, rel string, content []byte) map[string]astd
 
 func filterRatchetedComplexity(ctx *vscope.VerifyContext, root string, funcs []astdebt.FunctionMetric, thresh astdebt.Thresholds) ([]astdebt.FunctionMetric, bool) {
 	if !vscope.IsBrownfieldRatchetActive(ctx) {
-		return funcs, vscope.IsWorktreeContext(ctx, root)
+		return filterStrictNonWorktreeComplexity(ctx, root, funcs)
 	}
 	baseCache := make(map[string]map[string]astdebt.FunctionMetric)
 	var out []astdebt.FunctionMetric
 	for _, fn := range funcs {
-		if fn.Complexity <= thresh.MaxComplexity && fn.LOC <= thresh.MaxFuncLOC {
+		effMax := astdebt.EffectiveMaxComplexity(fn.File, thresh.MaxComplexity)
+		if fn.Complexity <= effMax && fn.LOC <= thresh.MaxFuncLOC {
 			continue
 		}
-		baseMap, loaded := baseCache[fn.File]
-		if !loaded {
-			absPath := filepath.Join(root, fn.File)
-			if baseBytes, ok := loadBaselineFileBytes(ctx, root, absPath); ok {
-				baseMap = parseBaselineFunctions(absPath, fn.File, baseBytes)
-			}
-			baseCache[fn.File] = baseMap
-		}
-		if baseMap == nil {
-			out = append(out, fn)
-			continue
-		}
-		baseFn := baseMap[fn.Name]
-		adj := fn
-		if fn.Complexity <= maxInt(thresh.MaxComplexity, baseFn.Complexity) {
-			adj.Complexity = thresh.MaxComplexity
-		}
-		if fn.LOC <= maxInt(thresh.MaxFuncLOC, baseFn.LOC) {
-			adj.LOC = thresh.MaxFuncLOC
-		}
-		if adj.Complexity > thresh.MaxComplexity || adj.LOC > thresh.MaxFuncLOC {
+		if adj, ok := evaluateSingleRatchetedFunc(ctx, root, fn, effMax, thresh.MaxFuncLOC, baseCache); ok {
 			out = append(out, adj)
 		}
 	}
 	return out, false
+}
+
+func evaluateSingleRatchetedFunc(ctx *vscope.VerifyContext, root string, fn astdebt.FunctionMetric, effMax, maxLOC int, baseCache map[string]map[string]astdebt.FunctionMetric) (astdebt.FunctionMetric, bool) {
+	baseMap, loaded := baseCache[fn.File]
+	if !loaded {
+		absPath := filepath.Join(root, fn.File)
+		if baseBytes, ok := loadBaselineFileBytes(ctx, root, absPath); ok {
+			baseMap = parseBaselineFunctions(absPath, fn.File, baseBytes)
+		}
+		baseCache[fn.File] = baseMap
+	}
+	if baseMap == nil {
+		return fn, true
+	}
+	baseFn := baseMap[fn.Name]
+	adj := fn
+	if fn.Complexity <= maxInt(effMax, baseFn.Complexity) {
+		adj.Complexity = effMax
+	}
+	if fn.LOC <= maxInt(maxLOC, baseFn.LOC) {
+		adj.LOC = maxLOC
+	}
+	return adj, adj.Complexity > effMax || adj.LOC > maxLOC
 }
 
 // EvaluatePackageFanOutViolations enforces MaxPackageFiles per directory with brownfield ratcheting (@intent tree_sitter_ast_gate_spec.md #Thresholds).

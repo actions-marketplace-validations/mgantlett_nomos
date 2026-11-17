@@ -42,7 +42,7 @@ func collectPolyglotComplexityFromBytes(path, rel string, content []byte, out *[
 
 func evaluateRatchetedCDSViolations(ctx *vscope.VerifyContext, root string, metrics []astdebt.FileMetric, sources map[string][]byte, thresh astdebt.Thresholds) []string {
 	if !vscope.IsBrownfieldRatchetActive(ctx) {
-		return astdebt.EnrichCDSViolations(root, metrics, sources, thresh, vscope.IsWorktreeContext(ctx, root))
+		return evaluateStrictNonWorktreeOrDefaultCDS(ctx, root, metrics, sources, thresh)
 	}
 	var newFileMetrics []astdebt.FileMetric
 	changedSources := make(map[string][]byte)
@@ -70,9 +70,7 @@ func evaluateRatchetedCDSViolations(ctx *vscope.VerifyContext, root string, metr
 	}
 
 	violations = append(violations, astdebt.EnrichCDSViolations(root, newFileMetrics, sources, thresh, false)...)
-	if vscope.IsWorktreeContext(ctx, root) && len(changedSources) > 0 {
-		violations = append(violations, detectNetNewCloneViolations(changedSources, baseSources, thresh)...)
-	}
+	violations = append(violations, evaluateNetNewBrownfieldClonesAndSlop(ctx, root, changedSources, baseSources, thresh)...)
 	return violations
 }
 

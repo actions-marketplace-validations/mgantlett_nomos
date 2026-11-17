@@ -122,7 +122,7 @@ def prop_alias(self):
 	for _, want := range []string{
 		"dead pass-through wrapper \"_fossil\"",
 		"trivial wrapper fragmentation",
-		"inline 'if not isinstance(...): raise' guards",
+		"inline 'isinstance(...): raise' guards",
 		"consecutive 'if op ==' checks",
 	} {
 		if !strings.Contains(joined, want) {
@@ -158,7 +158,7 @@ def run_cli(args):
 			"m1.py": m1Src,
 			"m2.py": "VAL_A = 1\n",
 			"m3.py": "VAL_B = 2\n",
-			"m4.py": "def run():\n    return _shared_helper(10)\n",
+			"m4.py": "def run():\n    return _shared_helper(10) + _shared_helper(20)\n",
 		} {
 			if err := os.WriteFile(filepath.Join(capDir, name), []byte(body), 0644); err != nil {
 				t.Fatal(err)
@@ -240,7 +240,7 @@ def dispatch_flat(op):
 `
 		hits := EvaluatePolyglotCognitiveViolations("engine.py", []byte(nestedPy), MaxFunctionCognitiveComplexity)
 		if len(hits) != 1 || !strings.Contains(hits[0], "process_records cognitive complexity") {
-			t.Fatalf("expected only process_records to exceed cognitive limit 15, got %v", hits)
+			t.Fatalf("expected only process_records to exceed cognitive limit 10, got %v", hits)
 		}
 	})
 

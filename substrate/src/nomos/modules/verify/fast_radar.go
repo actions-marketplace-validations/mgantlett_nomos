@@ -168,9 +168,10 @@ func evaluateFastASTBudgets(ctx *vscope.VerifyContext, wtRoot, absPath string, d
 	if rep.DebtScore > 0 {
 		checkBudgetMetricWithPct("cognitive debt", rep.DebtScore, t.MaxCDS, warnPct, res)
 	}
+	effMaxComp := astdebt.EffectiveMaxComplexity(absPath, t.MaxComplexity)
 	for _, fn := range rep.Functions {
 		checkBudgetMetricWithPct(fmt.Sprintf("func %s LOC", fn.Name), fn.LOC, t.MaxFuncLOC, warnPct, res)
-		checkBudgetMetricWithPct(fmt.Sprintf("func %s complexity", fn.Name), fn.Complexity, t.MaxComplexity, warnPct, res)
+		checkBudgetMetricWithPct(fmt.Sprintf("func %s complexity", fn.Name), fn.Complexity, effMaxComp, warnPct, res)
 	}
 }
 
@@ -206,15 +207,16 @@ func evaluateRatchetedFastBudgets(rep, baseRep *astdebt.FileDebtReport, t astdeb
 		}
 	}
 	baseFns := indexBaselineFunctionDebts(baseRep.Functions)
+	effMaxComp := astdebt.EffectiveMaxComplexity(res.File, t.MaxComplexity)
 	for _, fn := range rep.Functions {
 		bfn, existed := baseFns[fn.Name]
 		if !existed {
 			checkBudgetMetricWithPct(fmt.Sprintf("func %s LOC", fn.Name), fn.LOC, t.MaxFuncLOC, warnPct, res)
-			checkBudgetMetricWithPct(fmt.Sprintf("func %s complexity", fn.Name), fn.Complexity, t.MaxComplexity, warnPct, res)
+			checkBudgetMetricWithPct(fmt.Sprintf("func %s complexity", fn.Name), fn.Complexity, effMaxComp, warnPct, res)
 			continue
 		}
 		checkRatchetedMetricWithPct(fmt.Sprintf("func %s LOC", fn.Name), fn.LOC, bfn.LOC, t.MaxFuncLOC, warnPct, res)
-		checkRatchetedMetricWithPct(fmt.Sprintf("func %s complexity", fn.Name), fn.Complexity, bfn.Complexity, t.MaxComplexity, warnPct, res)
+		checkRatchetedMetricWithPct(fmt.Sprintf("func %s complexity", fn.Name), fn.Complexity, bfn.Complexity, effMaxComp, warnPct, res)
 	}
 }
 

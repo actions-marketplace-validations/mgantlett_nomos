@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	maxDesignSlopCorpusFiles = 512
-	maxDesignSlopFileBytes   = 512 * 1024
+	maxDesignSlopCorpusFiles  = 512
+	maxDesignSlopFileBytes    = 512 * 1024
+	minTrivialSinglesPerFile  = 2
 )
 
 var (
@@ -111,47 +112,29 @@ func readBoundedCorpusFile(root, path string, d fs.DirEntry) (string, []byte, bo
 	return filepath.ToSlash(rel), raw, true
 }
 
-func accumulateWordCounts(text string, counts map[string]int) {
-	start := -1
-	for i := 0; i <= len(text); i++ {
-		var ch byte
-		if i < len(text) {
-			ch = text[i]
-		}
-		if isWordIdentByte(ch, start >= 0) {
-			if start < 0 {
-				start = i
-			}
-			continue
-		}
-		if start >= 0 {
-			counts[text[start:i]]++
-			start = -1
-		}
-	}
-}
+type wrapperClass int
 
-func isWordIdentByte(ch byte, continuing bool) bool {
-	if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_' {
-		return true
-	}
-	return continuing && ch >= '0' && ch <= '9'
-}
+const (
+	wrapperNone wrapperClass = iota
+	wrapperDeadFossil
+	wrapperSingleMiddleman
+	wrapperTrivialSingle
+)
 
 func scanPythonFileWrappers(relPath, text string, corpusCounts map[string]int) []string {
 	var out []string
 	var trivialSingles []string
 	for _, fn := range parseTopLevelPyFuncs(text) {
-		isDead, isTrivialSingle := classifyTrivialTopWrapper(fn, corpusCounts)
-		if isDead {
+		switch classifyTopWrapper(fn, corpusCounts) {
+		case wrapperDeadFossil:
 			out = append(out, fmt.Sprintf("%s:%d: dead pass-through wrapper %q has 0 callers (checkpoint fossil); delete unused shim and call target directly (Law 6)", relPath, fn.startLine, fn.name))
-			continue
-		}
-		if isTrivialSingle {
+		case wrapperSingleMiddleman:
+			out = append(out, fmt.Sprintf("%s:%d: single-caller pass-through middleman %q forwards to another call with 1 caller; inline target call directly (Law 6)", relPath, fn.startLine, fn.name))
+		case wrapperTrivialSingle:
 			trivialSingles = append(trivialSingles, fn.name)
 		}
 	}
-	if len(trivialSingles) >= 3 {
+	if len(trivialSingles) >= minTrivialSinglesPerFile {
 		out = append(out, fmt.Sprintf("%s: excessive trivial wrapper fragmentation (%d single-use 1-line return helpers: %s); inline 1-line single-caller wrappers instead of fragmenting module (Law 6)", relPath, len(trivialSingles), strings.Join(trivialSingles, ", ")))
 	}
 	return append(out, scanPythonDeadClassMethods(relPath, text, corpusCounts)...)
@@ -195,6 +178,9 @@ func checkClassMethodBlockAt(relPath string, lines []string, i int, corpusCounts
 	if extRefs <= 0 {
 		return fmt.Sprintf("%s:%d: dead pass-through method %q has 0 callers (checkpoint fossil); inline call at callsite (Law 6)", relPath, i+1, name), end - 1
 	}
+	if extRefs == 1 && isPureCallForwardingReturn(execLines[0]) {
+		return fmt.Sprintf("%s:%d: single-caller pass-through method %q forwards to another call with 1 caller; inline target call at callsite (Law 6)", relPath, i+1, name), end - 1
+	}
 	return "", end - 1
 }
 
@@ -208,155 +194,24 @@ func isSkippablePyWrapper(fn pyFuncBlock) bool {
 	return fn.decorated || fn.name == "main" || (strings.HasPrefix(fn.name, "__") && strings.HasSuffix(fn.name, "__"))
 }
 
-func classifyTrivialTopWrapper(fn pyFuncBlock, corpusCounts map[string]int) (bool, bool) {
+func classifyTopWrapper(fn pyFuncBlock, corpusCounts map[string]int) wrapperClass {
 	if isSkippablePyWrapper(fn) {
-		return false, false
+		return wrapperNone
 	}
 	execLines, bodyFossil := extractPythonExecBodyInfo(fn.bodyLines)
 	if len(execLines) != 1 || !strings.HasPrefix(execLines[0], "return ") {
-		return false, false
+		return wrapperNone
 	}
 	extRefs := corpusCounts[fn.name] - (countWordInLines(fn.name, fn.bodyLines) + 1)
 	isFossilTarget := strings.HasPrefix(fn.name, "_") || fn.hasFossilNote || bodyFossil
 	if isFossilTarget && extRefs <= 0 && strings.Contains(execLines[0], "(") {
-		return true, false
+		return wrapperDeadFossil
 	}
-	return false, extRefs <= 1
-}
-
-func parseTopLevelPyFuncs(text string) []pyFuncBlock {
-	lines := strings.Split(text, "\n")
-	var blocks []pyFuncBlock
-	for i := 0; i < len(lines); i++ {
-		m := pyTopDefRe.FindStringSubmatchIndex(lines[i])
-		if len(m) != 4 {
-			continue
-		}
-		name := lines[i][m[2]:m[3]]
-		openParen := m[1] - 1
-		decorated, leadFossil := inspectPrecedingDefMeta(lines, i)
-		if inlineTail := extractPyDefInlineTail(lines[i], openParen); inlineTail != "" {
-			blocks = append(blocks, pyFuncBlock{
-				name:          name,
-				startLine:     i + 1,
-				bodyLines:     []string{inlineTail},
-				decorated:     decorated,
-				hasFossilNote: leadFossil,
-			})
-			continue
-		}
-		end := findPythonBlockEnd(lines, i+1, 0)
-		blocks = append(blocks, pyFuncBlock{
-			name:          name,
-			startLine:     i + 1,
-			bodyLines:     lines[i+1 : end],
-			decorated:     decorated,
-			hasFossilNote: leadFossil,
-		})
-		i = end - 1
+	if extRefs == 1 && isPureCallForwardingReturn(execLines[0]) {
+		return wrapperSingleMiddleman
 	}
-	return blocks
-}
-
-func inspectPrecedingDefMeta(lines []string, idx int) (bool, bool) {
-	decorated := false
-	seenDecorator := false
-	leadFossil := false
-	for j := idx - 1; j >= 0; j-- {
-		t := strings.TrimSpace(lines[j])
-		if t == "" {
-			continue
-		}
-		if strings.HasPrefix(t, "#") {
-			if pyFossilNoteRe.MatchString(t) {
-				leadFossil = true
-			}
-			continue
-		}
-		if strings.HasPrefix(t, "@") {
-			if !seenDecorator {
-				decorated = true
-			}
-			seenDecorator = true
-			continue
-		}
-		break
+	if extRefs <= 1 {
+		return wrapperTrivialSingle
 	}
-	return decorated, leadFossil
-}
-
-func extractPyDefInlineTail(line string, openParen int) string {
-	_, closeIdx, ok := extractBalancedParenSpanWithEnd(line, openParen)
-	if !ok {
-		return ""
-	}
-	colon := strings.IndexByte(line[closeIdx:], ':')
-	if colon < 0 {
-		return ""
-	}
-	tail := strings.TrimSpace(line[closeIdx+colon+1:])
-	if tail == "" || strings.HasPrefix(tail, "#") {
-		return ""
-	}
-	return tail
-}
-
-func findPythonBlockEnd(lines []string, startIdx, headerIndent int) int {
-	j := startIdx
-	for ; j < len(lines); j++ {
-		trimmed := strings.TrimSpace(lines[j])
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-		if countLeadingIndentCols(lines[j]) <= headerIndent {
-			break
-		}
-	}
-	return j
-}
-
-func extractPythonExecBodyInfo(bodyLines []string) ([]string, bool) {
-	var exec []string
-	inDocDelim := ""
-	hasFossil := false
-	for _, raw := range bodyLines {
-		t := strings.TrimSpace(raw)
-		if t == "" {
-			continue
-		}
-		if inDocDelim != "" {
-			if pyFossilNoteRe.MatchString(t) {
-				hasFossil = true
-			}
-			if strings.Contains(t, inDocDelim) {
-				inDocDelim = ""
-			}
-			continue
-		}
-		if strings.HasPrefix(t, "#") {
-			if pyFossilNoteRe.MatchString(t) {
-				hasFossil = true
-			}
-			continue
-		}
-		if delim := matchTripleQuoteAt(t, 0); delim != "" {
-			if pyFossilNoteRe.MatchString(t) {
-				hasFossil = true
-			}
-			if strings.Count(t, delim) < 2 {
-				inDocDelim = delim
-			}
-			continue
-		}
-		exec = append(exec, t)
-	}
-	return exec, hasFossil
-}
-
-func countWordInLines(target string, lines []string) int {
-	local := make(map[string]int, 16)
-	for _, l := range lines {
-		accumulateWordCounts(l, local)
-	}
-	return local[target]
+	return wrapperNone
 }

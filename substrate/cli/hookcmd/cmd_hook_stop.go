@@ -118,7 +118,7 @@ func buildBehavioralStopDecision(wsRoot string, fileCount, strike int, container
 	return HookDecision{
 		Decision: hookDecisionBlock,
 		Reason: fmt.Sprintf(
-			"%s Workspace '%s' modified %d source file(s) with zero automated test suite and no passing post-edit program/test execution. Create stdlib unittest.TestCase tests in '.tmp/tests/test_*.py' (or 'tests/') and run 'nomos verify', or execute a behavioral smoke test after your final edit before ending your turn (Law 2).",
+			"%s Workspace '%s' modified %d source file(s) with zero automated test suite and no passing post-edit program/test execution. Create stdlib unittest.TestCase tests in '.tmp/tests/test_<module>.py' covering boundary, multi-item, and error cases and run 'nomos verify', or execute a behavioral smoke test after your final edit before ending your turn (Law 2).",
 			strikePrefix, filepath.Base(wsRoot), fileCount,
 		),
 	}

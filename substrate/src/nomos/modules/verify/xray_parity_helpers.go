@@ -2,6 +2,7 @@
 package verify
 
 import (
+	"bytes"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -154,7 +155,7 @@ func countExceedingStringClusters(byDir map[string]map[string]map[string]int, ma
 }
 
 func evaluateBrownfieldArityRatchet(ctx *vscope.VerifyContext, root string, funcs []astdebt.FunctionMetric, thresh astdebt.Thresholds) []string {
-	if !vscope.IsBrownfieldRatchetActive(ctx) || !vscope.IsWorktreeContext(ctx, root) {
+	if !vscope.IsBrownfieldRatchetActive(ctx) || isUpstreamSurgicalRatchet(ctx) || (ctx != nil && (ctx.IsBaseline || ctx.AllFiles)) {
 		return nil
 	}
 	seen := make(map[string]bool)
@@ -186,6 +187,9 @@ func evaluateSingleFileArityRatchet(ctx *vscope.VerifyContext, root, rel string,
 	allowedNest := astdebt.MaxFunctionNesting
 	allowedCog := astdebt.MaxFunctionCognitiveComplexity
 	if baseBytes, ok := loadBaselineFileBytes(ctx, root, absPath); ok {
+		if !vscope.IsWorktreeContext(ctx, root) && bytes.Equal(src, baseBytes) {
+			return nil
+		}
 		baseMaxP, baseMaxN, baseHighA, baseDeepN := astdebt.SummarizeFileArityAndNesting(rel, baseBytes, maxParams, astdebt.MaxFunctionNesting)
 		if baseHighA >= 0 && baseDeepN >= 0 {
 			allowed = maxInt(maxParams, baseMaxP)

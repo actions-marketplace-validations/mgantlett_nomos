@@ -30,6 +30,7 @@ var (
 		".git": true, ".venv": true, "venv": true, "node_modules": true,
 		"vendor": true, "worktrees": true, "substrate": true, "intent": true,
 		"__pycache__": true, ".tmp": true,
+		"testdata": true, "fixtures": true, "examples": true, "samples": true, "files": true, "assets": true,
 	}
 	hullSourceExts = map[string]bool{".py": true, ".ts": true, ".js": true, ".rs": true}
 )
@@ -47,7 +48,7 @@ func appendPlainWorkspaceHullWithMode(b *strings.Builder, hookRoot string, conta
 		b.WriteString(fmt.Sprintf("  Workspace Modules : %s\n", strings.Join(mods, ", ")))
 	}
 	if (len(mods) > 0 || containerSandbox) && !hasWorkspaceAutomatedTests(hookRoot) {
-		b.WriteString("  Regression Suite  : none detected - create stdlib unittest.TestCase tests in .tmp/tests/test_<module>.py (keeps workspace git-clean while 'nomos verify' enforces >=80% coverage across turns)\n")
+		b.WriteString("  Regression Suite  : none detected - create stdlib unittest.TestCase tests in .tmp/tests/test_<module>.py covering boundary, multi-trigger/multi-item, and error cases before 'nomos verify' (keeps workspace git-clean and enforces >=80% coverage)\n")
 	}
 }
 

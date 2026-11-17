@@ -261,3 +261,23 @@ func TestBehavioralStopGate_AndTestlessHandshakeGuidance(t *testing.T) {
 		t.Fatalf("expected --container-sandbox Turn-0 SessionStart on empty repo to emit .tmp/tests/ guidance, got:\n%s", turnZeroOut)
 	}
 }
+
+// @verifies TC-BG-08
+func TestContainerSessionStart_SkipsFixtureHullAndGitCommit(t *testing.T) {
+	t.Setenv("NOMOS_HOME", t.TempDir())
+	t.Setenv("NOMOS_NO_UPDATE_CHECK", "1")
+	repoDir := setupBranchGuardTestRepo(t)
+	if err := os.MkdirAll(filepath.Join(repoDir, "files"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoDir, "files", "sample.py"), []byte("def fixture_fn():\n    return 1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	out := executeHookCmd(t, []string{"session-start", "--container-sandbox"}, map[string]any{
+		"hook_event_name": "SessionStart",
+		"cwd":             repoDir,
+	})
+	if strings.Contains(out, "files/sample.py") || strings.Contains(out, "git commit") {
+		t.Fatalf("expected container session-start to skip files/ fixtures and omit git commit, got:\n%s", out)
+	}
+}

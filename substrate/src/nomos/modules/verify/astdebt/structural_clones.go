@@ -318,9 +318,10 @@ func EnrichComplexityViolations(root string, funcs []FunctionMetric, thresh Thre
 		src := loadCachedSourceBytes(root, fn.File, seenFiles)
 		endLine := lookupFunctionEndLine(fn, src, thresh, endLines)
 		span := formatFileSpan(fn.File, fn.Line, endLine)
-		if fn.Complexity > thresh.MaxComplexity {
-			excess := fn.Complexity - thresh.MaxComplexity
-			msg := fmt.Sprintf("%s (%s) cyclomatic complexity %d exceeds max %d", span, fn.Name, fn.Complexity, thresh.MaxComplexity)
+		effMax := EffectiveMaxComplexity(fn.File, thresh.MaxComplexity)
+		if fn.Complexity > effMax {
+			excess := fn.Complexity - effMax
+			msg := fmt.Sprintf("%s (%s) cyclomatic complexity %d exceeds max %d", span, fn.Name, fn.Complexity, effMax)
 			seams := PrescribeFunctionSeams(fn.File, src, fn.Name, fn.Line)
 			seams = append(seams, fmt.Sprintf("[1-TURN RECIPE: extract >=%d branch(es) from %s (%s) into helper %sStep()]", excess, fn.Name, span, fn.Name))
 			violations = append(violations, msg+" -> "+strings.Join(seams, " "))

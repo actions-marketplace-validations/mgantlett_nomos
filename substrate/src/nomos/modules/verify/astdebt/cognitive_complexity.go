@@ -1,4 +1,4 @@
-// Package astdebt enforces per-function polyglot Cognitive Complexity bounds (Law 2 & Law 6).
+// Package astdebt enforces per-function polyglot Cognitive Complexity and cyclomatic complexity bounds (Law 2 & Law 6).
 package astdebt
 
 import (
@@ -8,8 +8,12 @@ import (
 	"strings"
 )
 
-// MaxFunctionCognitiveComplexity defines the statutory upper bound on per-function cognitive complexity (@intent tree_sitter_ast_gate_spec.md).
-const MaxFunctionCognitiveComplexity = 15
+const (
+	// MaxFunctionCognitiveComplexity defines the statutory upper bound on per-function cognitive complexity (@intent tree_sitter_ast_gate_spec.md).
+	MaxFunctionCognitiveComplexity = 10
+	// MaxPolyglotCyclomaticComplexity defines the default statutory upper bound on non-Go polyglot cyclomatic complexity (@intent tree_sitter_ast_gate_spec.md).
+	MaxPolyglotCyclomaticComplexity = 10
+)
 
 var (
 	cogPyFuncHeaderRe    = regexp.MustCompile(`^(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(`)
@@ -19,6 +23,18 @@ var (
 	cogPyBoolTokenRe     = regexp.MustCompile(`\b(and|or)\b`)
 	cogBraceBoolTokenRe  = regexp.MustCompile(`(&&|\|\|)`)
 )
+
+// EffectiveMaxComplexity returns MaxPolyglotCyclomaticComplexity (10) for non-Go files when configured equals Go default (15) (@intent tree_sitter_ast_gate_spec.md).
+func EffectiveMaxComplexity(filePath string, configured int) int {
+	def := DefaultThresholds().MaxComplexity
+	if configured <= 0 {
+		configured = def
+	}
+	if strings.EqualFold(filepath.Ext(filePath), ExtGo) || configured != def {
+		return configured
+	}
+	return MaxPolyglotCyclomaticComplexity
+}
 
 // EvaluatePolyglotCognitiveViolations flags non-test polyglot functions whose nesting-weighted cognitive complexity exceeds maxCog (@intent tree_sitter_ast_gate_spec.md).
 func EvaluatePolyglotCognitiveViolations(relPath string, src []byte, maxCog int) []string {
@@ -81,101 +97,6 @@ func analyzePolyglotCognitiveScores(relPath, text string) []cogFuncScore {
 		return scoreIndentCognitiveFuncs(text)
 	}
 	return scoreBraceCognitiveFuncs(text)
-}
-
-type indentCogState struct {
-	results    []cogFuncScore
-	curName    string
-	curStart   int
-	curScore   int
-	baseIndent int
-	stack      []int
-	inDocDelim string
-}
-
-func (s *indentCogState) flush() {
-	if s.baseIndent < 0 {
-		return
-	}
-	s.results = append(s.results, cogFuncScore{name: s.curName, startLine: s.curStart, score: s.curScore})
-	s.curName = ""
-	s.curStart = 0
-	s.curScore = 0
-	s.baseIndent = -1
-	s.stack = s.stack[:0]
-}
-
-func scoreIndentCognitiveFuncs(text string) []cogFuncScore {
-	st := &indentCogState{baseIndent: -1}
-	for idx, rawLine := range strings.Split(text, "\n") {
-		st.step(idx+1, rawLine)
-	}
-	st.flush()
-	return st.results
-}
-
-func (s *indentCogState) step(lineNum int, rawLine string) {
-	trimmed := strings.TrimSpace(rawLine)
-	if s.consumeDocstringLine(trimmed) || trimmed == "" || strings.HasPrefix(trimmed, "#") {
-		return
-	}
-	indent := countLeadingIndentCols(rawLine)
-	if indent <= s.baseIndent && s.baseIndent >= 0 {
-		s.flush()
-	}
-	if m := cogPyFuncHeaderRe.FindStringSubmatch(trimmed); len(m) == 2 {
-		s.handleFuncHeader(lineNum, indent, m[1])
-		return
-	}
-	if s.baseIndent < 0 {
-		return
-	}
-	s.stack = trimIndentStack(s.stack, indent)
-	cleaned := stripInlineStringsAndHashComment(trimmed)
-	if bm := cogIndentBranchRe.FindStringSubmatch(cleaned); len(bm) == 2 {
-		s.applyIndentBranch(bm[1], indent, cleaned)
-		return
-	}
-	s.curScore += countCogBooleanRuns(cogPyBoolTokenRe, cleaned)
-}
-
-func (s *indentCogState) consumeDocstringLine(trimmed string) bool {
-	if s.inDocDelim != "" {
-		if strings.Contains(trimmed, s.inDocDelim) {
-			s.inDocDelim = ""
-		}
-		return true
-	}
-	if delim := matchTripleQuoteAt(trimmed, 0); delim != "" {
-		if strings.Count(trimmed, delim) < 2 {
-			s.inDocDelim = delim
-		}
-		return true
-	}
-	return false
-}
-
-func (s *indentCogState) handleFuncHeader(lineNum, indent int, name string) {
-	if s.baseIndent < 0 {
-		s.curName = name
-		s.curStart = lineNum
-		s.curScore = 0
-		s.baseIndent = indent
-		return
-	}
-	s.curScore += 1 + len(s.stack)
-	s.stack = append(s.stack, indent)
-}
-
-func (s *indentCogState) applyIndentBranch(kw string, indent int, cleaned string) {
-	if kw == "elif" || kw == "else" {
-		s.curScore++
-		s.stack = append(s.stack, indent)
-	} else {
-		s.curScore += 1 + len(s.stack)
-		s.stack = append(s.stack, indent)
-	}
-	s.curScore += countCogBooleanRuns(cogPyBoolTokenRe, cleaned)
 }
 
 type braceCogState struct {
