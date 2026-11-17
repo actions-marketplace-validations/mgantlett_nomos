@@ -46,6 +46,9 @@ func buildPairedTestCandidates(rel, dir, stem, ext string) []string {
 			filepath.Join(astdebt.DirTests, astdebt.PrefixPyTest+stem+astdebt.ExtPy),
 			filepath.Join(astdebt.DirTests, stem+astdebt.SuffixPyTest),
 			filepath.Join(astdebt.DirTest, astdebt.PrefixPyTest+stem+astdebt.ExtPy),
+			filepath.Join(".tmp", astdebt.DirTests, astdebt.PrefixPyTest+stem+astdebt.ExtPy),
+			filepath.Join(".tmp", astdebt.DirTests, stem+astdebt.SuffixPyTest),
+			filepath.Join(".tmp", astdebt.DirTest, astdebt.PrefixPyTest+stem+astdebt.ExtPy),
 		}
 	case astdebt.ExtRB, astdebt.ExtRake:
 		return rubyPairedTestCandidates(dir, stem)
@@ -95,6 +98,8 @@ func jsFamilyPairedTestCandidates(dir, stem, ext string) []string {
 		add(filepath.Join(dir, "__tests__", stem+".spec"+te))
 		add(filepath.Join(astdebt.DirTests, stem+".test"+te))
 		add(filepath.Join(astdebt.DirTest, stem+".test"+te))
+		add(filepath.Join(".tmp", astdebt.DirTests, stem+".test"+te))
+		add(filepath.Join(".tmp", astdebt.DirTests, stem+".spec"+te))
 	}
 	return out
 }

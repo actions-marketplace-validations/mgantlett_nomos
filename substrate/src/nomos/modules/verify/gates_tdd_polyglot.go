@@ -84,10 +84,44 @@ func inspectPolyglotDirForStrictTDD(ctx *vscope.VerifyContext, root, dir string)
 	if len(implFiles) == 0 {
 		return false, false
 	}
-	if hasLocalTest || hasAnyPairedPolyglotImpl(root, dir, implFiles) {
+	if hasLocalTest || (filepath.Clean(dir) == filepath.Clean(root) && HasScratchPolyglotTests(root)) || hasAnyPairedPolyglotImpl(root, dir, implFiles) {
 		return true, true
 	}
 	return true, false
+}
+
+// HasScratchPolyglotTests reports whether untracked .tmp/tests or .tmp/test directories hold at least one unit test file.
+// @intent nomos_intent_traceability_spec.md
+func HasScratchPolyglotTests(root string) bool {
+	if strings.TrimSpace(root) == "" {
+		return false
+	}
+	for _, sub := range []string{astdebt.DirTests, astdebt.DirTest} {
+		dirPath := filepath.Join(root, ".tmp", sub)
+		if dirContainsPolyglotTestFile(dirPath) {
+			return true
+		}
+	}
+	return false
+}
+
+func dirContainsPolyglotTestFile(dirPath string) bool {
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			if dirContainsPolyglotTestFile(filepath.Join(dirPath, e.Name())) {
+				return true
+			}
+			continue
+		}
+		if isPolyglotTestFilePath(e.Name()) {
+			return true
+		}
+	}
+	return false
 }
 
 func classifyPolyglotDirEntries(entries []os.DirEntry) ([]string, bool) {
@@ -136,7 +170,7 @@ func evaluateBrownfieldPolyglotTDD(ctx *vscope.VerifyContext, root string, modif
 		return nil
 	}
 	mode := resolveEffectiveTDDMode(ctx)
-	hasModTest := hasModifiedTestFile(modified)
+	hasModTest := hasModifiedTestFile(modified) || (mode != config.TDDModeDiff && HasScratchPolyglotTests(root))
 	hasRepoSuite := hasRepositoryPolyglotTests(root)
 	hasManifest := hasPolyglotTestManifest(root)
 

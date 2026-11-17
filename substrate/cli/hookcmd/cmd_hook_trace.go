@@ -23,10 +23,11 @@ type HookSessionTrace struct {
 	ShellCommandsCount   int      `json:"shell_commands_count"`
 	TestCommandsCount    int      `json:"test_commands_count"`
 	DeniedInterceptions  int      `json:"denied_interceptions"`
-	UnverifiedCalls      int      `json:"unverified_calls,omitempty"`
-	ConsecutiveReadCalls int      `json:"consecutive_read_calls,omitempty"`
-	DirtyUnverifiedEdits bool     `json:"dirty_unverified_edits,omitempty"`
-	WarnedChurn75        bool     `json:"warned_churn_75,omitempty"`
+	UnverifiedCalls      int               `json:"unverified_calls,omitempty"`
+	ConsecutiveReadCalls int               `json:"consecutive_read_calls,omitempty"`
+	DirtyUnverifiedEdits bool              `json:"dirty_unverified_edits,omitempty"`
+	DirtyBehavioralEdits bool              `json:"dirty_behavioral_edits,omitempty"`
+	WarnedChurn75        bool              `json:"warned_churn_75,omitempty"`
 	WarnedChurn150       bool     `json:"warned_churn_150,omitempty"`
 	WarnedReadSpiral12   bool     `json:"warned_read_spiral_12,omitempty"`
 	WarnedReadSpiral20   bool     `json:"warned_read_spiral_20,omitempty"`
@@ -87,6 +88,7 @@ func evaluateWorktreeChurnAdvisory(p *HookPayload, hermeticDir, style string) st
 			tr.DirtyUnverifiedEdits = true
 		} else {
 			resetWorktreeChurnCounters(&tr)
+			clearBehavioralIfTested(wsRoot, &tr)
 			refreshTraceObservedDigests(wsRoot, &tr)
 		}
 		saveHookSessionTrace(path, tr)
@@ -136,8 +138,15 @@ func MarkWorktreeVerificationPassed(worktreeDir string) {
 		return
 	}
 	resetWorktreeChurnCounters(tr)
+	clearBehavioralIfTested(wsRoot, tr)
 	refreshTraceObservedDigests(wsRoot, tr)
 	saveHookSessionTrace(path, *tr)
+}
+
+func clearBehavioralIfTested(wsRoot string, tr *HookSessionTrace) {
+	if tr != nil && hasWorkspaceAutomatedTests(wsRoot) {
+		tr.DirtyBehavioralEdits = false
+	}
 }
 
 // MarkWorktreeVerificationFailed preserves DirtyUnverifiedEdits when 'nomos verify' fails in-process.
@@ -187,6 +196,26 @@ func hasFailedVerificationResponse(resp string) bool {
 	)
 }
 
+func updatePostToolShellTrace(tr *HookSessionTrace, p *HookPayload, wsRoot string) {
+	if p.CommandLine == "" {
+		return
+	}
+	var changedAbs []string
+	if isPotentialMutatingShellCommand(p.CommandLine) {
+		changedAbs = discoverShellMutatedFiles(wsRoot, tr)
+	}
+	if !hasBehavioralExecutionFailure(p.ToolResponseText) {
+		if (isBehavioralExecShellCommand(p.CommandLine) && len(changedAbs) == 0) ||
+			(len(changedAbs) > 0 && hasTrailingBehavioralSubcommand(p.CommandLine)) {
+			tr.DirtyBehavioralEdits = false
+			tr.StopBlockStrikes = 0
+		}
+	}
+	if isNomosVerificationCommand(p.CommandLine) && hasFailedVerificationResponse(p.ToolResponseText) {
+		tr.DirtyUnverifiedEdits = true
+	}
+}
+
 // recordPostToolSessionTrace records PostToolUse file mutations or shell runs when PreToolUse was not invoked.
 func recordPostToolSessionTrace(p *HookPayload, hermeticDir string) {
 	if p == nil || p.IsPostInvoke {
@@ -205,12 +234,7 @@ func recordPostToolSessionTrace(p *HookPayload, hermeticDir string) {
 		tr.ToolCallsCount = 1
 	}
 	recordTracePayloadDetails(&tr, p, wsRoot)
-	if p.CommandLine != "" && isPotentialMutatingShellCommand(p.CommandLine) {
-		discoverShellMutatedFiles(wsRoot, &tr)
-	}
-	if isNomosVerificationCommand(p.CommandLine) && hasFailedVerificationResponse(p.ToolResponseText) {
-		tr.DirtyUnverifiedEdits = true
-	}
+	updatePostToolShellTrace(&tr, p, wsRoot)
 	saveHookSessionTrace(path, tr)
 }
 
@@ -219,6 +243,20 @@ func resolveTraceScopeAndWorkspace(p *HookPayload, hermeticDir string) (string, 
 		return wtRoot, wtRoot, ""
 	}
 	return resolveBranchGuardScopeFromPayload(p, hermeticDir)
+}
+
+func recordTargetFileMutation(tr *HookSessionTrace, resolved, rel, wtRoot string) {
+	tr.MutatedFiles = appendUniqueBounded(tr.MutatedFiles, rel, 64)
+	tr.DirtyUnverifiedEdits = true
+	if isExecutableSourceRelPath(rel) && !hasWorkspaceAutomatedTests(wtRoot) {
+		tr.DirtyBehavioralEdits = true
+	}
+	if dig := computeFileContentDigest(resolved); dig != "" {
+		if tr.ObservedDigests == nil {
+			tr.ObservedDigests = make(map[string]string, 8)
+		}
+		tr.ObservedDigests[rel] = dig
+	}
 }
 
 func recordTracePayloadDetails(tr *HookSessionTrace, p *HookPayload, wtRoot string) {
@@ -241,16 +279,8 @@ func recordTracePayloadDetails(tr *HookSessionTrace, p *HookPayload, wtRoot stri
 			continue
 		}
 		rel := strings.TrimPrefix(resolved, wtRoot+"/")
-		if rel == "" || strings.HasPrefix(rel, ".tmp/") {
-			continue
-		}
-		tr.MutatedFiles = appendUniqueBounded(tr.MutatedFiles, rel, 64)
-		tr.DirtyUnverifiedEdits = true
-		if dig := computeFileContentDigest(resolved); dig != "" {
-			if tr.ObservedDigests == nil {
-				tr.ObservedDigests = make(map[string]string, 8)
-			}
-			tr.ObservedDigests[rel] = dig
+		if rel != "" && !strings.HasPrefix(rel, ".tmp/") {
+			recordTargetFileMutation(tr, resolved, rel, wtRoot)
 		}
 	}
 }

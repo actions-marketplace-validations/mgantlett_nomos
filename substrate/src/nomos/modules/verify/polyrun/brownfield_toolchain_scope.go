@@ -2,6 +2,7 @@
 package polyrun
 
 import (
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"os"
@@ -156,48 +157,116 @@ func ResolvePythonBinary(root, name string) (string, error) {
 	return exec.LookPath(name)
 }
 
+// DiscoverPythonScratchTestDirs returns relative untracked .tmp/tests or .tmp/test directories holding Python tests (@intent nomos_intent_traceability_spec.md).
+func DiscoverPythonScratchTestDirs(root string) []string {
+	if strings.TrimSpace(root) == "" {
+		return nil
+	}
+	var out []string
+	for _, rel := range []string{filepath.ToSlash(filepath.Join(".tmp", astdebt.DirTests)), filepath.ToSlash(filepath.Join(".tmp", astdebt.DirTest))} {
+		if dirHasPyTestFile(filepath.Join(root, filepath.FromSlash(rel))) {
+			out = append(out, rel)
+		}
+	}
+	return out
+}
+
+func dirHasPyTestFile(dir string) bool {
+	found := false
+	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d == nil || d.IsDir() || found {
+			return nil
+		}
+		if isPythonTestFilename(d.Name()) {
+			found = true
+		}
+		return nil
+	})
+	return found
+}
+
+func isPythonTestFilename(name string) bool {
+	return (strings.HasPrefix(name, astdebt.PrefixPyTest) && strings.HasSuffix(name, astdebt.ExtPy)) ||
+		strings.HasSuffix(name, astdebt.SuffixPyTest)
+}
+
+func collectExplicitPytestRoots(root string, scratch []string) []string {
+	var out []string
+	for _, topDir := range []string{astdebt.DirTests, astdebt.DirTest} {
+		if fi, err := os.Stat(filepath.Join(root, topDir)); err == nil && fi.IsDir() && dirHasPyTestFile(filepath.Join(root, topDir)) {
+			out = append(out, topDir)
+		}
+	}
+	if entries, err := os.ReadDir(root); err == nil {
+		for _, e := range entries {
+			if !e.IsDir() && isPythonTestFilename(e.Name()) {
+				out = append(out, e.Name())
+			}
+		}
+	}
+	return append(out, scratch...)
+}
+
 // ResolveScopedPytestTargets executes deterministic polyrun verification logic (@intent nomos_intent_traceability_spec.md).
 func ResolveScopedPytestTargets(ctx *vscope.VerifyContext, root string) ([]string, bool) {
+	scratch := DiscoverPythonScratchTestDirs(root)
 	if !vscope.IsBrownfieldRatchetActive(ctx) || !vscope.IsWorktreeContext(ctx, root) {
+		if len(scratch) > 0 {
+			return collectExplicitPytestRoots(root, scratch), true
+		}
 		return nil, true
 	}
 	modified := vscope.GetModifiedFilesInScope(ctx, root)
 	if len(modified) == 0 {
 		return nil, false
 	}
+	targets := collectBrownfieldPyTargets(root, modified)
+	if len(targets) == 0 && len(scratch) > 0 {
+		return scratch, true
+	}
+	if len(targets) == 0 {
+		return nil, false
+	}
+	return targets, true
+}
+
+func collectBrownfieldPyTargets(root string, modified []string) []string {
 	targets := make(map[string]struct{})
 	for _, rel := range modified {
 		slash := filepath.ToSlash(rel)
 		base := filepath.Base(slash)
-		if (strings.HasPrefix(base, "test_") && strings.HasSuffix(base, ".py")) || strings.HasSuffix(base, "_test.py") {
+		if isPythonTestFilename(base) {
 			if _, err := os.Stat(filepath.Join(root, rel)); err == nil {
 				targets[slash] = struct{}{}
 			}
 			continue
 		}
-		if strings.HasSuffix(base, ".py") && base != "__init__.py" {
-			stem := strings.TrimSuffix(base, ".py")
-			for _, cand := range []string{
-				filepath.Join("tests", "test_"+stem+".py"),
-				filepath.Join("tests", stem+"_test.py"),
-				filepath.Join("test", "test_"+stem+".py"),
-				filepath.Join(filepath.Dir(rel), "test_"+stem+".py"),
-			} {
-				if _, err := os.Stat(filepath.Join(root, cand)); err == nil {
-					targets[filepath.ToSlash(cand)] = struct{}{}
-				}
-			}
+		if strings.HasSuffix(base, astdebt.ExtPy) && base != "__init__.py" {
+			addPairedPyCandidates(root, rel, strings.TrimSuffix(base, astdebt.ExtPy), targets)
 		}
-	}
-	if len(targets) == 0 {
-		return nil, false
 	}
 	list := make([]string, 0, len(targets))
 	for t := range targets {
 		list = append(list, t)
 	}
 	sort.Strings(list)
-	return list, true
+	return list
+}
+
+func addPairedPyCandidates(root, rel, stem string, targets map[string]struct{}) {
+	for _, cand := range []string{
+		filepath.Join(astdebt.DirTests, astdebt.PrefixPyTest+stem+astdebt.ExtPy),
+		filepath.Join(astdebt.DirTests, stem+astdebt.SuffixPyTest),
+		filepath.Join(astdebt.DirTest, astdebt.PrefixPyTest+stem+astdebt.ExtPy),
+		filepath.Join(".tmp", astdebt.DirTests, astdebt.PrefixPyTest+stem+astdebt.ExtPy),
+		filepath.Join(".tmp", astdebt.DirTests, stem+astdebt.SuffixPyTest),
+		filepath.Join(".tmp", astdebt.DirTest, astdebt.PrefixPyTest+stem+astdebt.ExtPy),
+		filepath.Join(filepath.Dir(rel), astdebt.PrefixPyTest+stem+astdebt.ExtPy),
+	} {
+		if _, err := os.Stat(filepath.Join(root, cand)); err == nil {
+			targets[filepath.ToSlash(cand)] = struct{}{}
+		}
+	}
 }
 
 // ResolveNomosInternalCLIDir executes deterministic polyrun verification logic (@intent nomos_intent_traceability_spec.md).

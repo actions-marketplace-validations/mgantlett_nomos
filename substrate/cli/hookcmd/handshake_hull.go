@@ -43,6 +43,9 @@ func appendPlainWorkspaceHull(b *strings.Builder, hookRoot string) {
 	}
 	if mods := discoverWorkspaceModuleHull(hookRoot); len(mods) > 0 {
 		b.WriteString(fmt.Sprintf("  Workspace Modules : %s\n", strings.Join(mods, ", ")))
+		if !hasWorkspaceAutomatedTests(hookRoot) {
+			b.WriteString("  Regression Suite  : none detected - create stdlib unittest.TestCase tests in .tmp/tests/test_<module>.py so 'nomos verify' enforces >=80% coverage across turns without polluting git\n")
+		}
 	}
 }
 

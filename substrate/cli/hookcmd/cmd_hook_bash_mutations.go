@@ -102,6 +102,9 @@ func discoverShellMutatedFiles(wsRoot string, tr *HookSessionTrace) []string {
 		tr.MutatedFiles = appendUniqueBounded(tr.MutatedFiles, rel, 64)
 		tr.PendingShellRadar = appendUniqueBounded(tr.PendingShellRadar, rel, 8)
 		tr.DirtyUnverifiedEdits = true
+		if isExecutableSourceRelPath(rel) && !hasWorkspaceAutomatedTests(wsRoot) {
+			tr.DirtyBehavioralEdits = true
+		}
 		if len(changedAbs) < maxShellRadarFiles {
 			changedAbs = append(changedAbs, absPath)
 		}
@@ -281,7 +284,13 @@ func loadOrSyncStopTrace(traceKey, wsRoot string) *HookSessionTrace {
 	tr := loadHookSessionTrace(traceKey)
 	if tr == nil && wsRoot != "" {
 		if dirty := listGitDirtySourceFiles(wsRoot); len(dirty) > 0 {
-			seeded := HookSessionTrace{WorktreeRoot: wsRoot, MutatedFiles: dirty, DirtyUnverifiedEdits: true}
+			dirtyBeh := anyExecutableSourceRel(dirty) && !hasWorkspaceAutomatedTests(wsRoot)
+			seeded := HookSessionTrace{
+				WorktreeRoot:         wsRoot,
+				MutatedFiles:         dirty,
+				DirtyUnverifiedEdits: true,
+				DirtyBehavioralEdits: dirtyBeh,
+			}
 			refreshTraceObservedDigests(wsRoot, &seeded)
 			if path := resolveTraceStateFilePath(traceKey); path != "" {
 				saveHookSessionTrace(path, seeded)
@@ -292,6 +301,9 @@ func loadOrSyncStopTrace(traceKey, wsRoot string) *HookSessionTrace {
 	}
 	if tr != nil && wsRoot != "" {
 		if changed := discoverShellMutatedFiles(wsRoot, tr); len(changed) > 0 {
+			if anyExecutableSourceAbs(wsRoot, changed) && !hasWorkspaceAutomatedTests(wsRoot) {
+				tr.DirtyBehavioralEdits = true
+			}
 			if path := resolveTraceStateFilePath(traceKey); path != "" {
 				saveHookSessionTrace(path, *tr)
 			}

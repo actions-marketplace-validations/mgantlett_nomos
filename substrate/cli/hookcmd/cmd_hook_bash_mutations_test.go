@@ -56,6 +56,13 @@ func TestBranchGuard_BashShellMutationPostToolAndStopRearm(t *testing.T) {
 		"tool_name":       "Bash",
 		"tool_input":      map[string]any{"command": "nomos verify"},
 	})
+	executeHookCmd(t, []string{"post-tool", "--container-sandbox"}, map[string]any{
+		"session_id":      "scb-bash-1",
+		"hook_event_name": "PostToolUse",
+		"cwd":             repoDir,
+		"tool_name":       "Bash",
+		"tool_input":      map[string]any{"command": "python3 worker.py"},
+	})
 	stopAllowed := executeHookCmd(t, []string{"stop", "--container-sandbox"}, map[string]any{
 		"hook_event_name": "Stop",
 		"cwd":             repoDir,
@@ -152,6 +159,13 @@ func TestContainerStop_PreToolFailingBashWriteMultiStrikeAndPostVerifyRead(t *te
 		"hook_event_name": "PostToolUse",
 		"cwd":             repoDir,
 		"tool_name":       "Bash",
+		"tool_input":      map[string]any{"command": "python3 etl.py"},
+	})
+	executeHookCmd(t, []string{"post-tool", "--container-sandbox"}, map[string]any{
+		"session_id":      "scb-fail-write",
+		"hook_event_name": "PostToolUse",
+		"cwd":             repoDir,
+		"tool_name":       "Bash",
 		"tool_input":      map[string]any{"command": "git status --short"},
 	})
 	cleanStop := executeHookCmd(t, []string{"stop", "--container-sandbox"}, map[string]any{
@@ -160,5 +174,78 @@ func TestContainerStop_PreToolFailingBashWriteMultiStrikeAndPostVerifyRead(t *te
 	})
 	if cleanStop != "{}" {
 		t.Fatalf("expected read-only Bash after nomos verify pass to allow Stop {}, got %s", cleanStop)
+	}
+}
+
+// @verifies TC-BG-09
+func TestBehavioralStopGate_AndTestlessHandshakeGuidance(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("NOMOS_NO_UPDATE_CHECK", "1")
+	repoDir := setupBranchGuardTestRepo(t)
+	if out, err := workspace.SafeGitCommand(repoDir, "checkout", "-b", "feat/scb").CombinedOutput(); err != nil {
+		t.Fatalf("git checkout feat/scb: %v (%s)", err, string(out))
+	}
+
+	etlPath := filepath.Join(repoDir, "etl.py")
+	if err := os.WriteFile(etlPath, []byte("def run():\n    return 7\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	ev := &handshake.HandshakeEvent{Repository: "scb-etl", Phase: types.PhaseEdit, ActiveTask: "BRANCH-FEAT", GateCount: 42, StrictMode: false}
+	testlessBanner := hookcmd.FormatPlainHandshakeBannerWithRoot(ev, repoDir, false, "4.24.0")
+	if !strings.Contains(testlessBanner, "Regression Suite  : none detected") || !strings.Contains(testlessBanner, ".tmp/tests/test_<module>.py") {
+		t.Fatalf("expected testless Regression Suite hull guidance, got:\n%s", testlessBanner)
+	}
+
+	executeHookCmd(t, []string{"post-tool", "--container-sandbox"}, map[string]any{
+		"session_id":      "bg09",
+		"hook_event_name": "PostToolUse",
+		"cwd":             repoDir,
+		"tool_name":       "Write",
+		"tool_input":      map[string]any{"file_path": etlPath},
+	})
+	executeHookCmd(t, []string{"post-tool", "--container-sandbox"}, map[string]any{
+		"session_id":      "bg09",
+		"hook_event_name": "PostToolUse",
+		"cwd":             repoDir,
+		"tool_name":       "Bash",
+		"tool_input":      map[string]any{"command": "nomos verify"},
+		"tool_response":   map[string]any{"text": "All Laws Enforced"},
+	})
+
+	blockedStop := executeHookCmd(t, []string{"stop", "--container-sandbox"}, map[string]any{
+		"hook_event_name": "Stop",
+		"cwd":             repoDir,
+	})
+	if dec := parseDecision(t, blockedStop); dec.Decision != "block" || !strings.Contains(dec.Reason, "zero automated test suite") {
+		t.Fatalf("expected DirtyBehavioralEdits Stop block after testless nomos verify, got %+v (%s)", dec, blockedStop)
+	}
+
+	executeHookCmd(t, []string{"post-tool", "--container-sandbox"}, map[string]any{
+		"session_id":      "bg09",
+		"hook_event_name": "PostToolUse",
+		"cwd":             repoDir,
+		"tool_name":       "Bash",
+		"tool_input":      map[string]any{"command": "python3 etl.py"},
+		"tool_response":   map[string]any{"text": "ok"},
+	})
+	passedAfterExec := executeHookCmd(t, []string{"stop", "--container-sandbox"}, map[string]any{
+		"hook_event_name": "Stop",
+		"cwd":             repoDir,
+	})
+	if passedAfterExec != "{}" {
+		t.Fatalf("expected Stop '{}' after clean post-edit python3 execution, got %s", passedAfterExec)
+	}
+
+	scratchTests := filepath.Join(repoDir, ".tmp", "tests")
+	if err := os.MkdirAll(scratchTests, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(scratchTests, "test_etl.py"), []byte("import unittest\nfrom etl import run\nclass T(unittest.TestCase):\n    def test_run(self): self.assertEqual(run(), 7)\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testedBanner := hookcmd.FormatPlainHandshakeBannerWithRoot(ev, repoDir, false, "4.24.0")
+	if strings.Contains(testedBanner, "Regression Suite  : none detected") {
+		t.Fatalf("expected Regression Suite guidance suppressed once .tmp/tests/test_etl.py exists, got:\n%s", testedBanner)
 	}
 }

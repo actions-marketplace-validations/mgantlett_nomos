@@ -39,6 +39,7 @@ func detectPolyglotDesignSlopWithLimit(root string, sources map[string][]byte, m
 			out = append(out, scanPythonFileWrappers(relPath, text, corpusCounts)...)
 		}
 		out = append(out, scanPythonFuncLadders(relPath, text)...)
+		out = append(out, scanPythonIdiomSlop(relPath, text)...)
 	}
 	return out
 }

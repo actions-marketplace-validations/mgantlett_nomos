@@ -88,7 +88,12 @@ func evaluateTracedStopHook(p *HookPayload, hermeticDir string, containerSandbox
 		return HookDecision{Decision: hookDecisionAllow}
 	}
 	tr := loadOrSyncStopTrace(traceKey, wsRoot)
-	if tr == nil || len(tr.MutatedFiles) == 0 || !tr.DirtyUnverifiedEdits {
+	if tr == nil || len(tr.MutatedFiles) == 0 {
+		return HookDecision{Decision: hookDecisionAllow}
+	}
+	needsVerify := tr.DirtyUnverifiedEdits
+	needsBehavior := tr.DirtyBehavioralEdits && !hasWorkspaceAutomatedTests(wsRoot)
+	if !needsVerify && !needsBehavior {
 		return HookDecision{Decision: hookDecisionAllow}
 	}
 	if p.StopHookActive && tr.StopBlockStrikes >= maxContainerStopBlocks {
@@ -98,8 +103,25 @@ func evaluateTracedStopHook(p *HookPayload, hermeticDir string, containerSandbox
 	if path := resolveTraceStateFilePath(traceKey); path != "" {
 		saveHookSessionTrace(path, *tr)
 	}
+	if !needsVerify && needsBehavior {
+		return buildBehavioralStopDecision(wsRoot, len(tr.MutatedFiles), tr.StopBlockStrikes, containerSandbox)
+	}
 	radarNote := collectStopInlineRadarSummary(wsRoot, tr.MutatedFiles)
 	return buildUnverifiedStopDecision(wsRoot, branchLabel, len(tr.MutatedFiles), tr.StopBlockStrikes, containerSandbox, radarNote)
+}
+
+func buildBehavioralStopDecision(wsRoot string, fileCount, strike int, containerSandbox bool) HookDecision {
+	strikePrefix := "❌ [Nomos Anti-Phantom Gate]"
+	if containerSandbox {
+		strikePrefix = fmt.Sprintf("❌ [Nomos Anti-Phantom Gate (attempt %d/%d)]", strike, maxContainerStopBlocks)
+	}
+	return HookDecision{
+		Decision: hookDecisionBlock,
+		Reason: fmt.Sprintf(
+			"%s Workspace '%s' modified %d source file(s) with zero automated test suite and no passing post-edit program/test execution. Create stdlib unittest.TestCase tests in '.tmp/tests/test_*.py' (or 'tests/') and run 'nomos verify', or execute a behavioral smoke test after your final edit before ending your turn (Law 2).",
+			strikePrefix, filepath.Base(wsRoot), fileCount,
+		),
+	}
 }
 
 func buildUnverifiedStopDecision(wsRoot, branchLabel string, fileCount, strike int, containerSandbox bool, radarNote string) HookDecision {

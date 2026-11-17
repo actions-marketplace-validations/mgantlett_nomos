@@ -210,3 +210,94 @@ def dispatch(kind, v):
 		}
 	})
 }
+
+// @verifies TC-TS-22
+func TestUniversalCognitiveComplexityAndPythonIdioms(t *testing.T) {
+	t.Run("CognitiveComplexity_NestedExceeds15_WhileFlatElifPasses", func(t *testing.T) {
+		nestedPy := `def process_records(rows, cfg):
+    out = []
+    for row in rows:
+        if row.get("active"):
+            for item in row.get("items", []):
+                if item.get("valid") and not item.get("skip"):
+                    try:
+                        if cfg.get("strict") or item.get("force"):
+                            out.append(item["id"])
+                    except ValueError:
+                        out.append(None)
+    return out
+
+def dispatch_flat(op):
+    if op == "a": return 1
+    elif op == "b": return 2
+    elif op == "c": return 3
+    elif op == "d": return 4
+    elif op == "e": return 5
+    elif op == "f": return 6
+    elif op == "g": return 7
+    elif op == "h": return 8
+    return 0
+`
+		hits := EvaluatePolyglotCognitiveViolations("engine.py", []byte(nestedPy), MaxFunctionCognitiveComplexity)
+		if len(hits) != 1 || !strings.Contains(hits[0], "process_records cognitive complexity") {
+			t.Fatalf("expected only process_records to exceed cognitive limit 15, got %v", hits)
+		}
+	})
+
+	t.Run("GoStyleErrTuple_EmptyExceptionSprawl_SIM103_AndMultiCallerAllowed", func(t *testing.T) {
+		py := `class ErrA(Exception): pass
+class ErrB(Exception): pass
+class ErrC(Exception): pass
+
+def peek(buf):
+    return buf[0]
+
+def parse_cmd(line):
+    if not line:
+        return None, "empty"
+    if peek(line) == "!":
+        return None, "bang"
+    if peek(line) == "#":
+        return (line, None)
+    return line.strip(), None
+
+def is_ready(flag, count):
+    if flag and count > 0:
+        return True
+    return False
+`
+		dir := t.TempDir()
+		hits := DetectPolyglotDesignSlop(dir, map[string][]byte{"cmd.py": []byte(py)})
+		joined := strings.Join(hits, "\n")
+		for _, want := range []string{
+			"Go-style (value, err) tuple returns",
+			"declares 3 empty Exception subclasses",
+			"redundant 'if ...: return True' before opposite boolean return",
+		} {
+			if !strings.Contains(joined, want) {
+				t.Fatalf("expected %q in hits:\n%s", want, joined)
+			}
+		}
+		if strings.Contains(joined, "peek") || strings.Contains(joined, "wrapper") {
+			t.Fatalf("expected multi-caller 1-line helper peek() to remain allowed, got:\n%s", joined)
+		}
+	})
+
+	t.Run("TwoExceptionsAndSingleNoneLookupPassCleanly", func(t *testing.T) {
+		cleanPy := `class AppError(Exception):
+    pass
+
+class ValidationError(AppError):
+    pass
+
+def split_pair(val):
+    if ":" not in val:
+        return val, None
+    return val.split(":", 1)[0], None
+`
+		hits := DetectPolyglotDesignSlop(t.TempDir(), map[string][]byte{"clean.py": []byte(cleanPy)})
+		if len(hits) != 0 {
+			t.Fatalf("expected 0 hits on 2 empty exceptions and single-side lookup tuple, got %v", hits)
+		}
+	})
+}

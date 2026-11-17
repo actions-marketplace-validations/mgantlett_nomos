@@ -20,27 +20,58 @@ const (
 	EnvPyNoBytecodeKV  = "PYTHONDONTWRITEBYTECODE=1"
 )
 
-const pyUnittestRunnerScript = `import os, sys, unittest
+const pyUnittestRunnerScript = `import importlib.util, inspect, os, sys, unittest
 root = os.path.abspath(sys.argv[1])
 targets = [os.path.relpath(t, root) if os.path.isabs(t) else t for t in sys.argv[2:]]
 sys.path.insert(0, root)
 loader = unittest.defaultTestLoader
+py_tests = []
 if targets:
     suite = unittest.TestSuite()
     for t in targets:
-        if os.path.isfile(os.path.join(root, t)):
-            d, f = os.path.split(os.path.join(root, t))
+        full = os.path.join(root, t)
+        if os.path.isfile(full):
+            py_tests.append(full)
+            d, f = os.path.split(full)
             suite.addTests(loader.discover(d, pattern=f))
+        elif os.path.isdir(full):
+            for dp, _, fn in sorted(os.walk(full)):
+                for f in sorted(fn):
+                    if (f.startswith("test_") and f.endswith(".py")) or f.endswith("_test.py"):
+                        py_tests.append(os.path.join(dp, f))
+                        suite.addTests(loader.discover(dp, pattern=f))
         else:
             suite.addTests(loader.loadTestsFromName(t))
 else:
     cand = os.path.join(root, "tests")
     if not os.path.isdir(cand):
         cand = os.path.join(root, "test") if os.path.isdir(os.path.join(root, "test")) else root
+    for dp, dn, fn in sorted(os.walk(cand)):
+        dn[:] = [d for d in dn if not d.startswith(".") and d not in ("venv", ".venv", "node_modules", "__pycache__")]
+        for f in sorted(fn):
+            if (f.startswith("test_") and f.endswith(".py")) or f.endswith("_test.py"):
+                py_tests.append(os.path.join(dp, f))
     top = root if (cand == root or os.path.isfile(os.path.join(cand, "__init__.py"))) else None
     suite = loader.discover(cand, pattern="test*.py", top_level_dir=top)
 res = unittest.TextTestRunner(verbosity=0).run(suite)
-sys.exit(0 if res.wasSuccessful() else 1)
+if not res.wasSuccessful():
+    sys.exit(1)
+if res.testsRun == 0 and py_tests:
+    ran = 0
+    for idx, tp in enumerate(py_tests):
+        spec = importlib.util.spec_from_file_location("_nomos_u_" + str(idx), tp)
+        if spec is None or spec.loader is None:
+            continue
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        for name, obj in inspect.getmembers(mod, inspect.isfunction):
+            if name.startswith("test_") and getattr(obj, "__module__", "") == mod.__name__ and len(inspect.signature(obj).parameters) == 0:
+                obj()
+                ran += 1
+    if ran == 0:
+        sys.stderr.write("0 unittest.TestCase or zero-arg test_*() tests discovered (pytest not installed)\n")
+        sys.exit(1)
+sys.exit(0)
 `
 
 // RunPythonUnittestFallback executes deterministic polyrun verification logic (@intent nomos_intent_traceability_spec.md).

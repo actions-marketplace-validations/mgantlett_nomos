@@ -109,7 +109,7 @@ func verifyPythonToolchain(ctx *vscope.VerifyContext, root string) (string, *vsc
 				pytestArgs := append([]string{"-q", "--tb=short", "-p", "no:cacheprovider"}, targets...)
 				tCmd := exec.CommandContext(cmdCtx, pytestBin, pytestArgs...)
 				tCmd.Dir = root
-				tCmd.Env = SanitizedToolchainEnv(EnvPyNoBytecodeKV, EnvToolchainGateKV)
+				tCmd.Env = SanitizedToolchainEnv(EnvPyNoBytecodeKV, EnvToolchainGateKV, "PYTHONPATH="+root)
 				if out, tErr := tCmd.CombinedOutput(); tErr != nil {
 					return "", ToolchainFailure("Python pytest suite failed", string(out), "resolve failing Python unit tests (pytest -q)")
 				}
@@ -169,6 +169,9 @@ func walkRepoFilesByExt(root, ext string) []string {
 
 // HasPythonTests executes deterministic polyrun verification logic (@intent nomos_intent_traceability_spec.md).
 func HasPythonTests(root string) bool {
+	if len(DiscoverPythonScratchTestDirs(root)) > 0 {
+		return true
+	}
 	found := false
 	if walkErr := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d == nil || found {

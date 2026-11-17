@@ -161,7 +161,7 @@ func isPolyglotTDDTrackedExt(ext string) bool {
 
 func hasPolyglotTestManifest(root string) bool {
 	for _, m := range []string{
-		"pyproject.toml", "pytest.ini", "tox.ini", "setup.py", "Cargo.toml",
+		"pyproject.toml", "requirements.txt", "pytest.ini", "tox.ini", "setup.py", "Cargo.toml",
 		"Gemfile", "Rakefile", "CMakeLists.txt", "pom.xml", "build.gradle", "build.gradle.kts",
 	} {
 		if _, err := os.Stat(filepath.Join(root, m)); err == nil {
@@ -195,12 +195,18 @@ func isPolyglotTestFilePath(rel string) bool {
 	if vscope.IsRubyTestFile(base) || vscope.IsNativeTestFile(rel) || (!strings.HasSuffix(base, ".d.ts") && vscope.IsJSTestOrDeclFile(base)) {
 		return true
 	}
-	return strings.HasPrefix(slash, "tests/") || strings.HasPrefix(slash, "test/") ||
-		strings.HasPrefix(slash, "spec/") || strings.HasPrefix(slash, "src/test/") ||
-		strings.Contains(slash, "/__tests__/") || strings.Contains(slash, "/tests/")
+	for _, pref := range []string{"tests/", "test/", "spec/", "src/test/", ".tmp/tests/", ".tmp/test/"} {
+		if strings.HasPrefix(slash, pref) {
+			return true
+		}
+	}
+	return strings.Contains(slash, "/__tests__/") || strings.Contains(slash, "/tests/")
 }
 
 func hasRepositoryPolyglotTests(root string) bool {
+	if HasScratchPolyglotTests(root) {
+		return true
+	}
 	for _, d := range []string{"tests", "test", "__tests__", "spec"} {
 		if fi, err := os.Stat(filepath.Join(root, d)); err == nil && fi.IsDir() {
 			return true

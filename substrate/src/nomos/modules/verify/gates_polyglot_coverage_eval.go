@@ -21,7 +21,7 @@ import (
 
 const probeIDCoverage = "coverage"
 
-const pyStdlibTraceRunner = `import io, os, sys, trace, unittest
+const pyStdlibTraceRunner = `import importlib.util, inspect, io, os, sys, trace, unittest
 root = os.path.abspath(sys.argv[1])
 targets = sys.argv[2:]
 sys.path.insert(0, root)
@@ -50,21 +50,50 @@ def run_suite():
     except ImportError:
         pass
     loader = unittest.defaultTestLoader
+    py_tests = []
     if targets:
         suite = unittest.TestSuite()
         for t in targets:
             full = t if os.path.isabs(t) else os.path.join(root, t)
             if os.path.isfile(full):
+                py_tests.append(full)
                 d, f = os.path.split(full)
                 suite.addTests(loader.discover(d, pattern=f))
+            elif os.path.isdir(full):
+                for dp2, _, fn2 in sorted(os.walk(full)):
+                    for f2 in sorted(fn2):
+                        if (f2.startswith("test_") and f2.endswith(".py")) or f2.endswith("_test.py"):
+                            py_tests.append(os.path.join(dp2, f2))
+                            suite.addTests(loader.discover(dp2, pattern=f2))
             else:
                 suite.addTests(loader.loadTestsFromName(t))
     else:
         start = os.path.join(root, "tests") if os.path.isdir(os.path.join(root, "tests")) else root
+        for dp2, dn2, fn2 in sorted(os.walk(start)):
+            dn2[:] = [d for d in dn2 if not d.startswith(".") and d not in ("venv", ".venv", "node_modules", "__pycache__")]
+            for f2 in sorted(fn2):
+                if (f2.startswith("test_") and f2.endswith(".py")) or f2.endswith("_test.py"):
+                    py_tests.append(os.path.join(dp2, f2))
         top = root if (start == root or os.path.isfile(os.path.join(start, "__init__.py"))) else None
         suite = loader.discover(start, pattern="test*.py", top_level_dir=top)
     res = unittest.TextTestRunner(stream=io.StringIO()).run(suite)
     if not res.wasSuccessful():
+        sys.exit(2)
+    if res.testsRun > 0 or not py_tests:
+        return
+    ran = 0
+    for idx, tp in enumerate(py_tests):
+        spec = importlib.util.spec_from_file_location("_nomos_t_" + str(idx), tp)
+        if spec is None or spec.loader is None:
+            continue
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        for name, obj in inspect.getmembers(mod, inspect.isfunction):
+            if name.startswith("test_") and getattr(obj, "__module__", "") == mod.__name__ and len(inspect.signature(obj).parameters) == 0:
+                obj()
+                ran += 1
+    if ran == 0:
+        sys.stderr.write("0 unittest.TestCase or zero-arg test_*() tests discovered (pytest not installed)\n")
         sys.exit(2)
 tracer = trace.Trace(count=1, trace=0)
 tracer.runfunc(run_suite)
