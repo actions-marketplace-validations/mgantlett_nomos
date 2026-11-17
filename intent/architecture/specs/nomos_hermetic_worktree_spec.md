@@ -264,6 +264,8 @@ Session Sentinel (`CHARTER-4-BOUNDARY`) evaluates candidate workspace roots stru
 
 `nomos hook stop` evaluates branch-scoped traces keyed by repository root and branch, blocking turn exit until `nomos verify` passes. Git `pre-commit` blocks protected trunks and runs diff-scoped `nomos verify` on regular `git commit` invocations. `commit-msg` and `CommitSchemaGate` allow standard non-empty subjects without `[INT|SUB-N]` or `Task:` trailers, retaining anti-shim checks. `post-commit` invokes `nomos hook post-commit` to distill verified `trap -> fix` pitfalls into `mneme.db`.
 
+`ParseGoSurfaceFingerprintForPath` extracts exported Go functions, exported types, exported struct `json` tags, `@intent` bindings, and `verify`/`hookcmd` rule literals into `NormativeSurfaceDelta.GovernanceRules`. `InspectWorktreeNormativeSurface` cancels balanced intra-package moves so file splits pass untwinned while net-new rules require `Twin: INT-<N>`. `nomos hook post-tool` and `nomos hook stop` track `<size>:<sha256_8>` content digests across `Bash` file mutations. Active Branch Guard branches run `FastFileRadar` on `PostToolUse` and block unverified turns under `--container-sandbox` `Stop`. `FormatPlainHandshakeBannerWithRoot` appends `Manifest Deps` and `Workspace Modules` summaries during `SessionStart`.
+
 ---
 
 ## 6. Table-Driven Verification Vectors
@@ -303,6 +305,7 @@ Session Sentinel (`CHARTER-4-BOUNDARY`) evaluates candidate workspace roots stru
 | `TC-CMT-006` | AST normative-surface delta twin check | `refactor(hooks)` adding CLI flag or YAML tag under `intent_twin_mode: feat` | `"Rejects untwinned SUB commit when NormativeSurfaceDelta is non-empty."` | PASS |
 | `TC-CMT-007` | Internal substrate refactor exemption | `refactor(verify)` modifying private helpers with empty `NormativeSurfaceDelta` | `"Permits untwinned internal refactor under intent_twin_mode: feat."` | PASS |
 | `TC-CMT-008` | Referential `Twin:` provenance check | `Twin: INT-999999` absent from trunk history and task ledger | `"Rejects unresolvable Twin trailer lacking trunk or ledger provenance."` | PASS |
+| `TC-CMT-009` | Hardened Go AST governance delta | Untwinned `refactor`/`fix` adding export, `json` tag, or rule vs intra-package split | `"Rejects untwinned symbol or rule expansion while permitting intra-package splits."` | PASS |
 | `TC-HOOK-001` | Antigravity 2.0 `PostInvocation` flush | `nomos hook post-tool --antigravity --advisory-profile carbon` | `"Returns {} on PostToolUse and flushes buffered advisories on PostInvocation."` | PASS |
 | `TC-HOOK-002` | 5-provider `init` & `hook install` parity | `nomos init` and `nomos hook install` (`--cursor`, `--user`, default) | `"Scaffolds and merges Claude, Gemini, OpenCode, Cursor (.cursor/hooks.json v1), and Antigravity hooks."` | PASS |
 | `TC-HOOK-003` | Cursor lifecycle payload normalization | `nomos hook pre-tool` (`beforeShellExecution`) and `post-tool` (`afterFileEdit`) | `"Denies unsafe Cursor shell execution via permission=deny and runs AST radar on file_path edits."` | PASS |
@@ -316,6 +319,7 @@ Session Sentinel (`CHARTER-4-BOUNDARY`) evaluates candidate workspace roots stru
 | `TC-BG-04` | Branch Guard Stop verification gate | `nomos hook stop` on `feat/auth` with unverified edits | `"Blocks turn exit until nomos verify clears branch trace."` | PASS |
 | `TC-BG-05` | Branch Guard Git hook commit pass | `pre-commit` + `commit-msg` on `feat/auth` with plain message | `"Permits raw git commit after nomos verify without [SUB-N] trailers."` | PASS |
 | `TC-BG-06` | Branch Guard CommitSchemaGate pass | `CommitSchemaGate` evaluates feature-branch commits in `branch` mode | `"Accepts Jira, Linear, or plain subjects while rejecting canned shims."` | PASS |
+| `TC-BG-08` | Bash digest tracking & SessionStart hull | `Bash` file write across `post-tool` and `--container-sandbox` `stop`, plus `SessionStart` banner | `"Triggers AST radar, blocks unverified Stop, and renders Manifest Deps hull."` | PASS |
 
 ---
 

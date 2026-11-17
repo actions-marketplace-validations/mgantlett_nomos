@@ -379,6 +379,11 @@ func ScanRepository(rootDir string, opts XrayScanOptions) (*XrayReport, error)
 ### 4.5 Diff-Targeted AST Micro-Mutation & Verifier-Snooping Airlock
 `prproof.EvaluateDiffMutations` (`nomos verify --mutate-diff`) extracts modified Go, TypeScript/JS, and Python functions relative to `baseRef`. The mutator applies AST operator inversions (`>` to `>=`, `<` to `<=`, `==` to `!=`, and `true` to `false`) in shadow directories. Each mutant executes targeted language verification runners with zero LLM tokens and rejects execution when behavioral mutants survive. `EvaluateContainerPreToolHook` enforces the `shim-02` airlock across single-file and multi-file payloads. The hook blocks reads targeting `/tests`, `/solution`, `/logs/verifier`, `/verifier`, `/grading`, `/eval`, `/harness`, `/oracle`, and `/proc/1/environ`.
 
+### 4.6 Polyglot Design-Slop, Coverage-Exclusion & Wrapper-Fragmentation Sensors
+`CheckPolyglotUncheckedErrors` collapses single-line and multi-line Python `except (...)` tuples, rejecting three-plus types masking logic bugs. The sensor also rejects uncommented broad or multi-boundary catches returning empty values, plus empty JS/TS `catch` returns. `CheckCoverageExclusionDirectives` lexes source comments and attributes, rejecting `pragma: no cover`, `istanbul/v8/c8 ignore`, and `#[coverage(off)]` while ignoring string literals. `CheckManifestImportFallbacks` inspects `pyproject.toml`, `requirements.txt`, and stdlib sets, rejecting multi-statement `except ImportError` fallbacks for declared packages.
+
+`DetectPolyglotDesignSlop` rejects zero-caller private or compatibility-annotated pass-through shims and files containing three-plus single-use one-line return helpers. Cross-file caller counting scans up to `512` workspace files and skips wrapper counts above `512`. The gate also flags four or more consecutive `isinstance` raise guards and consecutive `if var ==` chains lacking `elif`. `EvaluatePolyglotNestingViolations` enforces `MaxFunctionNesting` (`5`) across Go, Python, JS/TS, and Rust functions inside `nomos verify` and `FastFileRadar`.
+
 ---
 
 ## 5. Table-Driven Verification Vectors
@@ -411,6 +416,9 @@ The following table-driven verification vectors validate the Tree-sitter AST Gat
 | `TC-TS-16` | `go` | `ratchet_mode: upstream` net-new file carrying third-party `Copyright` `<email>` | Header `<email>` compared against Git author email | Mismatched owner email detected | `FAIL` | Foreign copyright attribution on contributor file rejected |
 | `TC-TS-17` | `go` | `switch x { default: a(); case 1: b() }` | Non-terminal `default:` clause detected in Go AST | Clause index `< len-1` | `FAIL` | Mid-switch `default:` rejected in `ComplexityGate` and `FastFileRadar` |
 | `TC-TS-18` | `polyglot` | `corpus_command` exits non-zero on reference corpus regression | `GoToolchainGate` executes corpus probe with `NOMOS_BASELINE_REF` | Exit code `!= 0` | `FAIL` | Reference corpus regression fails closed |
+| `TC-TS-19` | `polyglot` | Multi-type `except (OSError, KeyError, TypeError)` or broad `except Exception: return {}` | Exception tuple and fallback return classified | Logic-bug mask or silent fallback | `FAIL` | Second-generation exception gaming rejected across Python and TS |
+| `TC-TS-20` | `polyglot` | Comment `# pragma: no cover` vs string literal, plus `pyproject.toml` `ImportError` shim | Lexical comments and manifest deps resolved | Comment pragma and manifest shim flagged | `FAIL` | Coverage pragmas and declared-package `ImportError` shims fail closed |
+| `TC-TS-21` | `python` | Dead `_fossil` wrapper, three 1-line helpers, `isinstance` ladder, `if ==` chain, depth `6` | Call counts, guard chains, and nesting measured | Wrapper slop and depth `> 5` flagged | `FAIL` | Design-slop fragmentation and deep control-flow nesting rejected |
 | `TC-XRAY-01` | `polyglot` | Uninitialized Go, Python, and TS fixture with clones and stubs | `xray.ScanRepository` aggregates polyglot metrics and hotspots | Non-zero `HangoverScore` and `BaselineEnvelope` | `PASS` | Read-only scan writes zero files or SQLite rows |
 | `TC-XRAY-02` | `polyglot` | `XrayReport` serialized via JSON and Markdown formatters | Relative hotspot paths emitted | Zero host home-directory literals | `PASS` | Law 5 path scrubbing holds across `XrayReport` outputs |
 | `TC-MUT-02` | `go` | Modified Go function tested with boundary assertions | `prproof.EvaluateDiffMutations` flips AST operators | `KillScorePct == 100` | `PASS` | Boundary tests kill every diff AST mutant |
@@ -424,6 +432,7 @@ The following table-driven verification vectors validate the Tree-sitter AST Gat
 | Metric types & CDS formula (`FunctionMetric`, `CalculateCDS`) | `substrate/src/nomos/modules/verify/treesitter/types.go` | `Cell 1.1 (complexity / max_file_loc / cognitive_debt)` |
 | Pure-Go `wazero` WASM sandbox (`WazeroTreeSitterEngine`) | `substrate/src/nomos/modules/verify/treesitter/engine.go` | `Cell 4.2 (contract_parity)`, `Cell 2.2 (go_toolchain)` |
 | Embedded `.scm` S-expression queries & polyglot scanners | `substrate/src/nomos/modules/verify/treesitter/scm_query.go`, `polyglot_scanner.go` | `Cell 2.1 (anti_shim / docstrings)`, `Cell 5.1 (magic_strings)` |
+| Polyglot design-slop & coverage-exclusion sensors (`DetectPolyglotDesignSlop`, `CheckCoverageExclusionDirectives`) | `substrate/src/nomos/modules/verify/astdebt/gates_design_slop.go`, `gates_coverage_antishim.go` | `Cell 1.1 (complexity)`, `Cell 2.1 (anti_shim)`, `Cell 7.2 (unchecked_errors)` |
 | Zero-init brownfield X-Ray & baseline envelope (`XrayReport`, `ScanRepository`) | `substrate/src/nomos/modules/verify/xray/types.go`, `scanner.go` | `Cell 1.1 (cognitive_debt)`, `Cell 4.2 (contract_parity)` |
 | Diff AST micro-mutation & PR proof (`EvaluateDiffMutations`, `PRProofReceipt`) | `substrate/src/nomos/modules/verify/prproof/mutator.go`, `receipt.go` | `Cell 2.2 (go_toolchain)`, `Cell 2.3 (gate_integrity_proof)` |
 
