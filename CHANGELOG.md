@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v4.24.0] - 2026-11-17
+
+> Add polyglot design-slop, coverage-exclusion, manifest ImportError fallback, and wrapper-fragmentation AST sensors; Track Bash file mutations natively across PostToolUse and Stop hooks and surface manifest/module hull in SessionStart (Apache 2.0)
+
+### Verification & AST Gates (`nomos verify`)
+- **Enforce 2nd-gen exception gaming, coverage exclusion, and design-slop AST sensors (`SUB-3200`)**: Detect >=3-type bug-masking `except` tuples and silent fallback returns across broad/boundary catches, reject comment-level coverage exclusion directives (`pragma: no cover`, `istanbul/v8/c8 ignore`, `#[coverage(off)]`), reject multi-statement `except ImportError` fallbacks when libraries are declared in manifests or stdlib, catch 0-caller private pass-through wrappers, flag >=3 single-use 1-line wrapper fragmentation, detect inline `isinstance` guard ladders and same-variable `if ==` chains, and enforce polyglot control-flow nesting depth across `verify` and `FastFileRadar`.
+
+### CLI, Distribution & Hooks (`nomos hook`)
+- **Track shell file mutations and surface manifest hull (`SUB-3201`)**: Record content digests to detect files created or edited via `Bash` across `PostToolUse` and `Stop` hooks (including `--container-sandbox` Branch Guard repos), enable `PostToolUse` AST radar on active Branch Guard feature branches, and surface declared dependencies (`Manifest Deps`) and workspace symbols (`Workspace Modules`) during `SessionStart`.
+
+---
+
 ## [v4.23.0] - 2026-11-17
 
 > Document HarnessSecurity-Bench 46-container paired audit in README; Container mechanism policies, symlink path isolation, and token-aware runner loop detection; Fix content-hash loop breaker and container test-plane write guard in hookcmd; Tighten README conversion flow and sync Branch Guard hero terminal SVG (Apache 2.0)
