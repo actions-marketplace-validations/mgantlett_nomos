@@ -88,6 +88,12 @@ func TestRootActionYAML_MarketplaceBrandingAndStepSummaryExitTrap(t *testing.T) 
 	for _, want := range []string{
 		"branding:",
 		"icon: 'shield'",
+		"sarif-path:",
+		"id: fast-binary",
+		"install.sh",
+		"if: steps.fast-binary.outputs.installed != 'true'",
+		"nomos init --local -d .",
+		"nomos.baseline.json",
 		"VERIFY_EXIT=0",
 		"|| VERIFY_EXIT=$?",
 		`cat "${INPUT_RECEIPT_PATH}" >> "$GITHUB_STEP_SUMMARY"`,
