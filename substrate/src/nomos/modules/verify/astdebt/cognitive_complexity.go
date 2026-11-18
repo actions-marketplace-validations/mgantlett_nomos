@@ -20,7 +20,7 @@ const (
 var (
 	cogPyFuncHeaderRe    = regexp.MustCompile(`^(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(`)
 	cogBraceFuncHeaderRe = regexp.MustCompile(`^(?:(?:pub(?:\([^)]*\))?\s+|export\s+|public\s+|private\s+|protected\s+|internal\s+|static\s+|async\s+|virtual\s+|override\s+|final\s+)*)(?:(?:function|fn)\s+([A-Za-z_][A-Za-z0-9_]*)|([A-Za-z_][A-Za-z0-9_]*)\s*(?:<[^>]*>)?)\s*\(`)
-	cogIndentBranchRe    = regexp.MustCompile(`^(if|elif|else|for|while|except|rescue|match)\b`)
+	cogIndentBranchRe    = regexp.MustCompile(`^(if|elif|elsif|else|for|while|except|rescue|match)\b`)
 	cogBraceBranchRe     = regexp.MustCompile(`^(else\s+if|if|else|for|foreach|while|catch|switch|match)\b`)
 	cogPyBoolTokenRe     = regexp.MustCompile(`\b(and|or)\b`)
 	cogBraceBoolTokenRe  = regexp.MustCompile(`(&&|\|\|)`)

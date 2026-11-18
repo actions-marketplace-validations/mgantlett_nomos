@@ -129,7 +129,9 @@ if tot > 0:
 `
 
 func evaluatePolyglotCoverageGate(gateName string, ctx *vscope.VerifyContext, root string) *vscope.GateResult {
+	start := time.Now()
 	pct, source, failMsg := measureWorkspacePolyglotCoverage(ctx, root)
+	elapsed := time.Since(start)
 	if failMsg != "" {
 		return &vscope.GateResult{
 			GateName: gateName, ProbeID: probeIDCoverage, Law: 2, Ring: RingDynamic,
@@ -150,8 +152,14 @@ func evaluatePolyglotCoverageGate(gateName string, ctx *vscope.VerifyContext, ro
 			GateName: gateName, ProbeID: probeIDCoverage, Law: 2, Ring: RingDynamic,
 			Passed:  false,
 			Message: fmt.Sprintf("polyglot statement coverage %.1f%% (%s) is below minimum required %.1f%%", pct, source, effThreshold),
-			Remedy:  fmt.Sprintf("author additional unit tests to raise statement coverage to >= %.1f%%", effThreshold),
+			Remedy:  resolvePolyglotCoverageRemedy(root, effThreshold),
 		}
+	}
+	if rigorRes := evaluatePolyglotTestRigor(ctx, root, source); rigorRes != nil {
+		return rigorRes
+	}
+	if mutRes := evaluatePolyglotBoundaryMutants(ctx, root, source, elapsed); mutRes != nil {
+		return mutRes
 	}
 	return &vscope.GateResult{
 		GateName: gateName, ProbeID: probeIDCoverage, Law: 2, Ring: RingDynamic,

@@ -10,7 +10,6 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -157,61 +156,6 @@ func formatGoCallTag(call *ast.CallExpr) string {
 		return fmt.Sprintf("CALL:%s/%d", ident.Name, len(call.Args))
 	}
 	return fmt.Sprintf("CALL:?/%d", len(call.Args))
-}
-
-var (
-	polyglotStringLitRe = regexp.MustCompile(`(?:"[^"\\]*(?:\\.[^"\\]*)*"|'[^'\\]*(?:\\.[^'\\]*)*')`)
-	polyglotNumberLitRe = regexp.MustCompile(`\b\d+(?:\.\d+)?\b`)
-	polyglotSpaceRe     = regexp.MustCompile(`\s+`)
-)
-
-func extractPolyglotCloneCandidates(lang, relPath string, src []byte, minLines int) []cloneBlockCandidate {
-	funcs, err := treesitter.ExtractFunctions(lang, relPath, src)
-	if err != nil || len(funcs) == 0 {
-		return nil
-	}
-	lines := strings.Split(string(src), "\n")
-	var out []cloneBlockCandidate
-	for _, fn := range funcs {
-		if fn.LOC < minLines {
-			continue
-		}
-		startIdx := fn.Line - 1
-		endIdx := startIdx + fn.LOC
-		if startIdx < 0 || endIdx > len(lines) {
-			continue
-		}
-		skel := normalizePolyglotLines(lines[startIdx:endIdx])
-		if len(skel) < 40 {
-			continue
-		}
-		out = append(out, cloneBlockCandidate{
-			file:      filepath.ToSlash(relPath),
-			startLine: fn.Line,
-			endLine:   fn.Line + fn.LOC - 1,
-			loc:       fn.LOC,
-			hash:      hashSkeleton(lang + ":" + skel),
-		})
-	}
-	return out
-}
-
-func normalizePolyglotLines(lines []string) string {
-	if len(lines) <= 1 {
-		return ""
-	}
-	var cleaned []string
-	for i := 1; i < len(lines); i++ {
-		trimmed := strings.TrimSpace(lines[i])
-		if trimmed == "" || strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-		norm := polyglotStringLitRe.ReplaceAllString(trimmed, "$STR")
-		norm = polyglotNumberLitRe.ReplaceAllString(norm, "$NUM")
-		norm = polyglotSpaceRe.ReplaceAllString(norm, " ")
-		cleaned = append(cleaned, norm)
-	}
-	return strings.Join(cleaned, "|")
 }
 
 func hashSkeleton(skel string) string {

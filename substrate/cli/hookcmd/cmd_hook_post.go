@@ -146,7 +146,11 @@ func EvaluatePostToolHook(p *HookPayload, hermeticDir string) string {
 	if syntaxMsg := validateStructuredFileInMemory(resolved); syntaxMsg != "" {
 		return joinHookAdvisories(syntaxMsg, pitfallMsg)
 	}
-	return joinHookAdvisories(evaluateFastRadarInMemory(resolved, baseCwd), pitfallMsg)
+	radarAndHygiene := joinHookAdvisories(
+		evaluateFastRadarInMemory(resolved, baseCwd),
+		evaluateTestPlacementHygieneAdvisory(resolved, baseCwd),
+	)
+	return joinHookAdvisories(radarAndHygiene, pitfallMsg)
 }
 
 func isPostToolTargetInScope(resolved, hermeticDir string) bool {

@@ -211,11 +211,12 @@ func isWorkspaceTestPath(resolved, baseCwd string) bool {
 		return true
 	}
 	baseName := filepath.Base(lower)
-	return strings.HasPrefix(baseName, "test_") ||
-		strings.HasSuffix(baseName, "_test.py") ||
-		strings.HasSuffix(baseName, "_test.go") ||
-		strings.HasSuffix(baseName, ".test.ts") ||
-		strings.HasSuffix(baseName, ".spec.ts")
+	for _, suffix := range []string{"_test.py", "_test.go", ".test.ts", ".spec.ts", ".test.js", ".spec.js", "_test.rb", "_spec.rb"} {
+		if strings.HasSuffix(baseName, suffix) {
+			return true
+		}
+	}
+	return strings.HasPrefix(baseName, "test_")
 }
 
 func isMutatingWorkspaceTestShellCmd(cmdLine, baseCwd string) bool {

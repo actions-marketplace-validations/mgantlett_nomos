@@ -162,6 +162,7 @@ type ifChainRun struct {
 	label     string
 	startLine int
 	length    int
+	allJump   bool
 }
 
 func findConsecutiveBranchChains(body []string, startLineBase int) []ifChainRun {
@@ -191,7 +192,10 @@ func findConsecutiveBranchChains(body []string, startLineBase int) []ifChainRun 
 
 func matchSameVarBranchHeader(line string) (string, string, bool) {
 	if m := pyIfEqVarRe.FindStringSubmatch(line); len(m) == 3 {
-		return "eq:" + m[2], fmt.Sprintf("consecutive 'if %s ==' checks", m[2]), true
+		return "dispatch:" + m[2], fmt.Sprintf("consecutive 'if %s ==' checks", m[2]), true
+	}
+	if m := pyIfInVarRe.FindStringSubmatch(line); len(m) == 3 {
+		return "dispatch:" + m[2], fmt.Sprintf("consecutive 'if %s == / in' checks", m[2]), true
 	}
 	if m := pyIfIsinstanceVarRe.FindStringSubmatch(line); len(m) == 3 {
 		return "is:" + m[2], fmt.Sprintf("consecutive 'if isinstance(%s, ...)' checks", m[2]), true
@@ -202,15 +206,20 @@ func matchSameVarBranchHeader(line string) (string, string, bool) {
 func stepIfChainLine(body []string, i, indent int, trimmed string, startLineBase int, cur *ifChainRun) (*ifChainRun, int, *ifChainRun) {
 	if key, label, ok := matchSameVarBranchHeader(body[i]); ok {
 		blockEnd := findPythonBlockEnd(body, i+1, indent)
+		isJump := pythonIfBlockEndsInJump(body[i:blockEnd])
 		if cur != nil && cur.indent == indent && cur.chainKey == key {
 			cur.length++
+			cur.allJump = cur.allJump && isJump
 			return cur, blockEnd - 1, nil
 		}
 		var flagged *ifChainRun
 		if isFlaggedIfChain(cur) {
 			flagged = cur
 		}
-		return &ifChainRun{indent: indent, chainKey: key, label: label, startLine: startLineBase + i, length: 1}, blockEnd - 1, flagged
+		return &ifChainRun{
+			indent: indent, chainKey: key, label: label,
+			startLine: startLineBase + i, length: 1, allJump: isJump,
+		}, blockEnd - 1, flagged
 	}
 	if cur != nil && indent == cur.indent && pyElseOrElifPrefixRe.MatchString(trimmed) {
 		return nil, findPythonBlockEnd(body, i+1, indent) - 1, nil
@@ -222,7 +231,10 @@ func stepIfChainLine(body []string, i, indent int, trimmed string, startLineBase
 }
 
 func isFlaggedIfChain(cur *ifChainRun) bool {
-	return cur != nil && cur.length >= 3
+	if cur == nil {
+		return false
+	}
+	return cur.length >= 3 || (cur.length >= 2 && cur.allJump)
 }
 
 func pythonIfBlockEndsInJump(block []string) bool {

@@ -98,8 +98,12 @@ func (s *indentCogState) handleFuncHeader(lineNum, indent int, name string) {
 }
 
 func (s *indentCogState) applyIndentBranch(kw string, indent int, cleaned string) {
-	if kw == "elif" || kw == "else" {
-		s.curScore++
+	if kw == "elif" || kw == "elsif" || kw == "else" {
+		if len(s.stack) > 0 {
+			s.curScore += 1 + len(s.stack) + 1
+		} else {
+			s.curScore++
+		}
 	} else {
 		s.curScore += 1 + len(s.stack)
 	}

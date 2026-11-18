@@ -19,12 +19,14 @@ const (
 var (
 	pyAnyDefRe           = regexp.MustCompile(`^(\s*)(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(`)
 	pyIfEqVarRe          = regexp.MustCompile(`^(\s*)if\s+([A-Za-z_][A-Za-z0-9_\.]*)\s*==\s*`)
+	pyIfInVarRe          = regexp.MustCompile(`^(\s*)if\s+([A-Za-z_][A-Za-z0-9_\.]*)\s+in\s+`)
 	pyIfIsinstanceVarRe  = regexp.MustCompile(`^(\s*)if\s+isinstance\s*\(\s*([A-Za-z_][A-Za-z0-9_\.]*)\s*,`)
 	pyElseOrElifPrefixRe = regexp.MustCompile(`^(?:elif|else)\b`)
+	pyErrorHelperCallRe  = regexp.MustCompile(`^(?:[A-Za-z_][A-Za-z0-9_]*\.)?(?:fail|abort|reject|panic|bail|error_out|err|raise_error|validation_error)\s*\(`)
 )
 
 // DetectPolyglotDesignSlop detects dead private or compatibility-annotated pass-through wrappers, 1-line wrapper fragmentation,
-// inline isinstance guard ladders, and consecutive same-variable if-chains in non-test Python files (@intent tree_sitter_ast_gate_spec.md).
+// inline type-guard ladders, consecutive same-variable if-chains, and anti-slop idioms across polyglot source files (@intent tree_sitter_ast_gate_spec.md).
 func DetectPolyglotDesignSlop(root string, sources map[string][]byte) []string {
 	return detectPolyglotDesignSlopWithLimit(root, sources, maxDesignSlopCorpusFiles)
 }
@@ -36,16 +38,30 @@ func detectPolyglotDesignSlopWithLimit(root string, sources map[string][]byte, m
 	corpusCounts, corpusTruncated := buildDesignSlopCorpusCountsWithLimit(root, sources, maxCorpusFiles)
 	var out []string
 	for _, relPath := range sortedSourceKeys(sources) {
-		if !strings.EqualFold(filepath.Ext(relPath), ExtPy) || isPythonTestRelPath(relPath) {
-			continue
-		}
-		text := string(sources[relPath])
+		out = append(out, evaluateSingleFileDesignSlop(root, relPath, sources[relPath], corpusCounts, corpusTruncated)...)
+	}
+	return out
+}
+
+func evaluateSingleFileDesignSlop(root, relPath string, src []byte, corpusCounts map[string]int, corpusTruncated bool) []string {
+	ext := strings.ToLower(filepath.Ext(relPath))
+	if ext == ExtGo || ext == ExtSvelte || !isPolyglotDesignSlopExt(ext) || isDesignSlopTestRelPath(relPath) {
+		return nil
+	}
+	text := string(src)
+	var out []string
+	if ext == ExtPy {
 		if !corpusTruncated {
 			out = append(out, scanPythonFileWrappers(relPath, text, corpusCounts)...)
 		}
 		out = append(out, scanPythonFuncLadders(relPath, text)...)
 		out = append(out, scanPythonIdiomSlop(relPath, text)...)
+		return out
 	}
+	if !corpusTruncated {
+		out = append(out, scanPolyglotFileWrappers(relPath, src, corpusCounts)...)
+	}
+	out = append(out, scanPolyglotIdiomAndControlFlowSlop(root, relPath, text)...)
 	return out
 }
 
@@ -98,7 +114,7 @@ func scanPythonFuncLadders(relPath, text string) []string {
 			out = append(out, fmt.Sprintf("%s:%d: function %s contains %d inline 'if ...: raise' guards; consolidate validation into a shared helper or lookup table", relPath, fn.startLine, fn.name, raiseGuards))
 		}
 		for _, chain := range findConsecutiveBranchChains(fn.bodyLines, fn.startLine+1) {
-			out = append(out, fmt.Sprintf("%s:%d: %d %s at same indent without elif or dispatch table; use elif, match, or a lookup dict", relPath, chain.startLine, chain.length, chain.label))
+			out = append(out, fmt.Sprintf("%s:%d: %d %s at same indent; consolidate into a lookup dict or match/case", relPath, chain.startLine, chain.length, chain.label))
 		}
 	}
 	if moduleIsinstanceGuards >= minInlineIsinstanceGuardsModule {
@@ -119,7 +135,7 @@ func countInlineIsinstanceAndRaiseGuards(body []string) (int, int) {
 			continue
 		}
 		raiseGuards++
-		if strings.Contains(cleaned, "isinstance(") {
+		if strings.Contains(cleaned, "isinstance(") || strings.Contains(cleaned, "type(") {
 			isGuards++
 		}
 	}
@@ -132,9 +148,14 @@ func pyIfHeaderImmediatelyRaises(body []string, idx int, cleaned string) bool {
 		return false
 	}
 	if suite != "" {
-		return strings.HasPrefix(suite, "raise ") || suite == "raise" || strings.HasPrefix(suite, "raise(")
+		return isPythonRaiseOrErrorHelper(suite)
 	}
 	return nextExecLineStartsWithRaise(body, idx+1, countLeadingIndentCols(body[idx]))
+}
+
+func isPythonRaiseOrErrorHelper(stmt string) bool {
+	t := strings.TrimSpace(stmt)
+	return strings.HasPrefix(t, "raise ") || t == "raise" || strings.HasPrefix(t, "raise(") || pyErrorHelperCallRe.MatchString(t)
 }
 
 func splitPyTopLevelColonTail(line string) (string, bool) {
@@ -165,7 +186,7 @@ func nextExecLineStartsWithRaise(lines []string, idx, ifIndent int) bool {
 		if countLeadingIndentCols(lines[j]) <= ifIndent {
 			return false
 		}
-		return strings.HasPrefix(t, "raise ") || t == "raise"
+		return isPythonRaiseOrErrorHelper(t)
 	}
 	return false
 }

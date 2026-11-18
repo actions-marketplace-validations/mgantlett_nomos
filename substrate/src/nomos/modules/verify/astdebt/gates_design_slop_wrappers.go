@@ -11,22 +11,24 @@ import (
 )
 
 const (
-	maxDesignSlopCorpusFiles  = 512
-	maxDesignSlopFileBytes    = 512 * 1024
-	minTrivialSinglesPerFile  = 2
+	maxDesignSlopCorpusFiles = 512
+	maxDesignSlopFileBytes   = 512 * 1024
+	minTrivialSinglesPerFile = 2
+	maxMultiOneLinersPy      = 2
 )
 
 var (
-	pyTopDefRe               = regexp.MustCompile(`^(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(`)
-	pyClassMethodDefRe       = regexp.MustCompile(`^([ \t]+)(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*self\b`)
 	pyFossilNoteRe           = regexp.MustCompile(`(?i)\b(?:compatibility|backwards?[- ]compatible|legacy|deprecated|checkpoint)\b`)
 	excludedClassMethodNames = map[string]bool{
 		"default": true, "format": true, "read": true, "write": true, "close": true,
-		"get": true, "set": true, "keys": true, "items": true, "values": true,
-		"copy": true, "reset": true, "run": true, "parse": true, "execute": true,
-		"main": true, "to_dict": true, "from_dict": true, "peek": true, "clear": true,
+		"keys": true, "items": true, "values": true, "copy": true,
+		"main": true, "to_dict": true, "from_dict": true,
 	}
-	designSlopCorpusExts  = map[string]bool{ExtPy: true, ExtJS: true, ExtJSX: true, ExtTS: true, ExtTSX: true}
+	designSlopCorpusExts = map[string]bool{
+		ExtPy: true, ExtRB: true, ExtRake: true,
+		ExtTS: true, ExtTSX: true, ExtJS: true, ExtJSX: true, ExtMJS: true, ExtCJS: true,
+		ExtRS: true, ExtJava: true, ExtKT: true, ExtKTS: true, ExtCS: true, ExtGo: true,
+	}
 	designSlopSkipDirName = map[string]bool{
 		".git": true, ".venv": true, "venv": true, "node_modules": true,
 		"__pycache__": true, "vendor": true, ".tmp": true, ".nomos": true,
@@ -35,6 +37,7 @@ var (
 
 type pyFuncBlock struct {
 	name          string
+	indent        int
 	startLine     int
 	bodyLines     []string
 	decorated     bool
@@ -116,102 +119,110 @@ type wrapperClass int
 
 const (
 	wrapperNone wrapperClass = iota
-	wrapperDeadFossil
+	wrapperDeadTopFossil
+	wrapperDeadMethod
 	wrapperSingleMiddleman
 	wrapperTrivialSingle
+	wrapperMultiOneLiner
 )
+
+type singleUseHit struct {
+	name string
+	line int
+}
 
 func scanPythonFileWrappers(relPath, text string, corpusCounts map[string]int) []string {
 	var out []string
-	var trivialSingles []string
-	for _, fn := range parseTopLevelPyFuncs(text) {
-		switch classifyTopWrapper(fn, corpusCounts) {
-		case wrapperDeadFossil:
-			out = append(out, fmt.Sprintf("%s:%d: dead pass-through wrapper %q has 0 callers (checkpoint fossil); delete unused shim and call target directly (Law 6)", relPath, fn.startLine, fn.name))
-		case wrapperSingleMiddleman:
-			out = append(out, fmt.Sprintf("%s:%d: single-caller pass-through middleman %q forwards to another call with 1 caller; inline target call directly (Law 6)", relPath, fn.startLine, fn.name))
-		case wrapperTrivialSingle:
-			trivialSingles = append(trivialSingles, fn.name)
+	var singles []singleUseHit
+	var multiNames []string
+	for _, fn := range parseAllPyFuncs(text) {
+		cls, note := classifyPyOneLiner(fn, corpusCounts)
+		if msg := formatImmediateWrapperHit(relPath, fn, cls, note); msg != "" {
+			out = append(out, msg)
+		} else if cls == wrapperTrivialSingle {
+			singles = append(singles, singleUseHit{name: fn.name, line: fn.startLine})
+		} else if cls == wrapperMultiOneLiner {
+			multiNames = append(multiNames, fn.name)
 		}
 	}
-	if len(trivialSingles) >= minTrivialSinglesPerFile {
-		out = append(out, fmt.Sprintf("%s: excessive trivial wrapper fragmentation (%d single-use 1-line return helpers: %s); inline 1-line single-caller wrappers instead of fragmenting module (Law 6)", relPath, len(trivialSingles), strings.Join(trivialSingles, ", ")))
-	}
-	return append(out, scanPythonDeadClassMethods(relPath, text, corpusCounts)...)
+	out = append(out, formatPyWrapperGroupHits(relPath, singles, multiNames)...)
+	return out
 }
 
-func scanPythonDeadClassMethods(relPath, text string, corpusCounts map[string]int) []string {
-	lines := strings.Split(text, "\n")
+func formatImmediateWrapperHit(relPath string, fn pyFuncBlock, cls wrapperClass, _ string) string {
+	switch cls {
+	case wrapperDeadTopFossil:
+		return fmt.Sprintf("%s:%d: dead pass-through wrapper %q has 0 callers (checkpoint fossil); delete unused shim and call target directly (Law 6)", relPath, fn.startLine, fn.name)
+	case wrapperDeadMethod:
+		return fmt.Sprintf("%s:%d: dead pass-through method %q has 0 callers (checkpoint fossil); inline expression at callsite (Law 6)", relPath, fn.startLine, fn.name)
+	case wrapperSingleMiddleman:
+		return fmt.Sprintf("%s:%d: single-caller pass-through middleman %q forwards to another call with 1 caller; inline target call directly (Law 6)", relPath, fn.startLine, fn.name)
+	default:
+		return ""
+	}
+}
+
+func formatPyWrapperGroupHits(relPath string, singles []singleUseHit, multiNames []string) []string {
 	var out []string
-	for i := 0; i < len(lines); i++ {
-		msg, nextIdx := checkClassMethodBlockAt(relPath, lines, i, corpusCounts)
-		if msg != "" {
-			out = append(out, msg)
+	if len(singles) == 1 {
+		out = append(out, fmt.Sprintf("%s:%d: single-caller one-line return helper %q has only 1 caller; inline expression directly at callsite (Law 6)", relPath, singles[0].line, singles[0].name))
+	} else if len(singles) >= minTrivialSinglesPerFile {
+		names := make([]string, len(singles))
+		for i, s := range singles {
+			names[i] = s.name
 		}
-		i = nextIdx
+		out = append(out, fmt.Sprintf("%s: excessive trivial wrapper fragmentation (%d single-use 1-line return helpers: %s); inline 1-line single-caller wrappers instead of fragmenting module (Law 6)", relPath, len(singles), strings.Join(names, ", ")))
+	}
+	if len(multiNames) > maxMultiOneLinersPy {
+		out = append(out, fmt.Sprintf("%s: module defines %d multi-caller one-line return micro-helpers (%s; max %d); inline trivial predicates/wrappers or consolidate into a dispatch table (Law 6)", relPath, len(multiNames), strings.Join(multiNames, ", "), maxMultiOneLinersPy))
 	}
 	return out
 }
 
-func checkClassMethodBlockAt(relPath string, lines []string, i int, corpusCounts map[string]int) (string, int) {
-	m := pyClassMethodDefRe.FindStringSubmatchIndex(lines[i])
-	if len(m) != 6 {
-		return "", i
+func isSkippablePyFunc(fn pyFuncBlock) bool {
+	if fn.decorated || fn.name == "main" || strings.HasPrefix(fn.name, "visit_") {
+		return true
 	}
-	indent := countLeadingIndentCols(lines[i][m[2]:m[3]])
-	name := lines[i][m[4]:m[5]]
-	end := findPythonBlockEnd(lines, i+1, indent)
-	if isSkippableClassMethod(name) {
-		return "", end - 1
+	if strings.HasPrefix(fn.name, "__") && strings.HasSuffix(fn.name, "__") {
+		return true
 	}
-	decorated, leadFossil := inspectPrecedingDefMeta(lines, i)
-	if decorated {
-		return "", end - 1
-	}
-	body := lines[i+1 : end]
-	execLines, bodyFossil := extractPythonExecBodyInfo(body)
-	hasSingleReturn := len(execLines) == 1 && strings.HasPrefix(execLines[0], "return ")
-	if !hasSingleReturn || (!strings.Contains(execLines[0], "(") && !leadFossil && !bodyFossil) {
-		return "", end - 1
-	}
-	extRefs := corpusCounts[name] - (countWordInLines(name, body) + 1)
-	if extRefs <= 0 {
-		return fmt.Sprintf("%s:%d: dead pass-through method %q has 0 callers (checkpoint fossil); inline call at callsite (Law 6)", relPath, i+1, name), end - 1
-	}
-	if extRefs == 1 && isPureCallForwardingReturn(execLines[0]) {
-		return fmt.Sprintf("%s:%d: single-caller pass-through method %q forwards to another call with 1 caller; inline target call at callsite (Law 6)", relPath, i+1, name), end - 1
-	}
-	return "", end - 1
+	return fn.indent > 0 && excludedClassMethodNames[fn.name]
 }
 
-func isSkippableClassMethod(name string) bool {
-	return (strings.HasPrefix(name, "__") && strings.HasSuffix(name, "__")) ||
-		strings.HasPrefix(name, "visit_") ||
-		excludedClassMethodNames[name]
-}
-
-func isSkippablePyWrapper(fn pyFuncBlock) bool {
-	return fn.decorated || fn.name == "main" || (strings.HasPrefix(fn.name, "__") && strings.HasSuffix(fn.name, "__"))
-}
-
-func classifyTopWrapper(fn pyFuncBlock, corpusCounts map[string]int) wrapperClass {
-	if isSkippablePyWrapper(fn) {
-		return wrapperNone
+func classifyPyOneLiner(fn pyFuncBlock, corpusCounts map[string]int) (wrapperClass, string) {
+	if isSkippablePyFunc(fn) {
+		return wrapperNone, ""
 	}
 	execLines, bodyFossil := extractPythonExecBodyInfo(fn.bodyLines)
 	if len(execLines) != 1 || !strings.HasPrefix(execLines[0], "return ") {
+		return wrapperNone, ""
+	}
+	retLine := execLines[0]
+	extRefs := corpusCounts[fn.name] - (countWordInLines(fn.name, fn.bodyLines) + 1)
+	if extRefs <= 0 {
+		return classifyDeadPyWrapper(fn, retLine, bodyFossil), ""
+	}
+	if extRefs == 1 {
+		if isPureCallForwardingReturn(retLine) {
+			return wrapperSingleMiddleman, ""
+		}
+		return wrapperTrivialSingle, ""
+	}
+	return wrapperMultiOneLiner, ""
+}
+
+func classifyDeadPyWrapper(fn pyFuncBlock, retLine string, bodyFossil bool) wrapperClass {
+	hasFossil := fn.hasFossilNote || bodyFossil
+	hasCallLike := strings.Contains(retLine, "(") || strings.Contains(retLine, "[")
+	if fn.indent > 0 {
+		if hasCallLike || hasFossil {
+			return wrapperDeadMethod
+		}
 		return wrapperNone
 	}
-	extRefs := corpusCounts[fn.name] - (countWordInLines(fn.name, fn.bodyLines) + 1)
-	isFossilTarget := strings.HasPrefix(fn.name, "_") || fn.hasFossilNote || bodyFossil
-	if isFossilTarget && extRefs <= 0 && strings.Contains(execLines[0], "(") {
-		return wrapperDeadFossil
-	}
-	if extRefs == 1 && isPureCallForwardingReturn(execLines[0]) {
-		return wrapperSingleMiddleman
-	}
-	if extRefs <= 1 {
-		return wrapperTrivialSingle
+	isFossilTarget := strings.HasPrefix(fn.name, "_") || hasFossil
+	if isFossilTarget && (hasCallLike || hasFossil) {
+		return wrapperDeadTopFossil
 	}
 	return wrapperNone
 }

@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	minGoErrTupleReturns = 3
+	minGoErrTupleReturns = 2
 	minEmptyExceptions   = 3
 )
 
@@ -32,6 +32,7 @@ func scanPythonIdiomSlop(relPath, text string) []string {
 	out = append(out, scanGoStyleErrorTupleReturns(relPath, funcs)...)
 	out = append(out, scanEmptyExceptionSprawl(relPath, lines)...)
 	out = append(out, scanRedundantBoolReturns(relPath, funcs)...)
+	out = append(out, scanPythonExtraIdioms(relPath, lines, funcs)...)
 	return out
 }
 
@@ -78,11 +79,12 @@ func sliceDirectFuncBody(body []string, funcIndent int) []string {
 func scanGoStyleErrorTupleReturns(relPath string, funcs []pyScopedFunc) []string {
 	var out []string
 	for _, fn := range funcs {
-		noneFirst, noneSecond := countNoneTupleReturns(fn.bodyLines)
-		total := noneFirst + noneSecond
-		if total >= minGoErrTupleReturns && noneFirst > 0 && noneSecond > 0 {
+		noneCount, noneBalanced := countComplementarySentinelReturns(fn.bodyLines, "None", "")
+		boolCount, boolBalanced := countComplementarySentinelReturns(fn.bodyLines, "False", "True")
+		total := pickSentinelTupleCount(noneCount, noneBalanced, boolCount, boolBalanced)
+		if total >= minGoErrTupleReturns {
 			out = append(out, fmt.Sprintf(
-				"%s:%d: function %s uses Go-style (value, err) tuple returns (%d branches); raise a typed exception or return a structured result instead",
+				"%s:%d: function %s uses Go-style (value, err) tuple returns or (ok, value) status pairs (%d branches); raise a typed exception or return value/None directly",
 				relPath, fn.startLine, fn.name, total,
 			))
 		}
@@ -90,96 +92,51 @@ func scanGoStyleErrorTupleReturns(relPath string, funcs []pyScopedFunc) []string
 	return out
 }
 
-func countNoneTupleReturns(body []string) (int, int) {
-	noneFirst, noneSecond := 0, 0
+func pickSentinelTupleCount(noneCount int, noneBalanced bool, boolCount int, boolBalanced bool) int {
+	if noneBalanced && noneCount >= minGoErrTupleReturns {
+		return noneCount
+	}
+	if boolBalanced && boolCount >= minGoErrTupleReturns {
+		return boolCount
+	}
+	return 0
+}
+
+func countComplementarySentinelReturns(body []string, failTok, okTok string) (int, bool) {
+	lhsHits, rhsHits := 0, 0
 	for _, raw := range body {
 		trimmed := strings.TrimSpace(raw)
 		if !strings.HasPrefix(trimmed, "return ") {
 			continue
 		}
-		expr := strings.TrimSpace(strings.TrimPrefix(trimmed, "return"))
-		expr = unwrapOuterParens(stripPythonComment(expr))
+		expr := unwrapOuterParens(stripPythonComment(strings.TrimSpace(strings.TrimPrefix(trimmed, "return"))))
 		lhs, rhs, ok := splitTopLevelTwoTuple(expr)
-		if !ok {
-			continue
-		}
-		if lhs == "None" && rhs != "None" {
-			noneFirst++
-		} else if rhs == "None" && lhs != "None" {
-			noneSecond++
+		if ok {
+			dFail, dOk := tallySentinelTuple(lhs, rhs, failTok, okTok)
+			lhsHits += dFail
+			rhsHits += dOk
 		}
 	}
-	return noneFirst, noneSecond
+	return lhsHits + rhsHits, lhsHits > 0 && rhsHits > 0
 }
 
-func unwrapOuterParens(s string) string {
-	trimmed := strings.TrimSpace(s)
-	if len(trimmed) < 2 || trimmed[0] != '(' || trimmed[len(trimmed)-1] != ')' {
-		return trimmed
-	}
-	depth := 0
-	for i := 0; i < len(trimmed); i++ {
-		switch trimmed[i] {
-		case '(':
-			depth++
-		case ')':
-			depth--
-			if depth == 0 && i < len(trimmed)-1 {
-				return trimmed
-			}
+func tallySentinelTuple(lhs, rhs, failTok, okTok string) (int, int) {
+	if okTok == "" {
+		if lhs == failTok && rhs != failTok {
+			return 1, 0
 		}
-	}
-	return strings.TrimSpace(trimmed[1 : len(trimmed)-1])
-}
-
-type tupleScanState struct {
-	depth    int
-	quote    byte
-	escaped  bool
-	splitIdx int
-}
-
-func splitTopLevelTwoTuple(expr string) (string, string, bool) {
-	st := &tupleScanState{splitIdx: -1}
-	for i := 0; i < len(expr); i++ {
-		if !st.advance(expr[i], i) {
-			return "", "", false
+		if rhs == failTok && lhs != failTok {
+			return 0, 1
 		}
+		return 0, 0
 	}
-	if st.splitIdx <= 0 || st.splitIdx >= len(expr)-1 {
-		return "", "", false
+	if lhs == failTok || rhs == failTok {
+		return 1, 0
 	}
-	return strings.TrimSpace(expr[:st.splitIdx]), strings.TrimSpace(expr[st.splitIdx+1:]), true
-}
-
-func (s *tupleScanState) advance(ch byte, idx int) bool {
-	if s.escaped {
-		s.escaped = false
-		return true
+	if lhs == okTok || rhs == okTok {
+		return 0, 1
 	}
-	if s.quote != 0 {
-		s.quote, s.escaped = stepSingleQuoteByte(ch, s.quote)
-		return true
-	}
-	if ch == '\'' || ch == '"' {
-		s.quote = ch
-		return true
-	}
-	return s.stepDelimiter(ch, idx)
-}
-
-func (s *tupleScanState) stepDelimiter(ch byte, idx int) bool {
-	if ch == '(' || ch == '[' || ch == '{' {
-		s.depth++
-	} else if (ch == ')' || ch == ']' || ch == '}') && s.depth > 0 {
-		s.depth--
-	} else if ch == ',' && s.depth == 0 {
-		if s.splitIdx >= 0 {
-			return false
-		}
-		s.splitIdx = idx
-	}
-	return true
+	return 0, 0
 }
 
 func stripPythonComment(expr string) string {
@@ -322,10 +279,48 @@ func matchesOppositeFollowingReturn(body []string, startIdx, ifIndent int, first
 			return false
 		}
 		if strings.HasPrefix(t, "else:") {
-			elseRet, elseEnd := extractIfSingleBoolReturn(body, j, ifIndent, strings.TrimSpace(strings.TrimPrefix(t, "else:")))
-			return elseEnd > j && elseRet == want
+			tail := strings.TrimSpace(strings.TrimPrefix(t, "else:"))
+			return matchesBoolReturnOrExpr(body, j, ifIndent, tail, want)
 		}
-		return parseReturnBoolLiteral(t) == want
+		return parseReturnBoolLiteral(t) == want || isReturnBooleanLikeExpr(t)
+	}
+	return false
+}
+
+func matchesBoolReturnOrExpr(body []string, idx, ifIndent int, tail, want string) bool {
+	if tail != "" && !strings.HasPrefix(tail, "#") {
+		return parseReturnBoolLiteral(tail) == want || isReturnBooleanLikeExpr(tail)
+	}
+	end := findPythonBlockEnd(body, idx+1, ifIndent)
+	execLines := extractPythonExecLines(body[idx+1 : end])
+	if len(execLines) != 1 {
+		return false
+	}
+	return parseReturnBoolLiteral(execLines[0]) == want || isReturnBooleanLikeExpr(execLines[0])
+}
+
+func isReturnBooleanLikeExpr(stmt string) bool {
+	cleaned := stripPythonComment(stmt)
+	if !strings.HasPrefix(cleaned, "return ") {
+		return false
+	}
+	expr := strings.TrimSpace(strings.TrimPrefix(cleaned, "return"))
+	if expr == "True" || expr == "False" {
+		return false
+	}
+	stripped := stripInlineStringsAndHashComment(expr)
+	for _, prefix := range []string{"bool(", "isinstance(", "issubclass(", "any(", "all(", "hasattr(", "callable(", "not "} {
+		if strings.HasPrefix(stripped, prefix) {
+			return true
+		}
+	}
+	if strings.HasSuffix(stripped, ", False)") || strings.HasSuffix(stripped, ", True)") {
+		return true
+	}
+	for _, tok := range []string{"==", "!=", "<=", ">=", " and ", " or ", " is ", " is not ", " in ", " not in "} {
+		if strings.Contains(stripped, tok) {
+			return true
+		}
 	}
 	return false
 }

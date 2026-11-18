@@ -256,28 +256,29 @@ func evaluateShellMutatedPaths(p *HookPayload, hermeticDir string, containerMode
 }
 
 func inspectMutatedFilePath(resolved, baseCwd, hermeticDir string, containerMode bool) string {
+	hygieneMsg := evaluateTestPlacementHygieneAdvisory(resolved, baseCwd)
 	if containerMode {
 		if snoop := validateContainerFileVerifierClean(resolved); snoop != "" {
 			return snoop
 		}
 		if syn := validateStructuredFileInMemory(resolved); syn != "" {
-			return syn
+			return joinHookAdvisories(syn, hygieneMsg)
 		}
 		if shim := evaluateContainerAntiShimInMemory(resolved, baseCwd); shim != "" {
-			return shim
+			return joinHookAdvisories(shim, hygieneMsg)
 		}
 		if hasExplicitNomosConfig(resolved, baseCwd) {
-			return evaluateFastRadarInMemory(resolved, baseCwd)
+			return joinHookAdvisories(evaluateFastRadarInMemory(resolved, baseCwd), hygieneMsg)
 		}
-		return ""
+		return hygieneMsg
 	}
 	if !isPostToolTargetInScope(resolved, hermeticDir) {
 		return ""
 	}
 	if syn := validateStructuredFileInMemory(resolved); syn != "" {
-		return syn
+		return joinHookAdvisories(syn, hygieneMsg)
 	}
-	return evaluateFastRadarInMemory(resolved, baseCwd)
+	return joinHookAdvisories(evaluateFastRadarInMemory(resolved, baseCwd), hygieneMsg)
 }
 
 func loadOrSyncStopTrace(traceKey, wsRoot string) *HookSessionTrace {

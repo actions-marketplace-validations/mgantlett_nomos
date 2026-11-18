@@ -310,7 +310,7 @@ func collectFileDesignSlopHits(wtRoot, absPath, relFile string, data []byte) []s
 	hits = append(hits, astdebt.CheckManifestImportFallbacks(wtRoot, relFile, data)...)
 	hits = append(hits, astdebt.EvaluatePolyglotNestingViolations(relFile, data, astdebt.MaxFunctionNesting)...)
 	hits = append(hits, astdebt.EvaluatePolyglotCognitiveViolations(relFile, data, astdebt.DefaultMaxCognitiveComplexity(relFile))...)
-	if ext == astdebt.ExtPy {
+	if ext != astdebt.ExtGo && ext != astdebt.ExtSvelte {
 		hits = append(hits, astdebt.DetectPolyglotDesignSlop(wtRoot, map[string][]byte{relFile: data})...)
 	}
 	return hits
