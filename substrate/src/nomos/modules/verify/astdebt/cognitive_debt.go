@@ -7,6 +7,7 @@ import (
 	"go/parser"
 	"go/token"
 	"math"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -279,4 +280,75 @@ func CalculateCyclomaticComplexity(fn *ast.FuncDecl) int {
 		return true
 	})
 	return comp
+}
+
+// CloneLangFamily returns the canonical structural clone language family for relPath, or "".
+func CloneLangFamily(relPath string) string {
+	if strings.HasSuffix(relPath, ExtGo) {
+		return "go"
+	}
+	lang := treesitter.DetectLanguage(relPath)
+	if polyglotCloneLangs[lang] {
+		return lang
+	}
+	return ""
+}
+
+// DetectFocusedCorpusClones matches net-new clone hashes in focusSources against unmodified corpus siblings.
+// @intent tree_sitter_ast_gate_spec.md #CloneGroup
+func DetectFocusedCorpusClones(focusSources, baseSources map[string][]byte, minLines int, walkSiblingCorpus func(langs map[string]bool, visit func(relPath string, src []byte))) []CloneGroup {
+	if minLines <= 0 {
+		minLines = DefaultMinCloneLines
+	}
+	targetHashes, langs, buckets := collectNetNewFocusClones(focusSources, baseSources, minLines)
+	if len(targetHashes) == 0 || walkSiblingCorpus == nil {
+		return nil
+	}
+	walkSiblingCorpus(langs, func(relPath string, src []byte) {
+		for _, c := range extractFileCloneCandidates(relPath, src, minLines) {
+			if targetHashes[c.hash] {
+				buckets[c.hash] = append(buckets[c.hash], c)
+			}
+		}
+	})
+	return buildCloneGroups(buckets)
+}
+
+func collectNetNewFocusClones(focusSources, baseSources map[string][]byte, minLines int) (map[string]bool, map[string]bool, map[string][]cloneBlockCandidate) {
+	totalCount := make(map[string]int)
+	var allCands []cloneBlockCandidate
+	curByFile := make(map[string]map[string]int, len(focusSources))
+	baseByFile := make(map[string]map[string]int, len(focusSources))
+
+	for _, rel := range sortedSourceKeys(focusSources) {
+		norm := filepath.ToSlash(rel)
+		cands := extractFileCloneCandidates(norm, focusSources[rel], minLines)
+		allCands = append(allCands, cands...)
+		curByFile[norm] = countCandidateHashes(cands, totalCount)
+		baseByFile[norm] = countCandidateHashes(extractFileCloneCandidates(norm, baseSources[norm], minLines), nil)
+	}
+	targetHashes := make(map[string]bool)
+	langs := make(map[string]bool)
+	buckets := make(map[string][]cloneBlockCandidate)
+	for _, c := range allCands {
+		if curByFile[c.file][c.hash] > baseByFile[c.file][c.hash] && totalCount[c.hash] < 2 {
+			targetHashes[c.hash] = true
+			if fam := CloneLangFamily(c.file); fam != "" {
+				langs[fam] = true
+			}
+			buckets[c.hash] = append(buckets[c.hash], c)
+		}
+	}
+	return targetHashes, langs, buckets
+}
+
+func countCandidateHashes(cands []cloneBlockCandidate, total map[string]int) map[string]int {
+	counts := make(map[string]int, len(cands))
+	for _, c := range cands {
+		counts[c.hash]++
+		if total != nil {
+			total[c.hash]++
+		}
+	}
+	return counts
 }

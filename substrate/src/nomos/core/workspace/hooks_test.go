@@ -301,3 +301,35 @@ func TestBranchGuardHooksAllowFeatureCommitAndBlockTrunk(t *testing.T) {
 		t.Fatalf("TC-BG-05: pre-commit in branch mode rejected feature commit: %v\n%s", err, string(out))
 	}
 }
+
+func TestPrePushHookScript_AutoSyncsReleaseNotesOnExplicitMainPush(t *testing.T) {
+	remoteBare := filepath.Join(t.TempDir(), "remote.git")
+	if out, err := SafeGitCommand(t.TempDir(), "init", "--bare", remoteBare).CombinedOutput(); err != nil {
+		t.Fatalf("bare init failed: %v\n%s", err, string(out))
+	}
+	repoDir := InitHermeticGitRepo(t)
+	if out, err := SafeGitCommand(repoDir, "remote", "add", "origin", remoteBare).CombinedOutput(); err != nil {
+		t.Fatalf("remote add failed: %v\n%s", err, string(out))
+	}
+	if err := InstallHooks(repoDir); err != nil {
+		t.Fatalf("InstallHooks failed: %v", err)
+	}
+	headOut, err := SafeGitCommand(repoDir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("rev-parse HEAD: %v", err)
+	}
+	headSHA := strings.TrimSpace(string(headOut))
+	if out, err := SafeGitCommand(repoDir, "notes", "--ref=refs/notes/nomos/releases", "add", "-m", "test-receipt", headSHA).CombinedOutput(); err != nil {
+		t.Fatalf("notes add failed: %v\n%s", err, string(out))
+	}
+	minBin := buildMinimalHookToolBin(t)
+	pushCmd := SafeGitCommand(repoDir, "push", "origin", "main")
+	pushCmd.Env = append(SanitizedGitEnv(), "PATH="+minBin, "HOME="+t.TempDir())
+	if out, pErr := pushCmd.CombinedOutput(); pErr != nil {
+		t.Fatalf("git push origin main failed: %v\n%s", pErr, string(out))
+	}
+	noteOut, nErr := SafeGitCommand(remoteBare, "notes", "--ref=refs/notes/nomos/releases", "show", headSHA).CombinedOutput()
+	if nErr != nil || strings.TrimSpace(string(noteOut)) != "test-receipt" {
+		t.Fatalf("expected remote refs/notes/nomos/releases on %s, err=%v out=%q", headSHA, nErr, string(noteOut))
+	}
+}

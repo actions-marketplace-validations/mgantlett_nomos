@@ -60,6 +60,10 @@ func EvaluateFastFileRadar(repoRoot, filePath string) (*FastFileRadarResult, err
 	evaluateFastDesignSlopAndHygiene(ctx, wtRoot, absPath, res.File, data, res)
 	warnPct := applyHotScopeRadarReflex(ctx, repoRoot, wtRoot, absPath, data, res)
 	evaluateFastASTBudgets(ctx, wtRoot, absPath, data, warnPct, res)
+	t := resolveThresholds(ctx)
+	if v := evaluateNetNewMicroFileViolation(ctx, wtRoot, absPath, t.MaxPackageFiles, t.MaxFileLOC, countBytesLines(data)); v != "" {
+		res.Breaches = append(res.Breaches, v)
+	}
 	return res, nil
 }
 
@@ -293,13 +297,14 @@ func checkBudgetMetricWithPct(label string, val, limit, warnPct int, res *FastFi
 }
 
 func resolveRadarPrimaryRoot(repoRoot, wtRoot string) string {
-	if pr, err := workspace.FindRepoRoot(wtRoot); err == nil && pr != "" {
-		return pr
+	for _, cand := range []string{wtRoot, repoRoot} {
+		if cand != "" {
+			if pr, err := workspace.FindRepoRoot(cand); err == nil && pr != "" {
+				return pr
+			}
+		}
 	}
 	if repoRoot != "" {
-		if pr, err := workspace.FindRepoRoot(repoRoot); err == nil && pr != "" {
-			return pr
-		}
 		return repoRoot
 	}
 	return wtRoot
@@ -321,4 +326,54 @@ func evaluateFastHotScopeProbes(ctx *vscope.VerifyContext, absPath, relFile stri
 		return
 	}
 	res.Breaches = append(res.Breaches, scanPolyglotAntiShim(absPath, relFile)...)
+}
+
+const maxSatelliteMicroFileLOC = 90
+
+var canonicalStructFileNames = map[string]bool{
+	"doc.go": true, "main.go": true, "constants.go": true, "types.go": true,
+	"errors.go": true, "mod.rs": true, "lib.rs": true, "__init__.py": true,
+	"index.ts": true, "index.js": true,
+}
+
+// evaluateNetNewMicroFileViolation flags net-new micro-files in crowded packages when a sibling can absorb them.
+func evaluateNetNewMicroFileViolation(ctx *vscope.VerifyContext, root, absPath string, maxFiles, maxFileLOC, fileLOC int) string {
+	if maxFiles <= 0 {
+		maxFiles = astdebt.DefaultThresholds().MaxPackageFiles
+	}
+	if maxFiles < 10 || fileLOC <= 0 || fileLOC >= maxSatelliteMicroFileLOC || !isNetNewMicroFileCandidate(ctx, root, absPath) {
+		return ""
+	}
+	curCount := countDirNonTestSourceFiles(filepath.Dir(absPath))
+	if curCount < (maxFiles*65+99)/100 {
+		return ""
+	}
+	bestName, bestLOC := findSmallestReceptiveSibling(absPath, maxFileLOC, fileLOC)
+	if bestName == "" {
+		return ""
+	}
+	relSlash := relativeOrFullPath(root, absPath)
+	return fmt.Sprintf("%s (%d LOC) is a net-new micro-file fragment in high-fanout package %s (%d/%d files) -> [1-TURN RECIPE: fold %s into cohesive sibling %s (%d LOC) or extract a sub-package (Law 6)]",
+		relSlash, fileLOC, filepath.ToSlash(filepath.Dir(relSlash)), curCount, maxFiles, filepath.Base(absPath), bestName, bestLOC)
+}
+
+func isNetNewMicroFileCandidate(ctx *vscope.VerifyContext, root, absPath string) bool {
+	if ctx != nil && (ctx.AllFiles || ctx.IsBaseline || isUpstreamSurgicalRatchet(ctx)) {
+		return false
+	}
+	ext := filepath.Ext(absPath)
+	if strings.EqualFold(ext, astdebt.ExtSvelte) || canonicalStructFileNames[strings.ToLower(filepath.Base(absPath))] {
+		return false
+	}
+	if strings.EqualFold(ext, astdebt.ExtGo) {
+		if raw, err := os.ReadFile(absPath); err == nil && hasLeadingGoBuildTag(raw) {
+			return false
+		}
+	}
+	gitRoot := resolveGitTreeRootForPath(ctx, root, absPath)
+	if gitRoot == "" || resolveBaselineCommitRef(ctx, gitRoot) == "" {
+		return false
+	}
+	_, existed := loadBaselineFileBytes(ctx, root, absPath)
+	return !existed
 }

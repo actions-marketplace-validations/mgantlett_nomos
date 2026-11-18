@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/mgantlett/nomos/substrate/src/nomos/core/config"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/types"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
 )
@@ -93,6 +94,7 @@ func (g *CognitiveDebtGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateRes
 	}
 
 	violations := evaluateRatchetedCDSViolations(ctx, root, metrics, sources, thresh)
+	violations = append(violations, evaluateCrossCorpusCloneViolations(ctx, root, sources, thresh)...)
 	if len(violations) > 0 {
 		return &vscope.GateResult{
 			GateName: g.Name(), Passed: false,
@@ -101,6 +103,59 @@ func (g *CognitiveDebtGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateRes
 		}, nil
 	}
 	return &vscope.GateResult{GateName: g.Name(), Passed: true, Message: "all files within cognitive debt bounds"}, nil
+}
+
+// evaluateCrossCorpusCloneViolations indexes sibling corpus files when diff-scoped edits add new structural clones.
+func evaluateCrossCorpusCloneViolations(ctx *vscope.VerifyContext, root string, sources map[string][]byte, thresh astdebt.Thresholds) []string {
+	if len(sources) == 0 || (ctx != nil && ctx.AllFiles) || vscope.ResolveEffectiveVerifyScope(ctx) == config.VerifyScopeRepo || isUpstreamSurgicalRatchet(ctx) {
+		return nil
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		absRoot = root
+	}
+	minLines := thresh.MinCloneLines
+	if minLines <= 0 {
+		minLines = astdebt.DefaultMinCloneLines
+	}
+	focusNorm := make(map[string]bool, len(sources))
+	baseSources := make(map[string][]byte, len(sources))
+	for rel := range sources {
+		norm := filepath.ToSlash(filepath.Clean(rel))
+		focusNorm[norm] = true
+		if b, ok := loadBaselineFileBytes(ctx, root, filepath.Join(root, rel)); ok {
+			baseSources[norm] = b
+		}
+	}
+	groups := astdebt.DetectFocusedCorpusClones(sources, baseSources, minLines, func(langs map[string]bool, visit func(relPath string, src []byte)) {
+		excludes := vscope.ResolveScopeExcludes(ctx, absRoot, absRoot)
+		if wErr := workspace.WalkWithExcludes(absRoot, excludes, func(path string, info os.FileInfo, walkErr error) error {
+			return visitCorpusCloneCandidate(absRoot, path, info, walkErr, focusNorm, langs, minLines, visit)
+		}); wErr != nil {
+			return
+		}
+	})
+	return astdebt.FormatCloneViolations(groups)
+}
+
+func visitCorpusCloneCandidate(absRoot, path string, info os.FileInfo, walkErr error, focusNorm, langs map[string]bool, minLines int, visit func(string, []byte)) error {
+	if walkErr != nil || info == nil || info.IsDir() || !isPolyglotTargetFile(path) {
+		return nil
+	}
+	rel, rErr := filepath.Rel(absRoot, path)
+	if rErr != nil {
+		return nil
+	}
+	normRel := filepath.ToSlash(filepath.Clean(rel))
+	if focusNorm[normRel] || !langs[astdebt.CloneLangFamily(normRel)] {
+		return nil
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil || countBytesLines(raw) < minLines {
+		return nil
+	}
+	visit(normRel, raw)
+	return nil
 }
 
 // MaxFileLOCGate verifies that no file exceeds the line length limit.

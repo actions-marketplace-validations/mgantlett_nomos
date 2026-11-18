@@ -2,7 +2,6 @@
 package verify
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
@@ -44,15 +43,12 @@ func resolveGitTreeRootForPath(ctx *vscope.VerifyContext, fallbackRoot, absFile 
 }
 
 func resolveBaselineCommitRef(ctx *vscope.VerifyContext, gitRoot string) string {
-	cfg := vscope.ResolveVerifyConfig(ctx)
-	refs := []string{}
-	if cfg != nil && strings.TrimSpace(cfg.DefaultBranch) != "" {
-		refs = append(refs, strings.TrimSpace(cfg.DefaultBranch))
+	refs := []string{"main", "origin/main", "master", "origin/master"}
+	if cfg := vscope.ResolveVerifyConfig(ctx); cfg != nil && strings.TrimSpace(cfg.DefaultBranch) != "" {
+		refs = append([]string{strings.TrimSpace(cfg.DefaultBranch)}, refs...)
 	}
-	refs = append(refs, "main", "origin/main", "master", "origin/master")
 	for _, ref := range refs {
-		out, err := workspace.RunSafeGit(gitRoot, "merge-base", "HEAD", ref)
-		if err == nil {
+		if out, err := workspace.RunSafeGit(gitRoot, "merge-base", "HEAD", ref); err == nil {
 			if sha := strings.TrimSpace(string(out)); sha != "" {
 				return sha
 			}
@@ -68,24 +64,17 @@ func resolveBaselineCommitRef(ctx *vscope.VerifyContext, gitRoot string) string 
 
 func loadBaselineFileBytes(ctx *vscope.VerifyContext, fallbackRoot, targetPath string) ([]byte, bool) {
 	absFile, err := filepath.Abs(targetPath)
-	if err != nil {
-		return nil, false
-	}
 	gitRoot := resolveGitTreeRootForPath(ctx, fallbackRoot, absFile)
-	if gitRoot == "" {
+	if err != nil || gitRoot == "" {
 		return nil, false
 	}
 	rel, rErr := filepath.Rel(gitRoot, absFile)
-	if rErr != nil || strings.HasPrefix(rel, "..") {
-		return nil, false
-	}
 	baseRef := resolveBaselineCommitRef(ctx, gitRoot)
-	if baseRef == "" {
+	if rErr != nil || strings.HasPrefix(rel, "..") || baseRef == "" {
 		return nil, false
 	}
 	relSlash := filepath.ToSlash(rel)
-	out, sErr := workspace.RunSafeGit(gitRoot, "show", baseRef+":"+relSlash)
-	if sErr == nil {
+	if out, sErr := workspace.RunSafeGit(gitRoot, "show", baseRef+":"+relSlash); sErr == nil {
 		return out, true
 	}
 	oldRel := vscope.ResolveRenamedBaselinePath(ctx, gitRoot, baseRef, relSlash)
@@ -93,16 +82,15 @@ func loadBaselineFileBytes(ctx *vscope.VerifyContext, fallbackRoot, targetPath s
 		return nil, false
 	}
 	renamedOut, rShowErr := workspace.RunSafeGit(gitRoot, "show", baseRef+":"+oldRel)
-	if rShowErr != nil {
-		return nil, false
-	}
-	return renamedOut, true
+	return renamedOut, rShowErr == nil
 }
 
 func countBytesLines(data []byte) int {
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	lines := 0
-	for scanner.Scan() {
+	if len(data) == 0 {
+		return 0
+	}
+	lines := bytes.Count(data, []byte{'\n'})
+	if data[len(data)-1] != '\n' {
 		lines++
 	}
 	return lines
@@ -157,13 +145,11 @@ func parseBaselineFunctions(absPath, rel string, content []byte) map[string]astd
 	byName := make(map[string]astdebt.FunctionMetric, len(list))
 	for _, fn := range list {
 		prev, exists := byName[fn.Name]
-		if !exists {
-			byName[fn.Name] = fn
-			continue
+		if exists {
+			fn.Complexity = maxInt(prev.Complexity, fn.Complexity)
+			fn.LOC = maxInt(prev.LOC, fn.LOC)
 		}
-		prev.Complexity = maxInt(prev.Complexity, fn.Complexity)
-		prev.LOC = maxInt(prev.LOC, fn.LOC)
-		byName[fn.Name] = prev
+		byName[fn.Name] = fn
 	}
 	return byName
 }
@@ -222,6 +208,11 @@ func EvaluatePackageFanOutViolations(ctx *vscope.VerifyContext, root string, met
 			violations = append(violations, v)
 		}
 	}
+	for _, m := range metrics {
+		if v := evaluateNetNewMicroFileViolation(ctx, root, filepath.Join(root, m.Name), maxFiles, thresh.MaxFileLOC, m.LOC); v != "" {
+			violations = append(violations, v)
+		}
+	}
 	return violations
 }
 
@@ -245,7 +236,8 @@ func evaluateSingleDirFanOut(ctx *vscope.VerifyContext, root, relDir string, max
 	if curCount <= maxFiles {
 		return ""
 	}
-	if shouldRatchetLegacyDirFanOut(ctx, root) {
+	ratchet := vscope.IsBrownfieldRatchetActive(ctx) || (ctx != nil && !ctx.Strict && !ctx.AllFiles && vscope.IsWorktreeContext(ctx, root))
+	if ratchet {
 		if baseCount, ok := countBaselineDirSourceFiles(ctx, root, absDir); ok {
 			ceil := maxInt(maxFiles, baseCount)
 			if curCount <= ceil {
@@ -257,13 +249,6 @@ func evaluateSingleDirFanOut(ctx *vscope.VerifyContext, root, relDir string, max
 	}
 	return fmt.Sprintf("%s has %d non-test source files (exceeds max %d) -> [1-TURN RECIPE: extract >=%d cohesive file(s) from %s into focused sub-packages]",
 		relDir, curCount, maxFiles, curCount-maxFiles, relDir)
-}
-
-func shouldRatchetLegacyDirFanOut(ctx *vscope.VerifyContext, root string) bool {
-	if vscope.IsBrownfieldRatchetActive(ctx) {
-		return true
-	}
-	return ctx != nil && !ctx.Strict && !ctx.AllFiles && vscope.IsWorktreeContext(ctx, root)
 }
 
 func countDirNonTestSourceFiles(absDir string) int {
@@ -340,4 +325,53 @@ func subsetFuncsByModified(funcs []astdebt.FunctionMetric, modified []string) []
 		}
 	}
 	return out
+}
+
+// hasLeadingGoBuildTag detects Go build constraint comments before package declarations.
+func hasLeadingGoBuildTag(raw []byte) bool {
+	for _, line := range strings.Split(string(raw), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "/*") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "//go:build ") || strings.HasPrefix(trimmed, "// +build ") {
+			return true
+		}
+		if !strings.HasPrefix(trimmed, "//") {
+			return false
+		}
+	}
+	return false
+}
+
+// findSmallestReceptiveSibling returns the smallest same-extension sibling with headroom to absorb fileLOC.
+func findSmallestReceptiveSibling(absPath string, maxFileLOC, fileLOC int) (string, int) {
+	entries, err := os.ReadDir(filepath.Dir(absPath))
+	if err != nil || maxFileLOC <= 15 {
+		return "", 0
+	}
+	dir := filepath.Dir(absPath)
+	targetBase, targetExt := filepath.Base(absPath), filepath.Ext(absPath)
+	bestName, bestLOC := "", 0
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || name == targetBase || !strings.EqualFold(filepath.Ext(name), targetExt) {
+			continue
+		}
+		if sibLOC := readReceptiveSiblingLOC(filepath.Join(dir, name), strings.EqualFold(targetExt, astdebt.ExtGo)); sibLOC > 0 && sibLOC+fileLOC <= maxFileLOC-15 && (bestName == "" || sibLOC < bestLOC) {
+			bestName, bestLOC = name, sibLOC
+		}
+	}
+	return bestName, bestLOC
+}
+
+func readReceptiveSiblingLOC(sibAbs string, isGo bool) int {
+	if !isPolyglotTargetFile(sibAbs) {
+		return 0
+	}
+	sibRaw, err := os.ReadFile(sibAbs)
+	if err != nil || (isGo && hasLeadingGoBuildTag(sibRaw)) {
+		return 0
+	}
+	return countBytesLines(sibRaw)
 }

@@ -194,7 +194,14 @@ const PrePushHookScript = `#!/usr/bin/env bash
         NOMOS_BIN="$HOME/bin/nomos"
     fi
 
+    remote_name="${1:-}"
+    saw_trunk_push=0
+    saw_notes_ref=0
+
     while read -r local_ref local_oid remote_ref remote_oid; do
+        if [[ "$local_ref" == "refs/notes/nomos/releases" || "$remote_ref" == "refs/notes/nomos/releases" ]]; then
+            saw_notes_ref=1
+        fi
         if [[ "$remote_ref" == "refs/heads/main" || "$remote_ref" == "refs/heads/master" ]]; then
             if [[ "$local_ref" != "refs/heads/main" && "$local_ref" != "refs/heads/master" && -n "$local_ref" && "$local_ref" != "(delete)" ]]; then
                 echo -e "\n\e[31m🚨 Push Blocked: Cannot push non-trunk branch ($local_ref) directly to remote trunk ($remote_ref) (Law 3).\e[0m"
@@ -208,8 +215,21 @@ const PrePushHookScript = `#!/usr/bin/env bash
                     exit 1
                 }
             fi
+            if [[ "$local_ref" != "(delete)" ]]; then
+                saw_trunk_push=1
+            fi
         fi
     done
+
+    if [[ "$saw_trunk_push" == "1" && "$saw_notes_ref" == "0" && "${NOMOS_SKIP_NOTES_SYNC:-0}" != "1" && -n "$remote_name" ]]; then
+        if git show-ref --verify --quiet refs/notes/nomos/releases; then
+            echo "📜 Syncing refs/notes/nomos/releases to ${remote_name}..."
+            NOMOS_SKIP_NOTES_SYNC=1 git push --no-verify "$remote_name" refs/notes/nomos/releases:refs/notes/nomos/releases || {
+                echo -e "\n\e[31m❌ Push Blocked: Failed syncing refs/notes/nomos/releases to ${remote_name} (Law 3 & Law 4)\e[0m"
+                exit 1
+            }
+        fi
+    fi
 
     exit 0
 }
