@@ -327,7 +327,7 @@ type UpdateCheckCache struct {
 * **Fail-Closed Invalidation**: Purges or bypasses cached receipts on any file byte mutation, untracked file addition, trunk `HEAD` advance, `--all` scan, or `NOMOS_NO_VERIFY_CACHE=1`.
 
 ### 4.15 Day-0 Progressive Onboarding (`nomos init`, Modes & `--help-agent`)
-* **Default Branch Guard (`nomos init [--dir <PATH>]`)**: Scaffolds `isolation_mode: "branch"`, skips creating `worktrees/`, merges compact `templates/AGENTS_BRANCH.md`, and makes zero silent trunk commits.
+* **Default Branch Guard (`nomos init [--dir <PATH>]`)**: Scaffolds `isolation_mode: "branch"`, skips `worktrees/`, merges `templates/AGENTS_BRANCH.md`, and makes zero silent trunk commits. Agents self-heal rejections invisibly without manual operator CLI chores or unprompted `--worktrees` upgrades.
 * **Smart Auto-Baselining & Strict Override (`--baseline`, `--strict`)**: Bare `nomos init` scans via `xray.ScanRepository` and writes `nomos.baseline.json` (`strict_mode: false`) when `HangoverScore > 0`. Passing `--strict` preserves `strict_mode: true` without creating a baseline manifest. Passing `--baseline` forces baseline creation regardless of score.
 * **Stealth Local Trial (`--local`)**: Skips `.gitignore` edits and registers untracked governance files inside `.git/info/exclude` (`# Nomos Local Stealth Trial`) so `git status` stays clean. Running `nomos init` without `--local` removes that exclude block cleanly.
 * **Agent Detection & Filtering (`--agents`)**: Auto-detects present agent configs or binaries (`claude`, `cursor`, `opencode`, `gemini`, `agy`) and falls back to all five when none appear. Passing `--agents <csv|all>` filters hook manifests strictly to named targets and emits `CLAUDE.md` only when `claude` is active or pre-existing.
