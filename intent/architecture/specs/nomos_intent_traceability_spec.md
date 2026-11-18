@@ -400,7 +400,7 @@ func FormatPRProofMarkdown(receipt *PRProofReceipt) string
    - `VerifySpecTypeSignatures` enforces package-qualified bijective Go struct parity (`spec_fields == ast_fields`) and canonicalized field type parity.
    - `VerifyNoOrphanedTestObligations` parses Go `*_test.go` comments and table vector names and rejects `TC-*` tags absent from `spec_roots`.
    - `VerifyNormativeRegistrySurjection` verifies `100%` of self-hosted `RegisterGate` `ProbeID`s, `core/config` structs, CLI `--flags`, and live `ERR_*` codes appear in specs.
-   - Concurrent `SUB-*` worktrees defer only pending sibling `INT-*` commit deltas (`TC-*` vectors, new structs, and added struct fields) across shared specs.
+   - Concurrent `SUB-*` worktrees filter disjoint sibling specs and defer pending sibling `INT-*` commit deltas (added or removed `TC-*` vectors, structs, and struct fields).
 8. **CLI Invocation Flags & Complete Probe Registry (`nomos verify` / `nomos proof`):**
    - `nomos verify` and `nomos proof` accept `--base-ref`, `--baseline`, `--fast-file`, `--impact`, `--mutate-diff`, `--pr`, `--pr-output`, `--range`, `--strict`, and `--worktree` flags.
    - Active probes include `config_immutability`, `dead_code`, `ecosystem_drift`, `gate_integrity_proof`, `infra_ingress`, `ip_leak`, `review_receipt`, `threshold_integrity`, `topology_parity`, `uasset_dependency`, `ui_anti_mask`, and `visual_regression`.
