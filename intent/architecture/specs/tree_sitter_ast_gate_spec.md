@@ -19,7 +19,7 @@ type: spec
 
 Gen 2 Nomos quality gates relied on line-scanning regex heuristics for complexity, docstring density, and forbidden literal audits. Regex scanning broke on polyglot workspaces and produced false positives inside comments and multiline strings. Line heuristics also lacked structural awareness of nested syntax trees.
 
-In strict compliance with **Law 2 (The Non-Verbal Proof Law)**, this specification formalizes the **Tree-sitter AST Gate Engine**. The engine integrates Tree-sitter queries and structural scanners across Go, TypeScript, Svelte, Python, Ruby, Rust, C/C++, Java, Kotlin, and C#. It also validates HTML, CSS, YAML, and Markdown files.
+In strict compliance with **Law 2 (The Non-Verbal Proof Law)**, this specification formalizes the **Tree-sitter AST Gate Engine**. It integrates unified structural, wrapper, idiom, exception, and clone scanners across Go, TypeScript, Svelte, Python, Ruby, Rust, C/C++, Java, Kotlin, and C#. It also validates HTML, CSS, YAML, and Markdown files.
 
 Under Nomos v4, pure-Go `wazero` (`github.com/tetratelabs/wazero`) executes linear-memory WebAssembly scanning hermetically without CGo or external process spawns. The engine binds directly to `treesitter.WazeroTreeSitterEngine` and `treesitter.GateEvaluationReport` (`substrate/src/nomos/modules/verify/treesitter/types.go`). It evaluates extracted AST metrics against `config.ThresholdsConfig` (`nomos.yaml` and `nomos.schema.json`) across all 42 DoD gates.
 
