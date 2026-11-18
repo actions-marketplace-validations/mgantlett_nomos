@@ -10,9 +10,9 @@ provides=('nomos')
 conflicts=('nomos')
 options=('!strip' '!debug')
 source_x86_64=("nomos-${pkgver}-x86_64.tar.gz::https://github.com/mgantlett/nomos/releases/download/v${pkgver}/nomos_Linux_x86_64.tar.gz")
-sha256sums_x86_64=('d81ce73a0912e601141a8b0dab861ed5074cb4f67104b6358f5547a9119569fa')
+sha256sums_x86_64=('571c169ab5f841af4d139289b3ce1c2168b7d8286e0422d0cac658d102f49b19')
 source_aarch64=("nomos-${pkgver}-aarch64.tar.gz::https://github.com/mgantlett/nomos/releases/download/v${pkgver}/nomos_Linux_arm64.tar.gz")
-sha256sums_aarch64=('d81b501a184b1269a42798fae5d1f155e6ba5e6ef090dc734f874d5e151c6d95')
+sha256sums_aarch64=('f60f889403096b6baa9f34ad7c8973a2b4cb5a19ab67fa1ca6dac533c8fca7b4')
 
 package() {
   install -Dm755 "${srcdir}/nomos" "${pkgdir}/usr/bin/nomos"
