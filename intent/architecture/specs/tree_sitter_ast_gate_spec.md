@@ -390,6 +390,8 @@ Across Python, Ruby, TypeScript/JS, Rust, Java, and C#, the polyglot two-tier wr
 
 Sibling clone normalization maps receiver calls deterministically alongside literals. Cross-language control-flow sensors flag helper-call validation ladders, two-branch jump `if` chains, and generalized boolean returns. The sensors also reject unnecessary `elif` after return and tuple `(val, err)` returns outside Go. Polyglot idiom checks flag redundant mutable defaults `.get(k, [])`/`{}` (`>= 2`), `setdefault` loops, manual copies, and `append` loops.
 
+`DetectPolyglotDesignSlop` also rejects modules repeating four-plus `isinstance` or `typeof` early-return guards instead of table-driven dispatch. `detectCWE89SQLSink` exempts identifier-quoted DDL queries while rejecting interpolated value literals and unquoted table names. `walkExplicitRelativeFiles` skips intermediate `.venv`, `venv`, `node_modules`, and `.tmp` directory segments during worktree scans.
+
 ---
 
 ## 5. Table-Driven Verification Vectors
@@ -427,6 +429,7 @@ The following table-driven verification vectors validate the Tree-sitter AST Gat
 | `TC-TS-21` | `python` | Dead shim, 1-caller middleman, `isinstance` guard sprawl, depth `6`, `CC > 10` | Call counts, guard counts, and nesting measured | Wrapper slop, `CC > 10`, and depth `> 5` flagged | `FAIL` | Design-slop fragmentation, guard sprawl, and polyglot complexity rejected |
 | `TC-TS-22` | `python` | Cognitive > 10 (including ternaries/filters), `(val, err)` tuple return, empty Exceptions, bool if-return | Nesting-weighted score, tuple returns, empty classes, bool returns | Cog > 10 and idiom breaches flagged | `FAIL` | Universal cognitive and Python anti-slop invariants enforced |
 | `TC-TS-23` | `polyglot` | Two-tier wrappers, sibling 5-line clones, helper guards, Go tuples outside Go, idioms | Wrapper counts, sibling hashes, idiom AST scans | Excess wrappers, clones, idioms blocked | `FAIL` | Polyglot wrapper caps, sibling clones, and idiom hygiene enforced |
+| `TC-TS-24` | `polyglot` | Four-plus `isinstance`/`typeof` return guards, quoted DDL, and `.venv` symlinks | Return guards, SQL quoting, intermediate paths | Sprawl flagged; quoted DDL and `.venv` pass | `FAIL` | Return-guard sprawl rejected while quoted DDL and `.venv` pass |
 | `TC-XRAY-01` | `polyglot` | Uninitialized Go, Python, and TS fixture with clones and stubs | `xray.ScanRepository` aggregates polyglot metrics and hotspots | Non-zero `HangoverScore` and `BaselineEnvelope` | `PASS` | Read-only scan writes zero files or SQLite rows |
 | `TC-XRAY-02` | `polyglot` | `XrayReport` serialized via JSON and Markdown formatters | Relative hotspot paths emitted | Zero host home-directory literals | `PASS` | Law 5 path scrubbing holds across `XrayReport` outputs |
 | `TC-MUT-02` | `go` | Modified Go function tested with boundary assertions | `prproof.EvaluateDiffMutations` flips AST operators | `KillScorePct == 100` | `PASS` | Boundary tests kill every diff AST mutant |

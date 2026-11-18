@@ -326,6 +326,7 @@ When a container or hermetic workspace starts with zero tracked baseline unit su
 | `TC-BG-08` | Bash digest tracking & SessionStart hull | `Bash` file write across `post-tool` and `--container-sandbox` `stop`, plus `SessionStart` banner | `"Triggers AST radar, blocks unverified Stop, skips sample/fixture dirs in Workspace Modules, and omits git commit in container Next Actions."` | PASS |
 | `TC-BG-09` | Post-edit behavioral Stop gate and testless hull guidance | Source edit without tests followed by Stop vs post-edit run | `"Prompts boundary/edge-case unittest.TestCase tests in .tmp/tests/test_<module>.py, blocks un-executed source edits, and clears after behavioral run."` | PASS |
 | `TC-BG-10` | Zero-baseline container scratch suite placement advisory | Creating net-new suite file outside `.tmp/` with empty baseline | `"Emits non-blocking advisory steering scratch suites to .tmp/tests/."` | PASS |
+| `TC-BG-11` | Static heredoc SQL airlock & headless Stop cap | `cat > f.py <<'E'` with `DROP TABLE` and container `stop` | `"Permits static heredoc writes and enforces 6-strike headless refactoring mandate."` | PASS |
 
 ---
 
