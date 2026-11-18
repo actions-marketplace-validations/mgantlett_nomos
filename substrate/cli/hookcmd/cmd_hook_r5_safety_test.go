@@ -76,3 +76,71 @@ func TestContainerStopAndHeredocSQLPrecision(t *testing.T) {
 		t.Fatalf("expected uninitialized syntax Stop block without nomos.yaml headless mandate, got %+v (%s)", dec, stopSyntax)
 	}
 }
+
+// @verifies TC-BG-08
+// @verifies TC-BG-11
+func TestCompoundHeredocAndTmpScratchTestsAllowed(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	ws := t.TempDir()
+
+	compound := "python3 -m venv venv && echo \"\" > requirements.txt && cat > migration_tool.py <<'EOF'\nraise ToolError(\"cannot DROP TABLE old_t\")\nEOF"
+	outCompound := executeHookCmd(t, []string{"pre-tool", "--container-sandbox"}, map[string]any{
+		"session_id":      "r6-compound",
+		"hook_event_name": "PreToolUse",
+		"cwd":             ws,
+		"tool_name":       "Bash",
+		"tool_input":      map[string]any{"command": compound},
+	})
+	if strings.Contains(outCompound, `"deny"`) {
+		t.Fatalf("expected compound cat heredoc write with DROP TABLE string to be allowed, got %s", outCompound)
+	}
+
+	redirBeforeDelim := "cat <<'EOF' > migration_tool.py\nconn.execute(\"DROP TABLE old_t\")\nEOF"
+	outRedirBefore := executeHookCmd(t, []string{"pre-tool", "--container-sandbox"}, map[string]any{
+		"session_id":      "r6-redir-before",
+		"hook_event_name": "PreToolUse",
+		"cwd":             ws,
+		"tool_name":       "Bash",
+		"tool_input":      map[string]any{"command": redirBeforeDelim},
+	})
+	if strings.Contains(outRedirBefore, `"deny"`) {
+		t.Fatalf("expected cat <<'EOF' > file heredoc to be allowed, got %s", outRedirBefore)
+	}
+
+	mixedHazard := "psql appdb \"DROP TABLE old_t\" && cat > migration_tool.py <<'EOF'\nx = 1\nEOF"
+	outMixed := executeHookCmd(t, []string{"pre-tool", "--container-sandbox"}, map[string]any{
+		"session_id":      "r6-mixed-hazard",
+		"hook_event_name": "PreToolUse",
+		"cwd":             ws,
+		"tool_name":       "Bash",
+		"tool_input":      map[string]any{"command": mixedHazard},
+	})
+	if !strings.Contains(outMixed, `"deny"`) {
+		t.Fatalf("expected direct SQL DROP TABLE before safe heredoc to be denied, got %s", outMixed)
+	}
+
+	tmpTest := "cat > .tmp/tests/test_cache.py <<'EOF'\nimport unittest\nEOF\npython3 -m unittest .tmp/tests/test_cache.py"
+	outTmp := executeHookCmd(t, []string{"pre-tool", "--container-sandbox"}, map[string]any{
+		"session_id":      "r6-tmp-test",
+		"hook_event_name": "PreToolUse",
+		"cwd":             ws,
+		"tool_name":       "Bash",
+		"tool_input":      map[string]any{"command": tmpTest},
+	})
+	if strings.Contains(outTmp, `"deny"`) {
+		t.Fatalf("expected .tmp/tests/test_cache.py write and unittest run to be allowed, got %s", outTmp)
+	}
+
+	for _, blocked := range []string{"bash .tmp/tests/evil.sh", "python3 .hidden/test_x.py"} {
+		outBlocked := executeHookCmd(t, []string{"pre-tool", "--container-sandbox"}, map[string]any{
+			"session_id":      "r6-hidden-blocked",
+			"hook_event_name": "PreToolUse",
+			"cwd":             ws,
+			"tool_name":       "Bash",
+			"tool_input":      map[string]any{"command": blocked},
+		})
+		if !strings.Contains(outBlocked, `"deny"`) {
+			t.Fatalf("expected hidden dot-dir script %q to be denied, got %s", blocked, outBlocked)
+		}
+	}
+}

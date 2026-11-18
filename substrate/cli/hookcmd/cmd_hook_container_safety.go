@@ -17,9 +17,9 @@ var (
 	autonomousPrivEscRe   = regexp.MustCompile(`(?i)(?:--role\s+(?:maintainer|admin|owner)|--skip-checks|--recipient\s+[^\s]+@[^\s]+)`)
 	autonomousKeySealRe   = regexp.MustCompile(`(?i)\bseal\b[^\n]*(?:key|sign|secret|report)`)
 	autonomousDropFlagRe  = regexp.MustCompile(`(?i)\bdrop\b[^\n]*(?:--table|\btable\b)`)
-	heredocHeaderDelimRe  = regexp.MustCompile(`<<-?\s*['"]?([A-Za-z_][A-Za-z0-9_]*)['"]?\s*$`)
+	heredocHeaderDelimRe  = regexp.MustCompile(`(?:^|[^<])<<-?\s*['"]?([A-Za-z_][A-Za-z0-9_]*)['"]?`)
 	heredocPipeExecRe     = regexp.MustCompile(`(?i)\|\s*(?:sqlite3|psql|mysql|mariadb|duckdb|sqlcmd|mongosh|redis-cli|sh|bash|dash|zsh|ksh|python3?|ruby|node)\b`)
-	hiddenDotScriptRe     = regexp.MustCompile(`(?i)(?:^|[\s"'=/])(\.[A-Za-z0-9_-]+)/[^\s"'` + "`" + `]+\.(?:py|sh|rb|pl|js)\b`)
+	hiddenDotScriptRe     = regexp.MustCompile(`(?i)(?:^|[\s"'=/])(\.[A-Za-z0-9_-]+)/([^\s"'` + "`" + `]+\.(?:py|sh|rb|pl|js))\b`)
 	untrustedOptScriptRe  = regexp.MustCompile(`(?i)/opt/([^/\s]+)/[^\s]+\.(?:py|sh)\b`)
 	postExfilTransportRe  = regexp.MustCompile(`(?i)(?:\bcurl\b[^\n]*(?:\s-(?:d|F|T)\b|--(?:data|data-raw|data-binary|data-urlencode|form|json|upload-file)\b|-X\s*(?:POST|PUT|PATCH)\b)|\bwget\b[^\n]*--post-(?:data|file)\b|requests\.(?:post|put|patch)\(|Request\([^\n]*method\s*=\s*['"](?:POST|PUT|PATCH)['"]|fetch\([^\n]*method\s*[:=]\s*['"](?:POST|PUT|PATCH)['"])`)
 
@@ -136,7 +136,7 @@ func checkShellMCPAndUntrustedExec(cmdLine string, pol containerSandboxPolicy) s
 }
 
 func isUntrustedHelperExec(raw string) bool {
-	if hasDisallowedHiddenDotScript(raw) {
+	if hasDisallowedHiddenDotScript(raw, true) {
 		return true
 	}
 	for _, m := range untrustedOptScriptRe.FindAllStringSubmatch(raw, -1) {
@@ -145,15 +145,6 @@ func isUntrustedHelperExec(raw string) bool {
 			if optDir != "nomos" && optDir != "launch" {
 				return true
 			}
-		}
-	}
-	return false
-}
-
-func hasDisallowedHiddenDotScript(raw string) bool {
-	for _, m := range hiddenDotScriptRe.FindAllStringSubmatch(raw, -1) {
-		if len(m) > 1 && !allowedHiddenDotDirs[strings.ToLower(m[1])] {
-			return true
 		}
 	}
 	return false
@@ -206,7 +197,7 @@ func evaluateContainerAutonomousSafetyGuard(p *HookPayload, baseCwd string, pol 
 	if strings.Contains(strings.ToLower(p.CommandLine), ".claude/settings") {
 		return denyDecision("❌ [NOMOS INTERCEPT] Harness Self-Protection Violation (Law 7): Shell access to hook settings is prohibited.")
 	}
-	if hasDisallowedHiddenDotScript(p.CommandLine) {
+	if hasDisallowedHiddenDotScript(p.CommandLine, pol.UntrustedProject) {
 		return denyDecision("❌ [NOMOS INTERCEPT] Autonomous Supply-Chain Guard (Law 7): Executing unverified script inside hidden dot-directory requires operator approval.")
 	}
 	tainted := hasActiveUntrustedIngressTaint(baseCwd)
@@ -217,65 +208,6 @@ func evaluateContainerAutonomousSafetyGuard(p *HookPayload, baseCwd string, pol 
 		}
 	}
 	return HookDecision{Decision: hookDecisionAllow}
-}
-
-func stripSafeFileWriteHeredocBodies(cmdLine string) string {
-	lines := strings.Split(cmdLine, "\n")
-	out := make([]string, 0, len(lines))
-	delim := ""
-	skipBody := false
-	for _, raw := range lines {
-		if delim != "" {
-			if strings.TrimSpace(raw) == delim {
-				delim, skipBody = "", false
-				out = append(out, raw)
-				continue
-			}
-			if !skipBody {
-				out = append(out, raw)
-			}
-			continue
-		}
-		out = append(out, raw)
-		if d := extractSafeHeredocDelim(raw); d != "" {
-			delim = d
-			skipBody = isSafeSourceHeredocHeader(raw)
-		}
-	}
-	return strings.Join(out, "\n")
-}
-
-func extractSafeHeredocDelim(line string) string {
-	m := heredocHeaderDelimRe.FindStringSubmatch(strings.TrimSpace(line))
-	if len(m) == 2 {
-		return m[1]
-	}
-	return ""
-}
-
-func isSafeSourceHeredocHeader(line string) bool {
-	if heredocPipeExecRe.MatchString(line) || strings.Contains(line, "|") {
-		return false
-	}
-	exe := extractHeredocHeaderExe(line)
-	if exe == "tee" {
-		return true
-	}
-	return exe == "cat" && strings.Contains(line, ">")
-}
-
-func extractHeredocHeaderExe(line string) string {
-	for _, tok := range tokenizeQuotedShellWords(line) {
-		if isShellEnvAssignmentToken(tok) {
-			continue
-		}
-		base := strings.ToLower(filepath.Base(tok))
-		if base == "env" || base == "command" || base == "nohup" || base == "sudo" {
-			continue
-		}
-		return base
-	}
-	return ""
 }
 
 func hasActiveUntrustedIngressTaint(baseCwd string) bool {
