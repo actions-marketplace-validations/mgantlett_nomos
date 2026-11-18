@@ -19,7 +19,7 @@ type: spec
 
 The Nomos Open-Core protocol enforces **Law 3 (The Hermetic Worktree Law)** across protected trunk branches (`main`, `master`, `intent`, `substrate`). Protected trunks remain physically immutable, and all mutations execute inside isolated task worktrees. Unrestricted trunk mutations introduce untracked state drift, broken CI pipelines, and multi-agent collisions.
 
-This specification formalizes the **Hermetic Worktree and Git Hygiene Subsystem** in `substrate/src/nomos/core/workspace/`. It codifies the worktree lifecycle state machine, `SafeGitCommand` wrappers, dynamic root discovery, and 42-gate DoD verification.
+This specification formalizes the **Hermetic Worktree and Git Hygiene Subsystem** across `substrate/src/nomos/core/workspace/` and `substrate/src/nomos/core/capbac/`. It codifies worktree lifecycle states, `SafeGitCommand` wrappers, shared `capbac` shell lexers, dynamic root discovery, and 42-gate DoD verification.
 
 ---
 
