@@ -415,6 +415,11 @@ func FormatPRProofMarkdown(receipt *PRProofReceipt) string
    - Brownfield target resolution pairs `.tmp/tests/test_<stem>.py` and `.tmp/tests/<stem>_test.py`.
    - Python runners pass `.tmp/tests` explicitly to `pytest` and `unittest` and canonicalize traced paths via `os.path.realpath` for accurate `>= 80%` coverage.
    - When Git scope contains modified Python sources, `CoverageGate` measures trace coverage strictly across modified non-test Python files.
+11. **Scratch Hygiene Preference, Polyglot Verification Breadth & Boundary-Mutant Spot-Checks (`TC-COV-006`):**
+   - When a repository has zero tracked baseline unit suites, `TDDGate` and `CoverageGate` remediations direct authors to `.tmp/tests/` first across supported languages.
+   - In greenfield or strict polyglot runs with `>= 100` production LOC, `CoverageGate` requires at least eight verification cases and assertions covering boundaries and errors.
+   - When zero-baseline polyglot suites finish in under `500ms` across `80..2500` production LOC, `CoverageGate` probes up to four relational flips inside ephemeral temp copies.
+   - If two or more boundary mutants survive inside ephemeral copies without mutating workspace files, `CoverageGate` rejects execution naming surviving `file:line` relational checks.
 
 ---
 
@@ -458,6 +463,7 @@ func FormatPRProofMarkdown(receipt *PRProofReceipt) string
 | `TC-COV-003` | `ThresholdIntegrityGate` | Worktree `nomos.yaml` relaxes `max_cyclomatic_complexity > 15` | Rejects threshold relaxation under `strict_mode: true` | Law 7 |
 | `TC-COV-004` | `ThresholdIntegrityGate` | Worktree downgrades `strict_mode` or `boundary.enforce` from trunk | Rejects governance downgrade against trunk baseline | Law 1 & Law 7 |
 | `TC-COV-005` | `TDDGate`, `CoverageGate` | Python repo with `requirements.txt` and `.tmp/tests/test_app.py` | Enforces strict TDD and >= 80% trace coverage via `.tmp/tests` | Law 2 & Law 7 |
+| `TC-COV-006` | `CoverageGate` | Greenfield repo >= 100 LOC with < 8 cases or surviving `<=` mutant | Rejects shallow suite breadth or surviving boundary mutants | Law 2 & Law 7 |
 | `TC-PRF-01` | `ProofReport` (Vector 1) | Synthetic AST defect injection across active gates | Asserts `MutationScore == 100%` (all defects killed) | Law 2 |
 | `TC-PRF-02` | `ProofReport` (Vector 2) | Clean reference fixture evaluation | Asserts `FalsePositiveRate == 0%` across all gates | Law 2 |
 | `TC-PRF-03` | `ProofReport` (Vector 3) | Non-vacuity probe audit across 42 gates | Asserts `NonVacuousGates == TotalGatesEvaluated` | Law 2 |

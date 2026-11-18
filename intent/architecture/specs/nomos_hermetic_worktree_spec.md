@@ -266,7 +266,9 @@ Session Sentinel (`CHARTER-4-BOUNDARY`) evaluates candidate workspace roots stru
 
 `ParseGoSurfaceFingerprintForPath` extracts exported Go symbols, struct `json` tags, `@intent` bindings, and `verify`/`hookcmd` rule literals into `NormativeSurfaceDelta.GovernanceRules`. `InspectWorktreeNormativeSurface` cancels balanced intra-package moves so file splits pass untwinned while net-new rules require `Twin: INT-<N>`. `nomos hook post-tool` and `nomos hook stop` track `<size>:<sha256_8>` `Bash` digests and evaluate `DirtyUnverifiedEdits` without penalizing post-verify reads. Under `--container-sandbox`, `nomos hook stop` enforces four-strike retries (`StopBlockStrikes`) with inline `FastFileRadar` diagnostics until `nomos verify` passes. `FormatPlainHandshakeBannerWithRoot` appends `Manifest Deps` and `Workspace Modules` summaries during `SessionStart`.
 
-`HookSessionTrace` sets `DirtyBehavioralEdits` when source mutations occur inside a workspace lacking discovered unit tests. `nomos hook stop` blocks exit until unit tests pass under `nomos verify` or post-edit execution succeeds. `FormatPlainHandshakeBannerWithRoot` emits `.tmp/tests/` regression-suite guidance when executable sources lack committed tests or under `--container-sandbox`.
+`HookSessionTrace` sets `DirtyBehavioralEdits` when source mutations occur inside a workspace lacking discovered unit suites. `nomos hook stop` blocks exit until unit suites pass under `nomos verify` or post-edit execution succeeds. `FormatPlainHandshakeBannerWithRoot` emits `.tmp/tests/` regression-suite guidance when executable sources lack committed suites or under `--container-sandbox`.
+
+When a container or hermetic workspace starts with zero tracked baseline unit suites, `EvaluatePostToolHook` monitors net-new verification file creation outside `.tmp/`. On creating `tests/` or root suite files outside `.tmp/`, `nomos hook post-tool` emits a non-blocking deliverable-hygiene advisory recommending `.tmp/tests/` instead.
 
 ---
 
@@ -323,6 +325,7 @@ Session Sentinel (`CHARTER-4-BOUNDARY`) evaluates candidate workspace roots stru
 | `TC-BG-06` | Branch Guard CommitSchemaGate pass | `CommitSchemaGate` evaluates feature-branch commits in `branch` mode | `"Accepts Jira, Linear, or plain subjects while rejecting canned shims."` | PASS |
 | `TC-BG-08` | Bash digest tracking & SessionStart hull | `Bash` file write across `post-tool` and `--container-sandbox` `stop`, plus `SessionStart` banner | `"Triggers AST radar, blocks unverified Stop, skips sample/fixture dirs in Workspace Modules, and omits git commit in container Next Actions."` | PASS |
 | `TC-BG-09` | Post-edit behavioral Stop gate and testless hull guidance | Source edit without tests followed by Stop vs post-edit run | `"Prompts boundary/edge-case unittest.TestCase tests in .tmp/tests/test_<module>.py, blocks un-executed source edits, and clears after behavioral run."` | PASS |
+| `TC-BG-10` | Zero-baseline container scratch suite placement advisory | Creating net-new suite file outside `.tmp/` with empty baseline | `"Emits non-blocking advisory steering scratch suites to .tmp/tests/."` | PASS |
 
 ---
 
