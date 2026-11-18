@@ -18,13 +18,8 @@ var (
 	braceSimpleBoolRetRe  = regexp.MustCompile(`^\s*return\s+(.+?)\s*;?\s*$`)
 	braceTypeofReturnRe   = regexp.MustCompile(`\bif\s*\(\s*typeof\s+[^)]+!==[^)]+\)\s*(?:\{\s*)?return\b`)
 
-	polyglotTupleCheckExts = map[string]bool{
-		ExtTS: true, ExtTSX: true, ExtJS: true, ExtJSX: true,
-		ExtMJS: true, ExtCJS: true, ExtRB: true, ExtRake: true,
-	}
-	polyglotNullishCheckExts = map[string]bool{
-		ExtTS: true, ExtTSX: true, ExtJS: true, ExtJSX: true,
-	}
+	polyglotTupleCheckExts   = map[string]bool{ExtTS: true, ExtTSX: true, ExtJS: true, ExtJSX: true, ExtMJS: true, ExtCJS: true, ExtRB: true, ExtRake: true}
+	polyglotNullishCheckExts = map[string]bool{ExtTS: true, ExtTSX: true, ExtJS: true, ExtJSX: true}
 )
 
 // scanPolyglotIdiomAndControlFlowSlop evaluates non-Python, non-Go polyglot sources for control-flow and idiom slop.
@@ -35,50 +30,30 @@ func scanPolyglotIdiomAndControlFlowSlop(_, relPath, text string) []string {
 	}
 	lines := strings.Split(text, "\n")
 	var out []string
-	out = append(out, scanPolyglotTypeGuardSprawl(relPath, ext, lines)...)
-	out = append(out, scanPolyglotDefensiveTypeofReturnSprawl(relPath, lines)...)
+	if guards := countBraceCodeLineMatches(lines, func(c string) bool { return braceTypeGuardThrowRe.MatchString(c) && braceErrorThrowRe.MatchString(c) }); guards >= 5 {
+		out = append(out, fmt.Sprintf("%s:1: module scatters %d inline runtime type-guard throws; centralize schema validation at the boundary", relPath, guards))
+	}
+	if typeofRets := countBraceCodeLineMatches(lines, braceTypeofReturnRe.MatchString); typeofRets >= 4 {
+		out = append(out, fmt.Sprintf("%s:1: module repeats 'if (typeof ... !== ...): return ...' across %d checks; consolidate field validation into a declarative schema validator (Law 6)", relPath, typeofRets))
+	}
 	out = append(out, scanPolyglotEqChainAndBoolReturn(relPath, lines)...)
 	out = append(out, scanPolyglotArrayTupleReturns(relPath, ext, lines)...)
-	out = append(out, scanTSNullishVerbosity(relPath, ext, lines)...)
-	return out
+	return append(out, scanTSNullishVerbosity(relPath, ext, lines)...)
 }
 
-func scanPolyglotDefensiveTypeofReturnSprawl(relPath string, lines []string) []string {
-	count := 0
+// countBraceCodeLineMatches tallies non-comment brace-language lines matching pred.
+func countBraceCodeLineMatches(lines []string, pred func(string) bool) int {
+	hits := 0
 	for _, raw := range lines {
 		code, cmt := splitSlashLineCommentOutsideStrings(raw)
 		if strings.TrimSpace(code) == "" && cmt != "" {
 			continue
 		}
-		if braceTypeofReturnRe.MatchString(code) {
-			count++
+		if pred(code) {
+			hits++
 		}
 	}
-	if count >= 4 {
-		return []string{fmt.Sprintf("%s:1: module repeats 'if (typeof ... !== ...): return ...' across %d checks; consolidate field validation into a declarative schema validator (Law 6)", relPath, count)}
-	}
-	return nil
-}
-
-// scanPolyglotTypeGuardSprawl flags scattered runtime type-guard throws across polyglot non-Go modules.
-func scanPolyglotTypeGuardSprawl(relPath, ext string, lines []string) []string {
-	if ext == ExtGo {
-		return nil
-	}
-	guards := 0
-	for _, raw := range lines {
-		code, cmt := splitSlashLineCommentOutsideStrings(raw)
-		if strings.TrimSpace(code) == "" && cmt != "" {
-			continue
-		}
-		if braceTypeGuardThrowRe.MatchString(code) && braceErrorThrowRe.MatchString(code) {
-			guards++
-		}
-	}
-	if guards >= 5 {
-		return []string{fmt.Sprintf("%s:1: module scatters %d inline runtime type-guard throws; centralize schema validation at the boundary", relPath, guards)}
-	}
-	return nil
+	return hits
 }
 
 // scanPolyglotEqChainAndBoolReturn detects consecutive single-variable jump ifs and redundant bool-return pairs.
@@ -138,8 +113,7 @@ func checkBraceRedundantBoolPair(relPath string, idx int, firstTrimmed, nextRaw 
 	if len(bm) != 2 {
 		return ""
 	}
-	expr := strings.TrimSpace(bm[1])
-	if isBraceBoolExprCandidate(expr, m[1]) {
+	if isBraceBoolExprCandidate(strings.TrimSpace(bm[1]), m[1]) {
 		return fmt.Sprintf("%s:%d: redundant 'if (...) { return %s; }' before boolean return; combine into a single boolean return expression", relPath, idx+1, m[1])
 	}
 	return ""
@@ -169,8 +143,7 @@ func scanPolyglotArrayTupleReturns(relPath, ext string, lines []string) []string
 		if (df > 0 || dok > 0) && firstLine == 0 {
 			firstLine = i + 1
 		}
-		failCnt += df
-		okCnt += dok
+		tallyComplementarySentinel(df > 0, dok > 0, &failCnt, &okCnt)
 	}
 	if failCnt > 0 && okCnt > 0 && failCnt+okCnt >= 2 {
 		return []string{fmt.Sprintf("%s:%d: uses Go-style [value, err]/[ok, value] array tuple returns; throw/raise an Error or return a typed object instead (Law 6)", relPath, firstLine)}
@@ -178,6 +151,7 @@ func scanPolyglotArrayTupleReturns(relPath, ext string, lines []string) []string
 	return nil
 }
 
+// isNullOrNilToken reports whether tok is a literal null or nil sentinel.
 func isNullOrNilToken(tok string) bool {
 	return tok == "null" || tok == "nil"
 }
@@ -188,22 +162,15 @@ func classifyArrayTupleReturnLine(raw string) (int, int) {
 	if strings.TrimSpace(code) == "" && cmt != "" {
 		return 0, 0
 	}
-	sanitized := polyglotStringLitRe.ReplaceAllString(code, "$STR")
-	m := braceReturnArrayRe.FindStringSubmatch(sanitized)
+	m := braceReturnArrayRe.FindStringSubmatch(polyglotStringLitRe.ReplaceAllString(code, "$STR"))
 	if len(m) != 3 {
 		return 0, 0
 	}
 	lhs, rhs := strings.TrimSpace(m[1]), strings.TrimSpace(m[2])
-	if lhs == "false" || rhs == "false" {
+	if lhs == "false" || rhs == "false" || (isNullOrNilToken(lhs) && !isNullOrNilToken(rhs)) {
 		return 1, 0
 	}
-	if lhs == "true" || rhs == "true" {
-		return 0, 1
-	}
-	if isNullOrNilToken(lhs) && !isNullOrNilToken(rhs) {
-		return 1, 0
-	}
-	if isNullOrNilToken(rhs) && !isNullOrNilToken(lhs) {
+	if lhs == "true" || rhs == "true" || (isNullOrNilToken(rhs) && !isNullOrNilToken(lhs)) {
 		return 0, 1
 	}
 	return 0, 0

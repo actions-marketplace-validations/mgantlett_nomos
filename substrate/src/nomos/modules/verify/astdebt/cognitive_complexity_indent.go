@@ -70,19 +70,12 @@ func (s *indentCogState) step(lineNum int, rawLine string) {
 }
 
 func (s *indentCogState) consumeDocstringLine(trimmed string) bool {
-	if s.inDocDelim != "" {
-		if strings.Contains(trimmed, s.inDocDelim) {
-			s.inDocDelim = ""
-		}
-		return true
+	if trimmed == "" {
+		return false
 	}
-	if delim := matchTripleQuoteAt(trimmed, 0); delim != "" {
-		if strings.Count(trimmed, delim) < 2 {
-			s.inDocDelim = delim
-		}
-		return true
-	}
-	return false
+	skip, nextDelim := stepPyDocDelim(trimmed, s.inDocDelim, nil)
+	s.inDocDelim = nextDelim
+	return skip
 }
 
 func (s *indentCogState) handleFuncHeader(lineNum, indent int, name string) {

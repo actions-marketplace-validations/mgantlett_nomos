@@ -1,5 +1,4 @@
-// Package astdebt enforces universal Python anti-slop idiom checks: Go-style (val, err) tuple returns,
-// empty Exception hierarchy sprawl, and redundant if/return boolean ceremony (Law 2 & Law 6).
+// Package astdebt enforces Python anti-slop idiom checks and shared delimiter/tuple utilities (Law 2 & Law 6).
 package astdebt
 
 import (
@@ -19,54 +18,52 @@ var (
 )
 
 type pyScopedFunc struct {
-	name      string
-	indent    int
-	startLine int
-	bodyLines []string
+	name         string
+	indent       int
+	startLine    int
+	bodyBaseLine int
+	bodyLines    []string
 }
 
-func scanPythonIdiomSlop(relPath, text string) []string {
-	lines := strings.Split(text, "\n")
-	funcs := collectDirectPythonFuncs(lines)
+type tupleScanState struct {
+	depth    int
+	quote    byte
+	escaped  bool
+	splitIdx int
+}
+
+// scanPythonIdiomSlop checks Go-style error tuples, empty Exception sprawl, and bool-return ceremony.
+func scanPythonIdiomSlop(relPath string, lines []string, funcs []pyScopedFunc) []string {
 	var out []string
 	out = append(out, scanGoStyleErrorTupleReturns(relPath, funcs)...)
 	out = append(out, scanEmptyExceptionSprawl(relPath, lines)...)
-	out = append(out, scanRedundantBoolReturns(relPath, funcs)...)
-	out = append(out, scanPythonExtraIdioms(relPath, lines, funcs)...)
-	return out
-}
-
-func collectDirectPythonFuncs(lines []string) []pyScopedFunc {
-	var out []pyScopedFunc
-	for i := 0; i < len(lines); i++ {
-		m := pyAnyDefRe.FindStringSubmatch(lines[i])
-		if len(m) != 3 {
-			continue
-		}
-		indent := countLeadingIndentCols(m[1])
-		end := findPythonBlockEnd(lines, i+1, indent)
-		direct := sliceDirectFuncBody(lines[i+1:end], indent)
-		out = append(out, pyScopedFunc{
-			name:      m[2],
-			indent:    indent,
-			startLine: i + 1,
-			bodyLines: direct,
-		})
+	for _, fn := range funcs {
+		out = append(out, scanFuncRedundantBoolReturns(relPath, fn)...)
 	}
 	return out
 }
 
+// splitAndCollectDirectPythonFuncs parses Python functions with nested def bodies zeroed out.
+func splitAndCollectDirectPythonFuncs(text string) ([]string, []pyScopedFunc) {
+	lines := strings.Split(text, "\n")
+	rawFuncs := parseAllPyFuncs(text)
+	out := make([]pyScopedFunc, 0, len(rawFuncs))
+	for _, fn := range rawFuncs {
+		out = append(out, pyScopedFunc{
+			name: fn.name, indent: fn.indent, startLine: fn.startLine,
+			bodyBaseLine: fn.sigEndIdx + 1, bodyLines: sliceDirectFuncBody(fn.bodyLines, fn.indent),
+		})
+	}
+	return lines, out
+}
+
+// sliceDirectFuncBody masks nested def suites so outer function scanners ignore inner helpers.
 func sliceDirectFuncBody(body []string, funcIndent int) []string {
 	out := make([]string, len(body))
 	for i := 0; i < len(body); i++ {
-		trimmed := strings.TrimSpace(body[i])
-		if m := pyAnyDefRe.FindStringSubmatch(trimmed); len(m) == 3 {
-			subIndent := countLeadingIndentCols(body[i])
-			if subIndent > funcIndent {
+		if m := pyAnyDefRe.FindStringSubmatch(strings.TrimSpace(body[i])); len(m) == 3 {
+			if subIndent := countLeadingIndentCols(body[i]); subIndent > funcIndent {
 				end := findPythonBlockEnd(body, i+1, subIndent)
-				for k := i; k < end; k++ {
-					out[k] = ""
-				}
 				i = end - 1
 				continue
 			}
@@ -76,12 +73,27 @@ func sliceDirectFuncBody(body []string, funcIndent int) []string {
 	return out
 }
 
+// tallyComplementarySentinel updates balanced failure vs success return counters across tuples.
+func tallyComplementarySentinel(failCond, okCond bool, failHits, okHits *int) {
+	if failCond {
+		*failHits++
+	} else if okCond {
+		*okHits++
+	}
+}
+
+// scanGoStyleErrorTupleReturns rejects Go-style (val, err) / (ok, val) tuple returns in Python.
 func scanGoStyleErrorTupleReturns(relPath string, funcs []pyScopedFunc) []string {
 	var out []string
 	for _, fn := range funcs {
-		noneCount, noneBalanced := countComplementarySentinelReturns(fn.bodyLines, "None", "")
-		boolCount, boolBalanced := countComplementarySentinelReturns(fn.bodyLines, "False", "True")
-		total := pickSentinelTupleCount(noneCount, noneBalanced, boolCount, boolBalanced)
+		noneCount, noneBalanced := countPySentinelReturns(fn.bodyLines, "None", "")
+		boolCount, boolBalanced := countPySentinelReturns(fn.bodyLines, "False", "True")
+		total := 0
+		if noneBalanced && noneCount >= minGoErrTupleReturns {
+			total = noneCount
+		} else if boolBalanced && boolCount >= minGoErrTupleReturns {
+			total = boolCount
+		}
 		if total >= minGoErrTupleReturns {
 			out = append(out, fmt.Sprintf(
 				"%s:%d: function %s uses Go-style (value, err) tuple returns or (ok, value) status pairs (%d branches); raise a typed exception or return value/None directly",
@@ -92,53 +104,95 @@ func scanGoStyleErrorTupleReturns(relPath string, funcs []pyScopedFunc) []string
 	return out
 }
 
-func pickSentinelTupleCount(noneCount int, noneBalanced bool, boolCount int, boolBalanced bool) int {
-	if noneBalanced && noneCount >= minGoErrTupleReturns {
-		return noneCount
-	}
-	if boolBalanced && boolCount >= minGoErrTupleReturns {
-		return boolCount
-	}
-	return 0
-}
-
-func countComplementarySentinelReturns(body []string, failTok, okTok string) (int, bool) {
-	lhsHits, rhsHits := 0, 0
+// countPySentinelReturns tallies balanced 2-tuple returns matching failTok vs non-failTok / okTok.
+func countPySentinelReturns(body []string, failTok, okTok string) (int, bool) {
+	failHits, okHits := 0, 0
 	for _, raw := range body {
 		trimmed := strings.TrimSpace(raw)
 		if !strings.HasPrefix(trimmed, "return ") {
 			continue
 		}
-		expr := unwrapOuterParens(stripPythonComment(strings.TrimSpace(strings.TrimPrefix(trimmed, "return"))))
+		expr := unwrapOuterDelims(stripPythonComment(strings.TrimSpace(strings.TrimPrefix(trimmed, "return"))), '(', ')')
 		lhs, rhs, ok := splitTopLevelTwoTuple(expr)
-		if ok {
-			dFail, dOk := tallySentinelTuple(lhs, rhs, failTok, okTok)
-			lhsHits += dFail
-			rhsHits += dOk
+		if !ok {
+			continue
+		}
+		if okTok == "" {
+			tallyComplementarySentinel(lhs == failTok && rhs != failTok, rhs == failTok && lhs != failTok, &failHits, &okHits)
+		} else {
+			tallyComplementarySentinel(lhs == failTok || rhs == failTok, lhs == okTok || rhs == okTok, &failHits, &okHits)
 		}
 	}
-	return lhsHits + rhsHits, lhsHits > 0 && rhsHits > 0
+	return failHits + okHits, failHits > 0 && okHits > 0
 }
 
-func tallySentinelTuple(lhs, rhs, failTok, okTok string) (int, int) {
-	if okTok == "" {
-		if lhs == failTok && rhs != failTok {
-			return 1, 0
+// unwrapOuterDelims strips one redundant matching outer delimiter pair wrapping the entire string.
+func unwrapOuterDelims(s string, openCh, closeCh byte) string {
+	trimmed := strings.TrimSpace(s)
+	if len(trimmed) < 2 || trimmed[0] != openCh || trimmed[len(trimmed)-1] != closeCh {
+		return trimmed
+	}
+	depth := 0
+	for i := 0; i < len(trimmed); i++ {
+		if trimmed[i] == openCh {
+			depth++
+		} else if trimmed[i] == closeCh {
+			depth--
+			if depth == 0 && i < len(trimmed)-1 {
+				return trimmed
+			}
 		}
-		if rhs == failTok && lhs != failTok {
-			return 0, 1
-		}
-		return 0, 0
 	}
-	if lhs == failTok || rhs == failTok {
-		return 1, 0
-	}
-	if lhs == okTok || rhs == okTok {
-		return 0, 1
-	}
-	return 0, 0
+	return strings.TrimSpace(trimmed[1 : len(trimmed)-1])
 }
 
+// splitTopLevelTwoTuple splits an unnested A, B tuple expression outside strings and brackets.
+func splitTopLevelTwoTuple(expr string) (string, string, bool) {
+	st := &tupleScanState{splitIdx: -1}
+	for i := 0; i < len(expr); i++ {
+		if !st.advance(expr[i], i) {
+			return "", "", false
+		}
+	}
+	if st.splitIdx <= 0 || st.splitIdx >= len(expr)-1 {
+		return "", "", false
+	}
+	return strings.TrimSpace(expr[:st.splitIdx]), strings.TrimSpace(expr[st.splitIdx+1:]), true
+}
+
+// advance steps one byte across quote state and bracket nesting inside tupleScanState.
+func (s *tupleScanState) advance(ch byte, idx int) bool {
+	if s.escaped {
+		s.escaped = false
+		return true
+	}
+	if s.quote != 0 {
+		s.quote, s.escaped = stepSingleQuoteByte(ch, s.quote)
+		return true
+	}
+	if ch == '\'' || ch == '"' {
+		s.quote = ch
+		return true
+	}
+	return s.stepDelimiter(ch, idx)
+}
+
+// stepDelimiter tracks nested brackets and locates at most one top-level tuple comma.
+func (s *tupleScanState) stepDelimiter(ch byte, idx int) bool {
+	if ch == '(' || ch == '[' || ch == '{' {
+		s.depth++
+	} else if (ch == ')' || ch == ']' || ch == '}') && s.depth > 0 {
+		s.depth--
+	} else if ch == ',' && s.depth == 0 {
+		if s.splitIdx >= 0 {
+			return false
+		}
+		s.splitIdx = idx
+	}
+	return true
+}
+
+// stripPythonComment strips trailing # comments outside single and double quoted string literals.
 func stripPythonComment(expr string) string {
 	quote, escaped := byte(0), false
 	for i := 0; i < len(expr); i++ {
@@ -161,16 +215,15 @@ func stripPythonComment(expr string) string {
 	return strings.TrimSpace(expr)
 }
 
+// scanEmptyExceptionSprawl flags modules declaring 3 or more empty Error/Exception subclasses.
 func scanEmptyExceptionSprawl(relPath string, lines []string) []string {
-	emptyCount := 0
-	firstLine := 0
+	emptyCount, firstLine := 0, 0
 	for i := 0; i < len(lines); i++ {
 		m := pyExceptionClassRe.FindStringSubmatch(lines[i])
 		if len(m) != 4 || !isExceptionBaseList(m[3]) {
 			continue
 		}
-		indent := countLeadingIndentCols(m[1])
-		end := findPythonBlockEnd(lines, i+1, indent)
+		end := findPythonBlockEnd(lines, i+1, countLeadingIndentCols(m[1]))
 		if isEmptyPythonClassBody(lines[i+1 : end]) {
 			emptyCount++
 			if firstLine == 0 {
@@ -188,6 +241,7 @@ func scanEmptyExceptionSprawl(relPath string, lines []string) []string {
 	)}
 }
 
+// isExceptionBaseList reports whether a Python class inherits from an Error or Exception base.
 func isExceptionBaseList(bases string) bool {
 	for _, raw := range strings.Split(bases, ",") {
 		base := strings.TrimSpace(raw)
@@ -198,6 +252,7 @@ func isExceptionBaseList(bases string) bool {
 	return false
 }
 
+// extractPythonExecLines returns non-comment executable lines inside a Python suite.
 func extractPythonExecLines(body []string) []string {
 	execLines, hasFossil := extractPythonExecBodyInfo(body)
 	if hasFossil && len(execLines) == 0 {
@@ -206,49 +261,38 @@ func extractPythonExecLines(body []string) []string {
 	return execLines
 }
 
+// isEmptyPythonClassBody reports whether a class suite only contains docstrings, pass, or ellipsis.
 func isEmptyPythonClassBody(body []string) bool {
-	execLines := extractPythonExecLines(body)
-	for _, stmt := range execLines {
-		cleaned := stripPythonComment(stmt)
-		if cleaned != "" && cleaned != "pass" && cleaned != "..." {
+	for _, stmt := range extractPythonExecLines(body) {
+		if cleaned := stripPythonComment(stmt); cleaned != "" && cleaned != "pass" && cleaned != "..." {
 			return false
 		}
 	}
 	return true
 }
 
-func scanRedundantBoolReturns(relPath string, funcs []pyScopedFunc) []string {
-	var out []string
-	for _, fn := range funcs {
-		out = append(out, scanFuncRedundantBoolReturns(relPath, fn)...)
-	}
-	return out
-}
-
+// scanFuncRedundantBoolReturns flags 'if cond: return True/False' followed directly by its opposite return.
 func scanFuncRedundantBoolReturns(relPath string, fn pyScopedFunc) []string {
 	var out []string
 	body := fn.bodyLines
 	for i := 0; i < len(body); i++ {
-		ifIndent := countLeadingIndentCols(body[i])
-		trimmed := strings.TrimSpace(body[i])
-		m := pyIfBoolHeaderRe.FindStringSubmatch(trimmed)
+		m := pyIfBoolHeaderRe.FindStringSubmatch(strings.TrimSpace(body[i]))
 		if len(m) != 3 {
 			continue
 		}
+		ifIndent := countLeadingIndentCols(body[i])
 		firstRet, bodyEnd := extractIfSingleBoolReturn(body, i, ifIndent, strings.TrimSpace(m[2]))
-		if firstRet == "" {
-			continue
-		}
-		if matchesOppositeFollowingReturn(body, bodyEnd, ifIndent, firstRet) {
+		if firstRet != "" && matchesOppositeFollowingReturn(body, bodyEnd, ifIndent, firstRet) {
 			out = append(out, fmt.Sprintf(
 				"%s:%d: redundant 'if ...: return %s' before opposite boolean return; return bool(<cond>) or not (<cond>) directly",
-				relPath, fn.startLine+i+1, firstRet,
+				relPath, fn.bodyBaseLine+i+1, firstRet,
 			))
 		}
 	}
 	return out
 }
 
+// extractIfSingleBoolReturn extracts 'return True|False' from an inline or 1-statement if suite.
 func extractIfSingleBoolReturn(body []string, idx, ifIndent int, inlineTail string) (string, int) {
 	if inlineTail != "" && !strings.HasPrefix(inlineTail, "#") {
 		return parseReturnBoolLiteral(inlineTail), idx + 1
@@ -261,8 +305,12 @@ func extractIfSingleBoolReturn(body []string, idx, ifIndent int, inlineTail stri
 	return parseReturnBoolLiteral(execLines[0]), end
 }
 
+// matchesOppositeFollowingReturn checks whether the next statement or else suite returns opposite/bool.
 func matchesOppositeFollowingReturn(body []string, startIdx, ifIndent int, firstRet string) bool {
-	want := oppositeBoolLiteral(firstRet)
+	want := "True"
+	if firstRet == "True" {
+		want = "False"
+	}
 	for j := startIdx; j < len(body); j++ {
 		t := strings.TrimSpace(body[j])
 		if t == "" || strings.HasPrefix(t, "#") {
@@ -279,26 +327,24 @@ func matchesOppositeFollowingReturn(body []string, startIdx, ifIndent int, first
 			return false
 		}
 		if strings.HasPrefix(t, "else:") {
-			tail := strings.TrimSpace(strings.TrimPrefix(t, "else:"))
-			return matchesBoolReturnOrExpr(body, j, ifIndent, tail, want)
+			return matchesElseBoolReturn(body, j, ifIndent, strings.TrimSpace(strings.TrimPrefix(t, "else:")), want)
 		}
 		return parseReturnBoolLiteral(t) == want || isReturnBooleanLikeExpr(t)
 	}
 	return false
 }
 
-func matchesBoolReturnOrExpr(body []string, idx, ifIndent int, tail, want string) bool {
+// matchesElseBoolReturn checks an else branch suite for a single opposite or boolean expression return.
+func matchesElseBoolReturn(body []string, idx, ifIndent int, tail, want string) bool {
 	if tail != "" && !strings.HasPrefix(tail, "#") {
 		return parseReturnBoolLiteral(tail) == want || isReturnBooleanLikeExpr(tail)
 	}
 	end := findPythonBlockEnd(body, idx+1, ifIndent)
 	execLines := extractPythonExecLines(body[idx+1 : end])
-	if len(execLines) != 1 {
-		return false
-	}
-	return parseReturnBoolLiteral(execLines[0]) == want || isReturnBooleanLikeExpr(execLines[0])
+	return len(execLines) == 1 && (parseReturnBoolLiteral(execLines[0]) == want || isReturnBooleanLikeExpr(execLines[0]))
 }
 
+// isReturnBooleanLikeExpr identifies non-literal boolean return expressions following a guard return.
 func isReturnBooleanLikeExpr(stmt string) bool {
 	cleaned := stripPythonComment(stmt)
 	if !strings.HasPrefix(cleaned, "return ") {
@@ -325,20 +371,14 @@ func isReturnBooleanLikeExpr(stmt string) bool {
 	return false
 }
 
+// parseReturnBoolLiteral parses 'return True' or 'return False' statements.
 func parseReturnBoolLiteral(stmt string) string {
-	cleaned := stripPythonComment(stmt)
-	if cleaned == "return True" {
+	switch stripPythonComment(stmt) {
+	case "return True":
 		return "True"
-	}
-	if cleaned == "return False" {
+	case "return False":
 		return "False"
+	default:
+		return ""
 	}
-	return ""
-}
-
-func oppositeBoolLiteral(val string) string {
-	if val == "True" {
-		return "False"
-	}
-	return "True"
 }

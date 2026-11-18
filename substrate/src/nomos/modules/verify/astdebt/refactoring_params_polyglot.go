@@ -1,8 +1,11 @@
-// Package astdebt implements 11-language parameter-arity analysis with balanced generic delimiters.
+// Package astdebt implements 11-language Go and polyglot parameter-arity analysis with balanced generics.
 package astdebt
 
 import (
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -13,15 +16,45 @@ var (
 	rbFuncDeclStartRe  = regexp.MustCompile(`(?m)^\s*def\s+(?:self\.)?([A-Za-z_]\w*[?!]?)\s*\(`)
 	rsFuncDeclStartRe  = regexp.MustCompile(`(?m)^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?(?:unsafe\s+)?(?:const\s+)?fn\s+([A-Za-z_]\w*)\s*(?:<[^>]*>)?\s*\(`)
 	jsFuncDeclStartRe  = regexp.MustCompile(`(?m)(?:\bfunction\s+([A-Za-z_$][\w$]*)\s*(?:<[^>]*>)?\s*\(|\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:<[^>]*>)?\s*\()`)
-	cLikeMethodStartRe = regexp.MustCompile(`(?m)^\s*(?:(?:public|private|protected|internal|static|final|virtual|override|async|inline|constexpr|suspend|fun)\s+)*(?:[A-Za-z_][\w:<>,.?\[\]\s*&]*\s+)?([A-Za-z_]\w*)\s*\(`)
+	cLikeMethodStartRe     = regexp.MustCompile(`(?m)^\s*(?:(?:public|private|protected|internal|static|final|virtual|override|async|inline|constexpr|suspend|fun)\s+)*(?:[A-Za-z_][\w:<>,.?\[\]\s*&]*\s+)?([A-Za-z_]\w*)\s*\(`)
+	nonFuncControlKeywords = makeWordSet("if for while switch catch return sizeof alignof decltype synchronized lock using when match")
 )
 
-var nonFuncControlKeywords = map[string]bool{
-	"if": true, "for": true, "while": true, "switch": true, "catch": true,
-	"return": true, "sizeof": true, "alignof": true, "decltype": true, "synchronized": true,
-	"lock": true, "using": true, "when": true, "match": true,
+// EvaluateParameterArityViolations enforces the maximum parameter count per function to prevent low-cohesion splits.
+// @intent software_physics_engine_spec.md tree_sitter_ast_gate_spec.md #FunctionMetric
+func EvaluateParameterArityViolations(relPath string, src []byte, maxParams int) []string {
+	if maxParams <= 0 || len(src) == 0 {
+		return nil
+	}
+	if strings.HasSuffix(relPath, ExtGo) {
+		return scanGoParamViolations(relPath, src, maxParams)
+	}
+	return scanPolyglotParamViolations(relPath, src, maxParams)
 }
 
+// scanGoParamViolations flags Go functions whose declared parameter count exceeds maxParams.
+func scanGoParamViolations(relPath string, src []byte, maxParams int) []string {
+	fset := token.NewFileSet()
+	node, err := parser.ParseFile(fset, relPath, src, 0)
+	if err != nil {
+		return nil
+	}
+	var violations []string
+	for _, decl := range node.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Body == nil {
+			continue
+		}
+		if count := countGoFuncParams(fn); count > maxParams {
+			span := formatFileSpan(relPath, fset.Position(fn.Pos()).Line, fset.Position(fn.End()).Line)
+			violations = append(violations, fmt.Sprintf("%s (%s) parameter count %d exceeds max %d -> [1-TURN RECIPE: group >=%d parameters into a %sOptions struct (%s)]",
+				span, fn.Name.Name, count, maxParams, (count-maxParams)+1, fn.Name.Name, span))
+		}
+	}
+	return violations
+}
+
+// countSignatureParamsAtLine counts parameters for the signature beginning near lines[startIdx].
 func countSignatureParamsAtLine(ext, fullText string, lines []string, startIdx int) int {
 	offset := 0
 	for i := 0; i < startIdx && i < len(lines); i++ {
@@ -41,6 +74,7 @@ func countSignatureParamsAtLine(ext, fullText string, lines []string, startIdx i
 	return countTopLevelParams(ext, paramRaw)
 }
 
+// scanPolyglotParamViolations flags non-Go functions exceeding maxParams declared arguments.
 func scanPolyglotParamViolations(relPath string, src []byte, maxParams int) []string {
 	ext := strings.ToLower(filepath.Ext(relPath))
 	re := selectParamHeaderRegex(ext)
@@ -48,9 +82,8 @@ func scanPolyglotParamViolations(relPath string, src []byte, maxParams int) []st
 		return nil
 	}
 	text := string(src)
-	matches := re.FindAllStringSubmatchIndex(text, -1)
 	var violations []string
-	for _, m := range matches {
+	for _, m := range re.FindAllStringSubmatchIndex(text, -1) {
 		name := extractFirstCapturedGroup(text, m)
 		openParen := m[1] - 1
 		if name == "" || nonFuncControlKeywords[name] || openParen < 0 || text[openParen] != '(' {
@@ -64,30 +97,19 @@ func scanPolyglotParamViolations(relPath string, src []byte, maxParams int) []st
 			continue
 		}
 		if count := countTopLevelParams(ext, paramRaw); count > maxParams {
-			startLine := strings.Count(text[:m[0]], "\n") + 1
-			endLine := strings.Count(text[:closeIdx], "\n") + 1
+			startLine, endLine := strings.Count(text[:m[0]], "\n")+1, strings.Count(text[:closeIdx], "\n")+1
 			if endLine <= startLine {
 				endLine = startLine + 1
 			}
-			groupMin := (count - maxParams) + 1
 			span := formatFileSpan(relPath, startLine, endLine)
 			violations = append(violations, fmt.Sprintf("%s (%s) parameter count %d exceeds max %d -> [1-TURN RECIPE: group >=%d parameters into a %sOptions object/dataclass (%s)]",
-				span, name, count, maxParams, groupMin, name, span))
+				span, name, count, maxParams, (count-maxParams)+1, name, span))
 		}
 	}
 	return violations
 }
 
-// IsJSFamilyExt executes deterministic astdebt verification logic (@intent tree_sitter_ast_gate_spec.md).
-func IsJSFamilyExt(ext string) bool {
-	switch ext {
-	case ExtTS, ExtTSX, ExtJS, ExtJSX, ExtMJS, ExtCJS, ExtSvelte:
-		return true
-	default:
-		return false
-	}
-}
-
+// selectParamHeaderRegex maps source extension to its function signature header regex.
 func selectParamHeaderRegex(ext string) *regexp.Regexp {
 	if IsJSFamilyExt(ext) {
 		return jsFuncDeclStartRe
@@ -106,6 +128,7 @@ func selectParamHeaderRegex(ext string) *regexp.Regexp {
 	}
 }
 
+// extractFirstCapturedGroup returns the first matched subexpression slice in match indices.
 func extractFirstCapturedGroup(text string, m []int) string {
 	for i := 2; i+1 < len(m); i += 2 {
 		if m[i] >= 0 && m[i+1] >= 0 {
@@ -115,6 +138,7 @@ func extractFirstCapturedGroup(text string, m []int) string {
 	return ""
 }
 
+// isFollowedByFuncBodyOrArrow checks whether a JS/TS parameter list precedes '{' or '=>'.
 func isFollowedByFuncBodyOrArrow(text string, openParen int) bool {
 	_, closeIdx, ok := extractBalancedParenSpanWithEnd(text, openParen)
 	if !ok || closeIdx+1 >= len(text) {
@@ -135,29 +159,25 @@ func isFollowedByFuncBodyOrArrow(text string, openParen int) bool {
 	return false
 }
 
+// extractBalancedParenSpanWithEnd returns the balanced (...) substring, closing index, and validity.
 func extractBalancedParenSpanWithEnd(text string, openParen int) (string, int, bool) {
 	if openParen < 0 || openParen >= len(text) || text[openParen] != '(' {
 		return "", -1, false
 	}
-	depth := 0
-	var inQuote byte
+	depth, quote, escaped := 0, byte(0), false
 	for i := openParen; i < len(text); i++ {
+		if escaped {
+			escaped = false
+			continue
+		}
 		ch := text[i]
-		if inQuote != 0 {
-			if ch == '\\' {
-				i++
-				continue
-			}
-			if ch == inQuote {
-				inQuote = 0
-			}
+		if quote != 0 {
+			quote, escaped = stepSingleQuoteByte(ch, quote)
 			continue
 		}
 		if ch == '"' || ch == '\'' || ch == '`' {
-			inQuote = ch
-			continue
-		}
-		if ch == '(' {
+			quote = ch
+		} else if ch == '(' {
 			depth++
 		} else if ch == ')' {
 			depth--
@@ -169,6 +189,7 @@ func extractBalancedParenSpanWithEnd(text string, openParen int) (string, int, b
 	return "", -1, false
 }
 
+// countTopLevelParams splits a signature parameter list and excludes language implicit receivers.
 func countTopLevelParams(ext, paramRaw string) int {
 	trimmed := strings.TrimSpace(paramRaw)
 	if trimmed == "" || ((ext == ExtC || ext == ExtH || ext == ExtCPP) && trimmed == "void") {
@@ -184,22 +205,22 @@ func countTopLevelParams(ext, paramRaw string) int {
 	return count
 }
 
+// splitTopLevelCommaParams splits comma-separated parameters outside strings and nested delimiters.
 func splitTopLevelCommaParams(s string) []string {
 	var parts []string
-	start, depth := 0, 0
-	var inQuote byte
+	start, depth, quote, escaped := 0, 0, byte(0), false
 	for i := 0; i < len(s); i++ {
+		if escaped {
+			escaped = false
+			continue
+		}
 		ch := s[i]
-		if inQuote != 0 {
-			if ch == '\\' {
-				i++
-			} else if ch == inQuote {
-				inQuote = 0
-			}
+		if quote != 0 {
+			quote, escaped = stepSingleQuoteByte(ch, quote)
 			continue
 		}
 		if ch == '"' || ch == '\'' || ch == '`' {
-			inQuote = ch
+			quote = ch
 			continue
 		}
 		prev := byte(0)
@@ -215,6 +236,7 @@ func splitTopLevelCommaParams(s string) []string {
 	return append(parts, s[start:])
 }
 
+// updateNestedParamDepth tracks (), <>, [], and {} nesting levels across parameter defaults/generics.
 func updateNestedParamDepth(depth int, ch, prev byte) int {
 	switch ch {
 	case '(', '<', '[', '{':
@@ -231,6 +253,7 @@ func updateNestedParamDepth(depth int, ch, prev byte) int {
 	return depth
 }
 
+// cleanParamToken strips single-line comments and joins multiline parameter declarations.
 func cleanParamToken(raw string) string {
 	var kept []string
 	for _, l := range strings.Split(raw, "\n") {
@@ -248,12 +271,13 @@ func cleanParamToken(raw string) string {
 	return strings.TrimSpace(strings.Join(kept, " "))
 }
 
+// isImplicitReceiverOrMarkerParam excludes Python self/cls/*/ markers and Rust self receivers.
 func isImplicitReceiverOrMarkerParam(ext, tok string) bool {
-	if ext == ".py" {
+	if ext == ExtPy {
 		name := strings.TrimSpace(strings.SplitN(strings.SplitN(tok, ":", 2)[0], "=", 2)[0])
 		return name == "self" || name == "cls" || name == "*" || name == "/"
 	}
-	if ext == ".rs" {
+	if ext == ExtRS {
 		return tok == "self" || tok == "mut self" || tok == "&self" || (strings.HasPrefix(tok, "&") && strings.HasSuffix(tok, " self"))
 	}
 	return false

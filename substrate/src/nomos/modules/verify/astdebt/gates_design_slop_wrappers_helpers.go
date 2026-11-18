@@ -1,15 +1,41 @@
-// Package astdebt provides parsing, word counting, and call-forwarding helpers for Python wrapper slop detection.
+// Package astdebt provides shared bounded corpus walking, word indexing, and Python function block parsing.
 package astdebt
 
 import (
+	"io/fs"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
 
+const (
+	maxDesignSlopCorpusFiles = 512
+	maxDesignSlopFileBytes   = 512 * 1024
+)
+
+type pyFuncBlock struct {
+	name          string
+	indent        int
+	startLine     int
+	sigEndIdx     int
+	bodyLines     []string
+	decorated     bool
+	hasFossilNote bool
+}
+
 var (
-	pyCalleePrefixRe        = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$`)
-	pyForwardDisallowedKwRe = regexp.MustCompile(`\b(?:and|or|not|if|else|for|in|lambda|is)\b`)
-	pyExemptDecorators      = []string{
+	pyFossilNoteRe           = regexp.MustCompile(`(?i)\b(?:compatibility|backwards?[- ]compatible|legacy|deprecated|checkpoint)\b`)
+	pyCalleePrefixRe         = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$`)
+	pyForwardDisallowedKwRe  = regexp.MustCompile(`\b(?:and|or|not|if|else|for|in|lambda|is)\b`)
+	excludedClassMethodNames = makeWordSet("default format read write close keys items values copy main to_dict from_dict")
+	designSlopCorpusExts     = map[string]bool{
+		ExtPy: true, ExtRB: true, ExtRake: true, ExtGo: true,
+		ExtTS: true, ExtTSX: true, ExtJS: true, ExtJSX: true, ExtMJS: true, ExtCJS: true,
+		ExtRS: true, ExtJava: true, ExtKT: true, ExtKTS: true, ExtCS: true,
+	}
+	designSlopSkipDirName = makeWordSet(".git .venv venv node_modules __pycache__ vendor .tmp .nomos")
+	pyExemptDecorators    = []string{
 		"@property", "@abstractmethod", "@abc.abstractmethod",
 		"@overload", "@typing.overload", "@override",
 		"@cached_property", "@functools.cached_property",
@@ -17,6 +43,85 @@ var (
 	}
 )
 
+// buildDesignSlopCorpusCountsWithLimit indexes word frequencies across repo files up to maxFiles.
+func buildDesignSlopCorpusCountsWithLimit(root string, sources map[string][]byte, maxFiles int) (map[string]int, bool) {
+	merged := make(map[string][]byte, len(sources)+8)
+	exceeded := collectWorkspaceSlopFiles(root, maxFiles, merged)
+	for k, v := range sources {
+		merged[filepath.ToSlash(filepath.Clean(k))] = v
+	}
+	if maxFiles > 0 && len(merged) > maxFiles {
+		exceeded = true
+	}
+	counts := make(map[string]int, 256)
+	for _, raw := range merged {
+		accumulateWordCounts(string(raw), counts)
+	}
+	return counts, exceeded
+}
+
+// collectWorkspaceSlopFiles walks root collecting bounded source files into dst.
+func collectWorkspaceSlopFiles(root string, maxFiles int, dst map[string][]byte) bool {
+	if root == "" || maxFiles <= 0 {
+		return false
+	}
+	collected, exceeded := 0, false
+	walkErr := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		return visitWorkspaceSlopEntry(root, path, d, err, maxFiles, &collected, &exceeded, dst)
+	})
+	return (walkErr != nil && walkErr != fs.SkipAll) || exceeded
+}
+
+// visitWorkspaceSlopEntry filters skipped directories, extensions, and oversized corpus files.
+func visitWorkspaceSlopEntry(root, path string, d fs.DirEntry, err error, maxFiles int, collected *int, exceeded *bool, dst map[string][]byte) error {
+	if err != nil || d == nil {
+		return nil
+	}
+	if d.IsDir() {
+		if path != root && designSlopSkipDirName[d.Name()] {
+			return filepath.SkipDir
+		}
+		return nil
+	}
+	if !designSlopCorpusExts[strings.ToLower(filepath.Ext(d.Name()))] {
+		return nil
+	}
+	if *collected >= maxFiles {
+		*exceeded = true
+		return fs.SkipAll
+	}
+	if key, raw, ok := readBoundedCorpusFile(root, path, d); ok {
+		dst[key] = raw
+		*collected++
+	}
+	return nil
+}
+
+// readBoundedCorpusFile reads one corpus file under the per-file size limit.
+func readBoundedCorpusFile(root, path string, d fs.DirEntry) (string, []byte, bool) {
+	info, iErr := d.Info()
+	if iErr != nil || info.Size() > maxDesignSlopFileBytes {
+		return "", nil, false
+	}
+	raw, rErr := os.ReadFile(path)
+	if rErr != nil {
+		return "", nil, false
+	}
+	if rel, err := filepath.Rel(root, path); err == nil {
+		return filepath.ToSlash(rel), raw, true
+	}
+	return filepath.ToSlash(path), raw, true
+}
+
+// isWordIdentByte reports whether ch can start or continue a normalized identifier token.
+func isWordIdentByte(ch byte, continuing bool) bool {
+	if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_' {
+		return true
+	}
+	return continuing && ch >= '0' && ch <= '9'
+}
+
+// accumulateWordCounts tallies identifier tokens present in text into counts.
 func accumulateWordCounts(text string, counts map[string]int) {
 	start := -1
 	for i := 0; i <= len(text); i++ {
@@ -37,13 +142,16 @@ func accumulateWordCounts(text string, counts map[string]int) {
 	}
 }
 
-func isWordIdentByte(ch byte, continuing bool) bool {
-	if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_' {
-		return true
+// countWordInLines counts identifier references for target across a slice of lines.
+func countWordInLines(target string, lines []string) int {
+	local := make(map[string]int, 16)
+	for _, l := range lines {
+		accumulateWordCounts(l, local)
 	}
-	return continuing && ch >= '0' && ch <= '9'
+	return local[target]
 }
 
+// isPureCallForwardingReturn detects 1-line return statements that only forward to another call.
 func isPureCallForwardingReturn(retLine string) bool {
 	if !strings.HasPrefix(retLine, "return ") {
 		return false
@@ -62,12 +170,21 @@ func isPureCallForwardingReturn(retLine string) bool {
 		return false
 	}
 	args := expr[openIdx+1 : closeIdx]
-	if strings.ContainsAny(args, "+*/%<>|&^") {
-		return false
-	}
-	return !pyForwardDisallowedKwRe.MatchString(args)
+	return !strings.ContainsAny(args, "+*/%<>|&^") && !pyForwardDisallowedKwRe.MatchString(args)
 }
 
+// isSkippablePyFunc exempts decorated endpoints/properties, dunders, visitors, and interface methods.
+func isSkippablePyFunc(fn pyFuncBlock) bool {
+	if fn.decorated || fn.name == "main" || strings.HasPrefix(fn.name, "visit_") {
+		return true
+	}
+	if strings.HasPrefix(fn.name, "__") && strings.HasSuffix(fn.name, "__") {
+		return true
+	}
+	return fn.indent > 0 && excludedClassMethodNames[fn.name]
+}
+
+// parseAllPyFuncs extracts Python def blocks along with signature span and leading metadata.
 func parseAllPyFuncs(text string) []pyFuncBlock {
 	lines := strings.Split(text, "\n")
 	var blocks []pyFuncBlock
@@ -78,25 +195,27 @@ func parseAllPyFuncs(text string) []pyFuncBlock {
 		}
 		indent := countLeadingIndentCols(lines[i][m[2]:m[3]])
 		name := lines[i][m[4]:m[5]]
-		sigEnd, openParen := findPyDefSignatureEnd(lines, i, m[1]-1)
+		openParen := m[1] - 1
+		sigEnd := findPyDefSignatureEnd(lines, i, openParen)
 		decorated, leadFossil := inspectPrecedingDefMeta(lines, i)
-		if inlineTail := extractPyDefInlineTail(lines[sigEnd], openParen); sigEnd == i && inlineTail != "" {
+		if tail := extractPyDefInlineTail(lines[sigEnd], openParen); sigEnd == i && tail != "" {
 			blocks = append(blocks, pyFuncBlock{
-				name: name, indent: indent, startLine: i + 1,
-				bodyLines: []string{inlineTail}, decorated: decorated, hasFossilNote: leadFossil,
+				name: name, indent: indent, startLine: i + 1, sigEndIdx: i,
+				bodyLines: []string{tail}, decorated: decorated, hasFossilNote: leadFossil,
 			})
 			continue
 		}
 		end := findPythonBlockEnd(lines, sigEnd+1, indent)
 		blocks = append(blocks, pyFuncBlock{
-			name: name, indent: indent, startLine: i + 1,
+			name: name, indent: indent, startLine: i + 1, sigEndIdx: sigEnd,
 			bodyLines: lines[sigEnd+1 : end], decorated: decorated, hasFossilNote: leadFossil,
 		})
 	}
 	return blocks
 }
 
-func findPyDefSignatureEnd(lines []string, startIdx, openParen int) (int, int) {
+// findPyDefSignatureEnd locates the closing signature line containing the trailing colon.
+func findPyDefSignatureEnd(lines []string, startIdx, openParen int) int {
 	depth := 0
 	for k := startIdx; k < len(lines); k++ {
 		colStart := 0
@@ -111,15 +230,15 @@ func findPyDefSignatureEnd(lines []string, startIdx, openParen int) (int, int) {
 			}
 		}
 		if depth <= 0 && strings.Contains(lines[k], ":") {
-			return k, openParen
+			return k
 		}
 	}
-	return startIdx, openParen
+	return startIdx
 }
 
+// inspectPrecedingDefMeta scans comments and decorators immediately above a Python def.
 func inspectPrecedingDefMeta(lines []string, idx int) (bool, bool) {
-	decorated := false
-	leadFossil := false
+	decorated, leadFossil := false, false
 	for j := idx - 1; j >= 0; j-- {
 		t := strings.TrimSpace(lines[j])
 		if t == "" {
@@ -132,8 +251,11 @@ func inspectPrecedingDefMeta(lines []string, idx int) (bool, bool) {
 			continue
 		}
 		if strings.HasPrefix(t, "@") {
-			if isPyExemptDecoratorLine(t) {
-				decorated = true
+			for _, prefix := range pyExemptDecorators {
+				if strings.HasPrefix(strings.ToLower(t), prefix) {
+					decorated = true
+					break
+				}
 			}
 			continue
 		}
@@ -142,16 +264,7 @@ func inspectPrecedingDefMeta(lines []string, idx int) (bool, bool) {
 	return decorated, leadFossil
 }
 
-func isPyExemptDecoratorLine(trimmed string) bool {
-	lower := strings.ToLower(trimmed)
-	for _, prefix := range pyExemptDecorators {
-		if strings.HasPrefix(lower, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
+// extractPyDefInlineTail extracts single-line def suite text after the signature colon.
 func extractPyDefInlineTail(line string, openParen int) string {
 	_, closeIdx, ok := extractBalancedParenSpanWithEnd(line, openParen)
 	if !ok {
@@ -168,70 +281,65 @@ func extractPyDefInlineTail(line string, openParen int) string {
 	return tail
 }
 
+// findPythonBlockEnd returns the first line index dedented back to or past headerIndent.
 func findPythonBlockEnd(lines []string, startIdx, headerIndent int) int {
-	j := startIdx
-	for ; j < len(lines); j++ {
+	for j := startIdx; j < len(lines); j++ {
 		trimmed := strings.TrimSpace(lines[j])
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-		if countLeadingIndentCols(lines[j]) <= headerIndent {
-			break
+		if trimmed != "" && !strings.HasPrefix(trimmed, "#") && countLeadingIndentCols(lines[j]) <= headerIndent {
+			return j
 		}
 	}
-	return j
+	return len(lines)
 }
 
+// stepPyDocDelim tracks triple-quote docstring state and blank/comment skipping on trimmed lines.
+func stepPyDocDelim(trimmed, inDoc string, onText func(string)) (bool, string) {
+	if inDoc != "" {
+		if onText != nil {
+			onText(trimmed)
+		}
+		if strings.Contains(trimmed, inDoc) {
+			return true, ""
+		}
+		return true, inDoc
+	}
+	if strings.HasPrefix(trimmed, "#") {
+		if onText != nil {
+			onText(trimmed)
+		}
+		return true, ""
+	}
+	if delim := matchTripleQuoteAt(trimmed, 0); delim != "" {
+		if onText != nil {
+			onText(trimmed)
+		}
+		if strings.Count(trimmed, delim) < 2 {
+			return true, delim
+		}
+		return true, ""
+	}
+	return false, ""
+}
+
+// extractPythonExecBodyInfo strips docstrings and comments while checking for fossil markers.
 func extractPythonExecBodyInfo(bodyLines []string) ([]string, bool) {
 	var exec []string
-	inDocDelim := ""
-	hasFossil := false
+	inDoc, hasFossil := "", false
+	markFossil := func(t string) {
+		if pyFossilNoteRe.MatchString(t) {
+			hasFossil = true
+		}
+	}
 	for _, raw := range bodyLines {
 		t := strings.TrimSpace(raw)
 		if t == "" {
 			continue
 		}
-		if next, skip := stepExecBodyCommentOrDoc(t, inDocDelim, &hasFossil); skip {
-			inDocDelim = next
+		if skip, nextDoc := stepPyDocDelim(t, inDoc, markFossil); skip {
+			inDoc = nextDoc
 			continue
 		}
 		exec = append(exec, t)
 	}
 	return exec, hasFossil
-}
-
-func stepExecBodyCommentOrDoc(t, inDocDelim string, hasFossil *bool) (string, bool) {
-	if inDocDelim != "" {
-		if pyFossilNoteRe.MatchString(t) {
-			*hasFossil = true
-		}
-		if strings.Contains(t, inDocDelim) {
-			return "", true
-		}
-		return inDocDelim, true
-	}
-	if strings.HasPrefix(t, "#") {
-		if pyFossilNoteRe.MatchString(t) {
-			*hasFossil = true
-		}
-		return "", true
-	}
-	if delim := matchTripleQuoteAt(t, 0); delim != "" {
-		if pyFossilNoteRe.MatchString(t) {
-			*hasFossil = true
-		}
-		if strings.Count(t, delim) < 2 {
-			return delim, true
-		}
-		return "", true
-	}
-	return "", false
-}
-
-func countWordInLines(target string, lines []string) int {
-	local := make(map[string]int, 16)
-	for _, l := range lines {
-		accumulateWordCounts(l, local)
-	}
-	return local[target]
 }

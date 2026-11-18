@@ -1,4 +1,4 @@
-// Package astdebt implements the deterministic Definition of Done (DoD) quality gate pipeline.
+// Package astdebt implements Go and polyglot Type-2 structural clone detection and violation enrichment (Law 6).
 package astdebt
 
 import (
@@ -10,6 +10,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -27,6 +28,14 @@ type cloneBlockCandidate struct {
 	hash      string
 }
 
+var (
+	polyglotStringLitRe = regexp.MustCompile(`(?:"[^"\\]*(?:\\.[^"\\]*)*"|'[^'\\]*(?:\\.[^'\\]*)*')`)
+	polyglotNumberLitRe = regexp.MustCompile(`\b\d+(?:\.\d+)?\b`)
+	polyglotSelfCallRe  = regexp.MustCompile(`\b(?:self|this)\.[A-Za-z_][A-Za-z0-9_]*\(`)
+	polyglotSpaceRe     = regexp.MustCompile(`\s+`)
+	polyglotCloneLangs  = makeWordSet("typescript svelte python ruby rust c cpp java kotlin csharp")
+)
+
 // DetectStructuralClones identifies Type-2 duplicated AST function structures across scanned source files.
 // @intent: #CloneGroup
 func DetectStructuralClones(files map[string][]byte, minLines int) []CloneGroup {
@@ -34,39 +43,17 @@ func DetectStructuralClones(files map[string][]byte, minLines int) []CloneGroup 
 		minLines = DefaultMinCloneLines
 	}
 	buckets := make(map[string][]cloneBlockCandidate)
-
-	paths := make([]string, 0, len(files))
-	for p := range files {
-		paths = append(paths, p)
-	}
-	sort.Strings(paths)
-
-	for _, relPath := range paths {
-		src := files[relPath]
-		candidates := extractFileCloneCandidates(relPath, src, minLines)
-		for _, c := range candidates {
+	for _, relPath := range sortedSourceKeys(files) {
+		for _, c := range extractFileCloneCandidates(relPath, files[relPath], minLines) {
 			buckets[c.hash] = append(buckets[c.hash], c)
 		}
 	}
-
 	return buildCloneGroups(buckets)
 }
 
-var polyglotCloneLangs = map[string]bool{
-	"typescript": true,
-	"svelte":     true,
-	"python":     true,
-	"ruby":       true,
-	"rust":       true,
-	"c":          true,
-	"cpp":        true,
-	"java":       true,
-	"kotlin":     true,
-	"csharp":     true,
-}
-
+// extractFileCloneCandidates dispatches Go AST or polyglot tree-sitter clone candidate extraction.
 func extractFileCloneCandidates(relPath string, src []byte, minLines int) []cloneBlockCandidate {
-	if strings.HasSuffix(relPath, ".go") {
+	if strings.HasSuffix(relPath, ExtGo) {
 		return extractGoCloneCandidates(relPath, src, minLines)
 	}
 	lang := treesitter.DetectLanguage(relPath)
@@ -76,6 +63,7 @@ func extractFileCloneCandidates(relPath string, src []byte, minLines int) []clon
 	return nil
 }
 
+// extractGoCloneCandidates hashes AST skeletons for Go functions meeting minLines.
 func extractGoCloneCandidates(relPath string, src []byte, minLines int) []cloneBlockCandidate {
 	fset := token.NewFileSet()
 	node, err := parser.ParseFile(fset, relPath, src, 0)
@@ -88,27 +76,22 @@ func extractGoCloneCandidates(relPath string, src []byte, minLines int) []cloneB
 		if !ok || fn.Body == nil {
 			continue
 		}
-		start := fset.Position(fn.Pos()).Line
-		end := fset.Position(fn.End()).Line
+		start, end := fset.Position(fn.Pos()).Line, fset.Position(fn.End()).Line
 		loc := end - start + 1
 		if loc < minLines {
 			continue
 		}
-		skel := buildGoASTSkeleton(fn.Body)
-		if len(skel) < 24 {
-			continue
+		if skel := buildGoASTSkeleton(fn.Body); len(skel) >= 24 {
+			out = append(out, cloneBlockCandidate{
+				file: filepath.ToSlash(relPath), startLine: start, endLine: end,
+				loc: loc, hash: hashSkeleton("go:" + skel),
+			})
 		}
-		out = append(out, cloneBlockCandidate{
-			file:      filepath.ToSlash(relPath),
-			startLine: start,
-			endLine:   end,
-			loc:       loc,
-			hash:      hashSkeleton("go:" + skel),
-		})
 	}
 	return out
 }
 
+// buildGoASTSkeleton serializes normalized control and call structure inside a Go block.
 func buildGoASTSkeleton(body *ast.BlockStmt) string {
 	var tokens []string
 	ast.Inspect(body, func(n ast.Node) bool {
@@ -123,6 +106,7 @@ func buildGoASTSkeleton(body *ast.BlockStmt) string {
 	return strings.Join(tokens, ";")
 }
 
+// goNodeStructuralTag encodes a canonical structural token for an AST node.
 func goNodeStructuralTag(n ast.Node) string {
 	switch x := n.(type) {
 	case *ast.IfStmt:
@@ -142,27 +126,91 @@ func goNodeStructuralTag(n ast.Node) string {
 	case *ast.BinaryExpr:
 		return fmt.Sprintf("BIN:%s", x.Op.String())
 	case *ast.CallExpr:
-		return formatGoCallTag(x)
+		if sel, ok := x.Fun.(*ast.SelectorExpr); ok {
+			return fmt.Sprintf("CALL:.%s/%d", sel.Sel.Name, len(x.Args))
+		}
+		if ident, ok := x.Fun.(*ast.Ident); ok {
+			return fmt.Sprintf("CALL:%s/%d", ident.Name, len(x.Args))
+		}
+		return fmt.Sprintf("CALL:?/%d", len(x.Args))
 	default:
 		return ""
 	}
 }
 
-func formatGoCallTag(call *ast.CallExpr) string {
-	if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
-		return fmt.Sprintf("CALL:.%s/%d", sel.Sel.Name, len(call.Args))
+// extractPolyglotCloneCandidates hashes normalized cross-file and sibling intra-file polyglot functions.
+func extractPolyglotCloneCandidates(lang, relPath string, src []byte, minLines int) []cloneBlockCandidate {
+	funcs, err := treesitter.ExtractFunctions(lang, relPath, src)
+	if err != nil || len(funcs) == 0 {
+		return nil
 	}
-	if ident, ok := call.Fun.(*ast.Ident); ok {
-		return fmt.Sprintf("CALL:%s/%d", ident.Name, len(call.Args))
+	crossMin, siblingEnabled := minLines, false
+	if lang != "svelte" && minLines == DefaultMinCloneLines {
+		crossMin, siblingEnabled = 8, true
 	}
-	return fmt.Sprintf("CALL:?/%d", len(call.Args))
+	lines := strings.Split(string(src), "\n")
+	var out []cloneBlockCandidate
+	for _, fn := range funcs {
+		if cand, ok := buildPolyglotFuncCloneCandidate(lang, relPath, fn, lines, crossMin, siblingEnabled); ok {
+			out = append(out, cand)
+		}
+	}
+	return out
 }
 
+// buildPolyglotFuncCloneCandidate builds a cross-file or intra-file hash candidate for fn.
+func buildPolyglotFuncCloneCandidate(lang, relPath string, fn treesitter.FunctionMetric, lines []string, crossMin int, siblingEnabled bool) (cloneBlockCandidate, bool) {
+	startIdx, endIdx := fn.Line-1, fn.Line-1+fn.LOC
+	if startIdx < 0 || endIdx > len(lines) {
+		return cloneBlockCandidate{}, false
+	}
+	canonRel := filepath.ToSlash(relPath)
+	if fn.LOC >= crossMin {
+		if skel, count := normalizePolyglotLines(lines[startIdx:endIdx], false); count > 0 && len(skel) >= 36 {
+			return cloneBlockCandidate{file: canonRel, startLine: fn.Line, endLine: fn.Line + fn.LOC - 1, loc: fn.LOC, hash: hashSkeleton(lang + ":" + skel)}, true
+		}
+	}
+	if siblingEnabled && fn.LOC >= 5 {
+		if skel, count := normalizePolyglotLines(lines[startIdx:endIdx], true); count >= 4 && len(skel) >= 26 {
+			return cloneBlockCandidate{file: canonRel, startLine: fn.Line, endLine: fn.Line + fn.LOC - 1, loc: fn.LOC, hash: hashSkeleton("intra:" + lang + ":" + canonRel + ":" + skel)}, true
+		}
+	}
+	return cloneBlockCandidate{}, false
+}
+
+// normalizePolyglotLines alpha-normalizes literals and self/this calls across function body lines.
+func normalizePolyglotLines(lines []string, normSelf bool) (string, int) {
+	if len(lines) <= 1 {
+		return "", 0
+	}
+	var cleaned []string
+	inDoc := ""
+	for i := 1; i < len(lines); i++ {
+		trimmed := strings.TrimSpace(lines[i])
+		if trimmed == "" || trimmed == "{" || trimmed == "}" || strings.HasPrefix(trimmed, "//") {
+			continue
+		}
+		if skip, nextDoc := stepPyDocDelim(trimmed, inDoc, nil); skip {
+			inDoc = nextDoc
+			continue
+		}
+		norm := polyglotStringLitRe.ReplaceAllString(trimmed, "$STR")
+		norm = polyglotNumberLitRe.ReplaceAllString(norm, "$NUM")
+		if normSelf {
+			norm = polyglotSelfCallRe.ReplaceAllString(norm, "$SELF.(")
+		}
+		cleaned = append(cleaned, polyglotSpaceRe.ReplaceAllString(norm, " "))
+	}
+	return strings.Join(cleaned, "|"), len(cleaned)
+}
+
+// hashSkeleton computes a short deterministic SHA-256 prefix digest of a normalized skeleton.
 func hashSkeleton(skel string) string {
 	sum := sha256.Sum256([]byte(skel))
 	return hex.EncodeToString(sum[:8])
 }
 
+// buildCloneGroups converts multi-occurrence skeleton hash buckets into sorted CloneGroups.
 func buildCloneGroups(buckets map[string][]cloneBlockCandidate) []CloneGroup {
 	var groups []CloneGroup
 	for hash, list := range buckets {
@@ -175,21 +223,11 @@ func buildCloneGroups(buckets map[string][]cloneBlockCandidate) []CloneGroup {
 			if item.loc > maxLOC {
 				maxLOC = item.loc
 			}
-			occs = append(occs, CloneOccurrence{
-				File:      item.file,
-				StartLine: item.startLine,
-				EndLine:   item.endLine,
-			})
+			occs = append(occs, CloneOccurrence{File: item.file, StartLine: item.startLine, EndLine: item.endLine})
 		}
-		groups = append(groups, CloneGroup{
-			Hash:        hash,
-			LineCount:   maxLOC,
-			Occurrences: occs,
-		})
+		groups = append(groups, CloneGroup{Hash: hash, LineCount: maxLOC, Occurrences: occs})
 	}
-	sort.Slice(groups, func(i, j int) bool {
-		return groups[i].Hash < groups[j].Hash
-	})
+	sort.Slice(groups, func(i, j int) bool { return groups[i].Hash < groups[j].Hash })
 	return groups
 }
 
@@ -229,8 +267,7 @@ func EnrichCDSViolations(root string, metrics []FileMetric, sources map[string][
 		if minLines <= 0 {
 			minLines = DefaultMinCloneLines
 		}
-		clones := DetectStructuralClones(sources, minLines)
-		violations = append(violations, FormatCloneViolations(clones)...)
+		violations = append(violations, FormatCloneViolations(DetectStructuralClones(sources, minLines))...)
 		violations = append(violations, DetectPolyglotDesignSlop(root, sources)...)
 	}
 	return violations
@@ -264,18 +301,10 @@ func EnrichComplexityViolations(root string, funcs []FunctionMetric, thresh Thre
 		span := formatFileSpan(fn.File, fn.Line, endLine)
 		effMax := EffectiveMaxComplexity(fn.File, thresh.MaxComplexity)
 		if fn.Complexity > effMax {
-			excess := fn.Complexity - effMax
-			msg := fmt.Sprintf("%s (%s) cyclomatic complexity %d exceeds max %d", span, fn.Name, fn.Complexity, effMax)
-			seams := PrescribeFunctionSeams(fn.File, src, fn.Name, fn.Line)
-			seams = append(seams, fmt.Sprintf("[1-TURN RECIPE: extract >=%d branch(es) from %s (%s) into helper %sStep()]", excess, fn.Name, span, fn.Name))
-			violations = append(violations, msg+" -> "+strings.Join(seams, " "))
+			violations = append(violations, formatComplexitySeamMsg(fn, src, span, fmt.Sprintf("cyclomatic complexity %d exceeds max %d", fn.Complexity, effMax), fmt.Sprintf("extract >=%d branch(es)", fn.Complexity-effMax)))
 		}
 		if fn.LOC > thresh.MaxFuncLOC {
-			excess := fn.LOC - thresh.MaxFuncLOC
-			msg := fmt.Sprintf("%s (%s) LOC %d exceeds max %d", span, fn.Name, fn.LOC, thresh.MaxFuncLOC)
-			seams := PrescribeFunctionSeams(fn.File, src, fn.Name, fn.Line)
-			seams = append(seams, fmt.Sprintf("[1-TURN RECIPE: extract >=%d line(s) from %s (%s) into helper %sStep()]", excess, fn.Name, span, fn.Name))
-			violations = append(violations, msg+" -> "+strings.Join(seams, " "))
+			violations = append(violations, formatComplexitySeamMsg(fn, src, span, fmt.Sprintf("LOC %d exceeds max %d", fn.LOC, thresh.MaxFuncLOC), fmt.Sprintf("extract >=%d line(s)", fn.LOC-thresh.MaxFuncLOC)))
 		}
 	}
 	if checkParams {
@@ -292,6 +321,13 @@ func EnrichComplexityViolations(root string, funcs []FunctionMetric, thresh Thre
 	return violations
 }
 
+// formatComplexitySeamMsg appends seam blueprints and 1-turn extraction recipe onto a complexity/LOC violation.
+func formatComplexitySeamMsg(fn FunctionMetric, src []byte, span, reason, recipeDelta string) string {
+	seams := append(PrescribeFunctionSeams(fn.File, src, fn.Name, fn.Line), fmt.Sprintf("[1-TURN RECIPE: %s from %s (%s) into helper %sStep()]", recipeDelta, fn.Name, span, fn.Name))
+	return fmt.Sprintf("%s (%s) %s -> %s", span, fn.Name, reason, strings.Join(seams, " "))
+}
+
+// lookupFunctionEndLine caches analyzed file end lines to render exact fn span ranges.
 func lookupFunctionEndLine(fn FunctionMetric, src []byte, thresh Thresholds, cache map[string]map[string]int) int {
 	byName, ok := cache[fn.File]
 	if !ok {
