@@ -8,14 +8,13 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/config"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/storage"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/task"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
 
 const embeddedTemplatesRelPrefix = "substrate/cli/templates/"
@@ -39,18 +38,20 @@ func (d NormativeSurfaceDelta) HasChanges() bool {
 // Summary formats a deterministic, bounded description of changed normative contract surfaces.
 // @intent nomos_hermetic_worktree_spec.md #NormativeSurfaceDelta
 func (d NormativeSurfaceDelta) Summary() string {
+	rows := []struct {
+		label string
+		items []string
+	}{
+		{"cli_surface", d.CLISurface},
+		{"config_schema", d.ConfigSchema},
+		{"governance_rules", d.GovernanceRules},
+		{"template_assets", d.TemplateAssets},
+	}
 	var parts []string
-	if s := formatBoundedTokens("cli_surface", d.CLISurface); s != "" {
-		parts = append(parts, s)
-	}
-	if s := formatBoundedTokens("config_schema", d.ConfigSchema); s != "" {
-		parts = append(parts, s)
-	}
-	if s := formatBoundedTokens("governance_rules", d.GovernanceRules); s != "" {
-		parts = append(parts, s)
-	}
-	if s := formatBoundedTokens("template_assets", d.TemplateAssets); s != "" {
-		parts = append(parts, s)
+	for _, row := range rows {
+		if s := formatBoundedTokens(row.label, row.items); s != "" {
+			parts = append(parts, s)
+		}
 	}
 	return strings.Join(parts, ", ")
 }
@@ -92,6 +93,7 @@ func InspectWorktreeNormativeSurface(worktreeDir string) NormativeSurfaceDelta {
 		inspectChangedNormativeFile(worktreeDir, baseRef, rel, cliSet, cfgSet, govSet, tplSet)
 	}
 	cancelBalancedIntraPackageMoves(govSet)
+	pruneSurvivingPackageGovTokens(worktreeDir, govSet)
 
 	return NormativeSurfaceDelta{
 		CLISurface:      sortedSetKeys(cliSet),
@@ -99,6 +101,69 @@ func InspectWorktreeNormativeSurface(worktreeDir string) NormativeSurfaceDelta {
 		GovernanceRules: sortedSetKeys(govSet),
 		TemplateAssets:  sortedSetKeys(tplSet),
 	}
+}
+
+// pruneSurvivingPackageGovTokens removes false-positive "-gov_rule:..." deltas when a sibling file in the same package still carries the rule token.
+func pruneSurvivingPackageGovTokens(worktreeDir string, govSet map[string]bool) {
+	var removedKeys []string
+	for k := range govSet {
+		if strings.HasPrefix(k, "-gov_rule:") {
+			removedKeys = append(removedKeys, k)
+		}
+	}
+	if len(removedKeys) == 0 {
+		return
+	}
+	survivingByDir := make(map[string]map[string]bool)
+	for _, k := range removedKeys {
+		tok := strings.TrimPrefix(k, "-")
+		relDir := resolveGovRuleRelDir(worktreeDir, tok)
+		if survivingByDir[relDir] == nil {
+			survivingByDir[relDir] = collectDirSurvivingGovTokens(worktreeDir, relDir)
+		}
+		if survivingByDir[relDir][tok] {
+			delete(govSet, k)
+		}
+	}
+}
+
+func resolveGovRuleRelDir(worktreeDir, tok string) string {
+	rest := strings.TrimPrefix(tok, "gov_rule:")
+	parts := strings.SplitN(rest, ":", 3)
+	if len(parts) == 3 && parts[0] != "" {
+		if info, err := os.Stat(filepath.Join(worktreeDir, filepath.FromSlash(parts[0]))); err == nil && info.IsDir() {
+			return parts[0]
+		}
+	}
+	return "."
+}
+
+func collectDirSurvivingGovTokens(worktreeDir, relDir string) map[string]bool {
+	out := make(map[string]bool)
+	absDir := filepath.Join(worktreeDir, filepath.FromSlash(relDir))
+	entries, err := os.ReadDir(absDir)
+	if err != nil {
+		return out
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		raw, rErr := os.ReadFile(filepath.Join(absDir, name))
+		if rErr != nil {
+			continue
+		}
+		relFile := name
+		if relDir != "." {
+			relFile = relDir + "/" + name
+		}
+		fp := astdebt.ParseGoSurfaceFingerprintForPath(relFile, raw)
+		for tok := range fp.GovTokens {
+			out[tok] = true
+		}
+	}
+	return out
 }
 
 func cancelBalancedIntraPackageMoves(set map[string]bool) {
@@ -195,6 +260,13 @@ func extractSubCommitTwinContext(commitMsg string) (string, string, []string) {
 	if errMsg != "" {
 		return m[1], m[2], nil
 	}
+	return m[1], m[2], collectIntentTwinTrailers(trailers)
+}
+
+func collectIntentTwinTrailers(trailers map[string][]string) []string {
+	if trailers == nil {
+		return nil
+	}
 	var twins []string
 	for _, twin := range trailers["Twin"] {
 		trimmed := strings.TrimSpace(twin)
@@ -202,7 +274,53 @@ func extractSubCommitTwinContext(commitMsg string) (string, string, []string) {
 			twins = append(twins, trimmed)
 		}
 	}
-	return m[1], m[2], twins
+	return twins
+}
+
+// ValidateCommitIntentTwinMode enforces governance.quality_gates.intent_twin_mode
+// ("off", "feat", "strict") against a hydrated or committed Golden Commit message.
+// @intent nomos_hermetic_worktree_spec.md #QualityGatesConfig
+func ValidateCommitIntentTwinMode(commitMsg, mode string) string {
+	normMode := strings.ToLower(strings.TrimSpace(mode))
+	rank, ok := config.IntentTwinModeRank(normMode)
+	if !ok {
+		return fmt.Sprintf("invalid governance.quality_gates.intent_twin_mode %q (expected off, feat, or strict)", mode)
+	}
+	if rank == 0 {
+		return ""
+	}
+	subjectKey, commitType, twinKeys := extractSubCommitTwinContext(commitMsg)
+	if !strings.HasPrefix(subjectKey, "SUB-") || (normMode == config.IntentTwinModeFeat && commitType != "feat") {
+		return ""
+	}
+	if len(twinKeys) == 0 {
+		return fmt.Sprintf(
+			"Substrate %s commit [%s] requires a bound 'Twin: INT-<N>' trailer when governance.quality_gates.intent_twin_mode=%s (Law 4 & Law 7)",
+			commitType, subjectKey, normMode,
+		)
+	}
+	return ""
+}
+
+// IntentTwinModeRemedy returns the deterministic HATEOAS remediation string for missing INT twins.
+// @intent nomos_hermetic_worktree_spec.md #QualityGatesConfig
+func IntentTwinModeRemedy(subjectKey string) string {
+	key := strings.TrimSpace(subjectKey)
+	if key == "" {
+		key = "SUB-<N>"
+	}
+	return fmt.Sprintf(
+		"bind an Intent specification twin via 'nomos task create \"<spec title>\" --plane intent --twin-of %s' (or 'nomos task pair') and re-commit via 'nomos task commit'",
+		key,
+	)
+}
+
+func resolveIntentTwinMode(ctx *vscope.VerifyContext) string {
+	cfg := vscope.ResolveVerifyConfig(ctx)
+	if cfg == nil {
+		return config.IntentTwinModeOff
+	}
+	return cfg.Governance.QualityGates.EffectiveIntentTwinMode()
 }
 
 func verifyIntentTwinProvenance(worktreeDir, subjectKey, twinKey string) string {
@@ -240,78 +358,4 @@ func hasLedgerTaskRecord(taskKey string) bool {
 	}()
 	rec, gErr := task.NewSQLiteTaskStore(db).GetTask(strings.TrimSpace(taskKey))
 	return gErr == nil && rec != nil && rec.Status != task.StatusAborted
-}
-
-func resolveClosestTrunkBaseRef(worktreeDir string) string {
-	bestBase := ""
-	bestDist := -1
-	for _, trunk := range workspace.ProtectedTrunkBranches {
-		if workspace.SafeGitCommand(worktreeDir, "rev-parse", "--verify", trunk).Run() != nil {
-			continue
-		}
-		mbOut, err := workspace.SafeGitCommand(worktreeDir, "merge-base", trunk, "HEAD").Output()
-		if err != nil {
-			continue
-		}
-		mb := strings.TrimSpace(string(mbOut))
-		if mb == "" {
-			continue
-		}
-		revOut, rErr := workspace.SafeGitCommand(worktreeDir, "rev-list", "--count", mb+"..HEAD").Output()
-		if rErr != nil {
-			continue
-		}
-		dist, cErr := strconv.Atoi(strings.TrimSpace(string(revOut)))
-		if cErr != nil {
-			continue
-		}
-		if bestBase == "" || dist < bestDist {
-			bestBase = mb
-			bestDist = dist
-		}
-	}
-	return bestBase
-}
-
-func collectChangedPathsAgainstBase(worktreeDir, baseRef string) []string {
-	seen := make(map[string]bool)
-	if diffOut, err := workspace.SafeGitCommand(worktreeDir, "diff", "--name-only", baseRef).Output(); err == nil {
-		for _, line := range nonEmptyLines(string(diffOut)) {
-			seen[filepath.ToSlash(line)] = true
-		}
-	}
-	if untrackedOut, err := workspace.SafeGitCommand(worktreeDir, "ls-files", "--others", "--exclude-standard").Output(); err == nil {
-		for _, line := range nonEmptyLines(string(untrackedOut)) {
-			seen[filepath.ToSlash(line)] = true
-		}
-	}
-	return sortedSetKeys(seen)
-}
-
-func readGitRevisionBytes(worktreeDir, rev, relSlashPath string) []byte {
-	out, err := workspace.SafeGitCommand(worktreeDir, "show", rev+":"+relSlashPath).Output()
-	if err != nil {
-		return nil
-	}
-	return out
-}
-
-func readWorktreeDiskBytes(absPath string) []byte {
-	raw, err := os.ReadFile(absPath)
-	if err != nil {
-		return nil
-	}
-	return raw
-}
-
-func sortedSetKeys(m map[string]bool) []string {
-	if len(m) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }

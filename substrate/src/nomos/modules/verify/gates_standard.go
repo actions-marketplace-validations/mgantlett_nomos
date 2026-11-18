@@ -2,7 +2,6 @@
 package verify
 
 import (
-	"bufio"
 	"fmt"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
@@ -28,8 +27,6 @@ func init() {
 	RegisterGate("phase_discipline", func() vscope.Gate { return &PhaseDisciplineGate{} })
 	RegisterGate("canonical_singularity", func() vscope.Gate { return &CanonicalSingularityGate{} })
 	RegisterGate("unchecked_errors", func() vscope.Gate { return &UncheckedErrorsGate{} })
-	RegisterGate("zero_filesystem_alias", func() vscope.Gate { return &ZeroFilesystemAliasGate{} })
-	RegisterGate("plane_separation", func() vscope.Gate { return &PlaneSeparationGate{} })
 	RegisterGate("go_toolchain", func() vscope.Gate { return &GoToolchainGate{} })
 	RegisterGate("staged_boundaries", func() vscope.Gate { return &vscope.StagedBoundariesGate{} })
 	RegisterGate("git_hygiene", func() vscope.Gate { return &vscope.GitSubprocessHygieneGate{} })
@@ -149,20 +146,11 @@ func (g *MaxFileLOCGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult
 }
 
 func countFileLines(path string) int {
-	f, err := os.Open(path)
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return 0
 	}
-	defer f.Close()
-	scanner := bufio.NewScanner(f)
-	lines := 0
-	for scanner.Scan() {
-		lines++
-	}
-	if err := scanner.Err(); err != nil {
-		return lines
-	}
-	return lines
+	return countBytesLines(raw)
 }
 
 // ComplexityGate verifies cyclomatic complexity and function LOC bounds.
@@ -304,78 +292,4 @@ func (g *CanonicalSingularityGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.
 		}, nil
 	}
 	return &vscope.GateResult{GateName: g.Name(), Passed: true, Message: "canonical task key valid"}, nil
-}
-
-// ZeroFilesystemAliasGate strictly enforces Law 6 by rejecting filesystem symlinks.
-type ZeroFilesystemAliasGate struct{}
-
-func (g *ZeroFilesystemAliasGate) Name() string { return "Zero Filesystem Alias Invariant" }
-
-func (g *ZeroFilesystemAliasGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
-	root := ctx.WorktreePath
-	if root == "" {
-		root = ctx.RepoRoot
-	}
-	var symlinks []string
-	err := vscope.WalkTargetFiles(ctx, root, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil {
-			return nil
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			rel, rErr := filepath.Rel(root, path)
-			if rErr != nil {
-				rel = path
-			}
-			symlinks = append(symlinks, rel)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, types.NewNomosError(types.ErrCodeCore, "zero filesystem alias walk failed: %v", err)
-	}
-
-	violations := EvaluateZeroFilesystemAliasViolations(symlinks)
-	if len(violations) > 0 {
-		return &vscope.GateResult{
-			GateName: g.Name(),
-			Passed:   false,
-			Message:  violations[0],
-			Remedy:   "replace all filesystem symlinks with canonical physical files (Law 6)",
-		}, nil
-	}
-	return &vscope.GateResult{GateName: g.Name(), Passed: true, Message: "zero filesystem aliases (symlinks) detected"}, nil
-}
-
-// PlaneSeparationGate enforces Law 7 by rejecting cross-plane mutations (SUB mutating intent, INT mutating substrate).
-type PlaneSeparationGate struct{}
-
-func (g *PlaneSeparationGate) Name() string { return "Plane Separation Invariant" }
-
-func (g *PlaneSeparationGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
-	if ctx.TaskID == "" || ctx.IsBaseline {
-		return &vscope.GateResult{GateName: g.Name(), Passed: true, Message: "plane separation verified (baseline or unassigned task)"}, nil
-	}
-	workDir := ctx.WorktreePath
-	if workDir == "" {
-		workDir = ctx.RepoRoot
-	}
-	modified := vscope.GetModifiedFilesInScope(ctx, workDir)
-
-	cfg := vscope.ResolveVerifyConfig(ctx)
-	var intentRoots, substrateRoots []string
-	if cfg != nil {
-		intentRoots = cfg.Governance.QualityGates.IntentSourceRoots
-		substrateRoots = cfg.Governance.QualityGates.SubstrateSourceRoots
-	}
-
-	violations := EvaluatePlaneViolationsWithRoots(ctx.TaskID, modified, intentRoots, substrateRoots)
-	if len(violations) > 0 {
-		return &vscope.GateResult{
-			GateName: g.Name(),
-			Passed:   false,
-			Message:  violations[0],
-			Remedy:   PlaneSeparationRemedy(ctx.TaskID),
-		}, nil
-	}
-	return &vscope.GateResult{GateName: g.Name(), Passed: true, Message: "plane separation intact: zero cross-plane mutations"}, nil
 }

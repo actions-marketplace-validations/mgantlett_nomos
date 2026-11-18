@@ -310,3 +310,34 @@ func countBaselineDirSourceFiles(ctx *vscope.VerifyContext, fallbackRoot, absDir
 	}
 	return count, true
 }
+
+func filterStrictNonWorktreeComplexity(ctx *vscope.VerifyContext, root string, funcs []astdebt.FunctionMetric) ([]astdebt.FunctionMetric, bool) {
+	if vscope.IsWorktreeContext(ctx, root) {
+		return funcs, true
+	}
+	if ctx != nil && !ctx.IsBaseline && !ctx.AllFiles && vscope.HasGitMetadata(root) {
+		if modified := vscope.GetModifiedFilesInScope(ctx, root); len(modified) > 0 {
+			return subsetFuncsByModified(funcs, modified), true
+		}
+	}
+	return funcs, false
+}
+
+func buildModifiedRelSet(modified []string) map[string]bool {
+	set := make(map[string]bool, len(modified))
+	for _, m := range modified {
+		set[filepath.ToSlash(filepath.Clean(m))] = true
+	}
+	return set
+}
+
+func subsetFuncsByModified(funcs []astdebt.FunctionMetric, modified []string) []astdebt.FunctionMetric {
+	modSet := buildModifiedRelSet(modified)
+	var out []astdebt.FunctionMetric
+	for _, fn := range funcs {
+		if modSet[filepath.ToSlash(filepath.Clean(fn.File))] {
+			out = append(out, fn)
+		}
+	}
+	return out
+}

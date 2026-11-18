@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/treesitter"
@@ -298,4 +299,65 @@ func filterRatchetedForbiddenLiterals(ctx *vscope.VerifyContext, root, path stri
 			return raw
 		})
 	})
+}
+
+func evaluateStrictNonWorktreeOrDefaultCDS(ctx *vscope.VerifyContext, root string, metrics []astdebt.FileMetric, sources map[string][]byte, thresh astdebt.Thresholds) []string {
+	if vscope.IsWorktreeContext(ctx, root) {
+		return astdebt.EnrichCDSViolations(root, metrics, sources, thresh, true)
+	}
+	if ctx != nil && !ctx.IsBaseline && !ctx.AllFiles && vscope.HasGitMetadata(root) {
+		if modified := vscope.GetModifiedFilesInScope(ctx, root); len(modified) > 0 {
+			subMetrics, subSources := subsetMetricsAndSources(metrics, sources, modified)
+			return astdebt.EnrichCDSViolations(root, subMetrics, subSources, thresh, true)
+		}
+	}
+	return astdebt.EnrichCDSViolations(root, metrics, sources, thresh, false)
+}
+
+func evaluateNetNewBrownfieldClonesAndSlop(ctx *vscope.VerifyContext, root string, changedSources, baseSources map[string][]byte, thresh astdebt.Thresholds) []string {
+	if len(changedSources) == 0 || isUpstreamSurgicalRatchet(ctx) || (ctx != nil && (ctx.IsBaseline || ctx.AllFiles)) {
+		return nil
+	}
+	violations := detectNetNewCloneViolations(changedSources, baseSources, thresh)
+	rels := make([]string, 0, len(changedSources))
+	for rel := range changedSources {
+		rels = append(rels, rel)
+	}
+	sort.Strings(rels)
+	for _, rel := range rels {
+		if !isBrownfieldDesignSlopTarget(rel) {
+			continue
+		}
+		cur := astdebt.DetectPolyglotDesignSlop(root, map[string][]byte{rel: changedSources[rel]})
+		filtered := filterNetNewLineViolations(ctx, root, filepath.Join(root, rel), cur, func(baseBytes []byte) []string {
+			return astdebt.DetectPolyglotDesignSlop(root, map[string][]byte{rel: baseBytes})
+		})
+		violations = append(violations, filtered...)
+	}
+	return violations
+}
+
+func isBrownfieldDesignSlopTarget(rel string) bool {
+	ext := filepath.Ext(rel)
+	if strings.EqualFold(ext, astdebt.ExtGo) || strings.EqualFold(ext, astdebt.ExtSvelte) {
+		return false
+	}
+	return isPolyglotTargetFile(rel)
+}
+
+func subsetMetricsAndSources(metrics []astdebt.FileMetric, sources map[string][]byte, modified []string) ([]astdebt.FileMetric, map[string][]byte) {
+	modSet := buildModifiedRelSet(modified)
+	var subMetrics []astdebt.FileMetric
+	for _, m := range metrics {
+		if modSet[filepath.ToSlash(filepath.Clean(m.Name))] {
+			subMetrics = append(subMetrics, m)
+		}
+	}
+	subSources := make(map[string][]byte, len(subMetrics))
+	for k, v := range sources {
+		if modSet[filepath.ToSlash(filepath.Clean(k))] {
+			subSources[k] = v
+		}
+	}
+	return subMetrics, subSources
 }

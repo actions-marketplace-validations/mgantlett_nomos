@@ -4,6 +4,7 @@ package verify
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/config"
@@ -258,4 +259,61 @@ func evaluateConfiguredArchitectureBoundaries(gateName string, ctx *vscope.Verif
 		Message: fmt.Sprintf("architecture boundary violation(s): %s", strings.Join(violations, "; ")),
 		Remedy:  "remove forbidden cross-layer imports or route calls through an allowed interface package per nomos.yaml architecture_boundaries (Law 7)",
 	}
+}
+
+// EvaluatePlaneViolations checks if a task mutated files across prohibited plane boundaries.
+// It defaults to standard "intent" and "substrate" roots.
+func EvaluatePlaneViolations(taskKey string, modifiedFiles []string) []string {
+	return EvaluatePlaneViolationsWithRoots(taskKey, modifiedFiles, nil, nil)
+}
+
+// EvaluatePlaneViolationsWithRoots evaluates plane boundaries dynamically using declared roots (Law 5).
+func EvaluatePlaneViolationsWithRoots(taskKey string, modifiedFiles []string, intentRoots, substrateRoots []string) []string {
+	if len(intentRoots) == 0 {
+		intentRoots = []string{"intent"}
+	}
+	if len(substrateRoots) == 0 {
+		substrateRoots = []string{"substrate"}
+	}
+
+	var violations []string
+	isSub := strings.HasPrefix(taskKey, "SUB-")
+	isInt := strings.HasPrefix(taskKey, "INT-")
+
+	matchesRoot := func(clean string, roots []string) bool {
+		for _, r := range roots {
+			rootClean := strings.Trim(filepath.ToSlash(r), "/")
+			if rootClean == "" {
+				continue
+			}
+			if clean == rootClean || strings.HasPrefix(clean, rootClean+"/") {
+				return true
+			}
+		}
+		return false
+	}
+
+	for _, f := range modifiedFiles {
+		clean := strings.TrimPrefix(filepath.ToSlash(f), "/")
+		if isSub && matchesRoot(clean, intentRoots) {
+			violations = append(violations, fmt.Sprintf("Law 7 violation: Substrate task %s cannot modify intent plane files (detected: %s)", taskKey, f))
+		}
+		if isInt && matchesRoot(clean, substrateRoots) {
+			violations = append(violations, fmt.Sprintf("Law 7 violation: Intent task %s cannot modify substrate plane files (detected: %s)", taskKey, f))
+		}
+	}
+	return violations
+}
+
+// PlaneSeparationRemedy provides deterministic, actionable JIT instructions for Law 7 plane separation recovery.
+func PlaneSeparationRemedy(taskKey string) string {
+	targetPlane, oppPlane := "substrate", "intent"
+	if strings.HasPrefix(taskKey, "INT-") {
+		targetPlane, oppPlane = "intent", "substrate"
+	}
+	return fmt.Sprintf("Law 7 strictly forbids cross-plane mutations. Protocol Recovery Steps:\n"+
+		"  1. Revert cross-plane edits in active %s worktree: git checkout -- <file>\n"+
+		"  2. Provision a twin task in the %s plane: nomos task create \"<title>\" --plane %s\n"+
+		"  3. Execute and sync the twin task in its isolated worktree: nomos task start <KEY>",
+		targetPlane, oppPlane, oppPlane)
 }

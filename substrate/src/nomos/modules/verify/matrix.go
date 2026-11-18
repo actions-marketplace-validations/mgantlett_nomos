@@ -1,7 +1,12 @@
 // Package verify implements the deterministic Definition of Done (DoD) quality gate pipeline.
 package verify
 
-import "github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
+import (
+	"fmt"
+
+	"github.com/mgantlett/nomos/substrate/src/nomos/core/config"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
+)
 
 // Ring constants represent the three orthogonal defense rings of the Nomos DoD.
 const (
@@ -290,4 +295,72 @@ func law7Cells() []InvariantCellSpec {
 			ProbeIDs: []string{"threshold_integrity"},
 		},
 	}
+}
+
+func checkRankedModeDowngrade(field, wtRaw, trunkEff, wtEff string, rankFn func(string) (int, bool)) string {
+	if _, ok := rankFn(wtRaw); !ok {
+		return fmt.Sprintf("worktree nomos.yaml contains invalid governance.quality_gates.%s %q", field, wtRaw)
+	}
+	tRank, tOK := rankFn(trunkEff)
+	wRank, wOK := rankFn(wtEff)
+	if tOK && wOK && wRank < tRank {
+		return fmt.Sprintf("worktree nomos.yaml illegally downgrades governance.quality_gates.%s from trunk baseline (%s -> %s)", field, trunkEff, wtEff)
+	}
+	return ""
+}
+
+func checkIntentTwinModeDowngrade(trunkCfg, wtCfg *config.EcosystemConfig) string {
+	if trunkCfg == nil || wtCfg == nil {
+		return ""
+	}
+	wtRank, wtOK := config.IntentTwinModeRank(wtCfg.Governance.QualityGates.IntentTwinMode)
+	if !wtOK {
+		return fmt.Sprintf("worktree nomos.yaml contains invalid governance.quality_gates.intent_twin_mode %q (expected off, feat, or strict)", wtCfg.Governance.QualityGates.IntentTwinMode)
+	}
+	trunkMode := trunkCfg.Governance.QualityGates.EffectiveIntentTwinMode()
+	trunkRank, trunkOK := config.IntentTwinModeRank(trunkMode)
+	if !trunkOK {
+		return fmt.Sprintf("trunk nomos.yaml contains invalid governance.quality_gates.intent_twin_mode %q", trunkMode)
+	}
+	wtMode := wtCfg.Governance.QualityGates.EffectiveIntentTwinMode()
+	if wtRank < trunkRank {
+		return fmt.Sprintf("worktree nomos.yaml illegally downgrades governance.quality_gates.intent_twin_mode from trunk baseline (%s -> %s)", trunkMode, wtMode)
+	}
+	return ""
+}
+
+func checkTestGateModeDowngrade(trunkCfg, wtCfg *config.EcosystemConfig) string {
+	if trunkCfg == nil || wtCfg == nil {
+		return ""
+	}
+	tq, wq := trunkCfg.Governance.QualityGates, wtCfg.Governance.QualityGates
+	if msg := checkRankedModeDowngrade("tdd_mode", wq.TDDMode, tq.EffectiveTDDMode(), wq.EffectiveTDDMode(), config.TDDModeRank); msg != "" {
+		return msg
+	}
+	if msg := checkRankedModeDowngrade("coverage_mode", wq.CoverageMode, tq.EffectiveCoverageMode(), wq.EffectiveCoverageMode(), config.CoverageModeRank); msg != "" {
+		return msg
+	}
+	return checkVerifyScopeAndTDDExcludeDowngrade(trunkCfg, wtCfg)
+}
+
+func checkVerifyScopeAndTDDExcludeDowngrade(trunkCfg, wtCfg *config.EcosystemConfig) string {
+	tq, wq := trunkCfg.Governance.QualityGates, wtCfg.Governance.QualityGates
+	if msg := checkRankedModeDowngrade("verify_scope", wq.VerifyScope, tq.EffectiveVerifyScope(), wq.EffectiveVerifyScope(), config.VerifyScopeRank); msg != "" {
+		return msg
+	}
+	if !tq.StrictMode {
+		return ""
+	}
+	allowed := make(map[string]struct{}, len(tq.TDDExclude))
+	for _, ex := range tq.TDDExclude {
+		allowed[vscope.NormalizeSlashPath(ex)] = struct{}{}
+	}
+	for _, ex := range wq.TDDExclude {
+		if norm := vscope.NormalizeSlashPath(ex); norm != "" {
+			if _, exists := allowed[norm]; !exists {
+				return fmt.Sprintf("worktree nomos.yaml illegally expands governance.quality_gates.tdd_exclude beyond trunk baseline (%s)", ex)
+			}
+		}
+	}
+	return ""
 }

@@ -2,14 +2,18 @@
 package verify
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/types"
+	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/treesitter"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
 
@@ -171,5 +175,161 @@ func gateRejectsFixture(g vscope.Gate, ctx *vscope.VerifyContext) bool {
 		return false
 	}
 	return !res.Passed
+}
+
+func init() {
+	RegisterGate("gate_integrity_proof", func() vscope.Gate { return &GateIntegrityProofGate{} })
+}
+
+// GateIntegrityProofGate enforces the Three Invariant Attestation Vectors of Gate Integrity (Cell 2.3, Law 2).
+type GateIntegrityProofGate struct{}
+
+// Name returns the canonical display name of the gate.
+func (g *GateIntegrityProofGate) Name() string {
+	return "Gate Integrity & Invariant Attestation (Law 2)"
+}
+
+// Evaluate executes the Three Invariant Attestation Vectors against the target repository.
+func (g *GateIntegrityProofGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
+	root := ctx.RepoRoot
+	if root == "" {
+		root = ctx.WorktreePath
+	}
+	report, err := EvaluateGateIntegrityAttestation(root)
+	if err != nil {
+		return nil, types.NewNomosError(types.ErrCodeInvariant, "gate integrity attestation execution failed: %v", err)
+	}
+	if !report.Passed {
+		return &vscope.GateResult{
+			GateName: g.Name(),
+			ProbeID:  "gate_integrity_proof",
+			Law:      2,
+			Ring:     RingCryptographic,
+			Passed:   false,
+			Message: fmt.Sprintf("gate integrity attestation failed: MS=%.1f%% (%d/%d killed), FPR=%.1f%%, NonVacuous=%d/%d",
+				report.MutationScore, report.MutationKilled, report.MutationTotal,
+				report.FalsePositiveRate, report.NonVacuousGates, report.TotalGatesEvaluated),
+			Remedy: "Definition of Done gates must kill 100% of mutants, produce 0% false alarms, and have non-vacuous AST logic",
+		}, nil
+	}
+
+	return &vscope.GateResult{
+		GateName: g.Name(),
+		ProbeID:  "gate_integrity_proof",
+		Law:      2,
+		Ring:     RingCryptographic,
+		Passed:   true,
+		Message: fmt.Sprintf("mathematical proof satisfied: MS=%.1f%% (%d/%d killed), FPR=%.1f%% (%d/%d passed), %d non-vacuous gates (%.2f ms)",
+			report.MutationScore, report.MutationKilled, report.MutationTotal,
+			report.FalsePositiveRate, report.ReferenceGatesPass, report.ReferenceGatesTotal,
+			report.NonVacuousGates, float64(report.DurationTotalMicros)/1000.0),
+	}, nil
+}
+
+func readGitRevisionBytes(worktreeDir, rev, relSlashPath string) []byte {
+	out, err := workspace.SafeGitCommand(worktreeDir, "show", rev+":"+relSlashPath).Output()
+	if err != nil {
+		return nil
+	}
+	return out
+}
+
+func readWorktreeDiskBytes(absPath string) []byte {
+	raw, err := os.ReadFile(absPath)
+	if err != nil {
+		return nil
+	}
+	return raw
+}
+
+func sortedSetKeys(m map[string]bool) []string {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// ArchitecturalEngineDescriptor captures an engine requirement declared in Intent.
+type ArchitecturalEngineDescriptor struct {
+	Name          string
+	IntentSpec    string
+	EnforcedBy    string
+	IsImplemented bool
+}
+
+// AuditArchitecturalEngines inspects Substrate implementation against Intent engine charters.
+func AuditArchitecturalEngines(root string) []ArchitecturalEngineDescriptor {
+	return []ArchitecturalEngineDescriptor{
+		{
+			Name:          "SQLite Persistence & Task Lifecycle Engine",
+			IntentSpec:    "task_lifecycle_cli_spec.md",
+			EnforcedBy:    "substrate/src/nomos/core/storage, substrate/src/nomos/modules/task",
+			IsImplemented: vscope.DirExists(filepath.Join(root, "substrate", "src", "nomos", "core", "storage")),
+		},
+		{
+			Name:          "Nomos Mneme Memory Engine",
+			IntentSpec:    "mneme_memory_spec.md",
+			EnforcedBy:    "substrate/src/nomos/modules/mem",
+			IsImplemented: vscope.DirExists(filepath.Join(root, "substrate", "src", "nomos", "modules", "mem")),
+		},
+		{
+			Name:          "Compiled Go & JSON Schema Contract Engine",
+			IntentSpec:    "go_ssot_and_json_schema_spec.md",
+			EnforcedBy:    "substrate/src/nomos/core/config/schema.go",
+			IsImplemented: vscope.FileExists(filepath.Join(root, "substrate", "src", "nomos", "core", "config", "schema.go")),
+		},
+		{
+			Name:       "Nomos Software Physics & CLI Surface Engine",
+			IntentSpec: "software_physics_engine_spec.md",
+			EnforcedBy: "substrate/cli/physics.go, substrate/cli/cmd_physics.go",
+			IsImplemented: vscope.FileExists(filepath.Join(root, "substrate", "cli", "physics.go")) &&
+				vscope.FileExists(filepath.Join(root, "substrate", "cli", "cmd_physics.go")),
+		},
+		{
+			Name:          "Hermetic Worktree & CapBAC Security Engine",
+			IntentSpec:    "nomos_hermetic_worktree_spec.md",
+			EnforcedBy:    "substrate/src/nomos/core/workspace, substrate/src/nomos/core/capbac",
+			IsImplemented: vscope.DirExists(filepath.Join(root, "substrate", "src", "nomos", "core", "workspace")),
+		},
+		{
+			Name:          "Polyglot Tree-sitter WASM AST Gate Engine",
+			IntentSpec:    "tree_sitter_ast_gate_spec.md",
+			EnforcedBy:    "substrate/src/nomos/modules/verify/treesitter",
+			IsImplemented: checkWazeroImplemented(root) && vscope.DirExists(filepath.Join(root, "substrate", "src", "nomos", "modules", "verify", "treesitter")),
+		},
+		{
+			Name:          "DoD 7x3 Gate Matrix & Obligation Compiler Engine",
+			IntentSpec:    "nomos_intent_traceability_spec.md",
+			EnforcedBy:    "substrate/src/nomos/modules/verify",
+			IsImplemented: vscope.DirExists(filepath.Join(root, "substrate", "src", "nomos", "modules", "verify")),
+		},
+		{
+			Name:          "Nomos Controlled Technical English (NCTE-100) Engine",
+			IntentSpec:    "nomos_controlled_technical_english_spec.md",
+			EnforcedBy:    "substrate/src/nomos/modules/ncte",
+			IsImplemented: vscope.DirExists(filepath.Join(root, "substrate", "src", "nomos", "modules", "ncte")),
+		},
+	}
+}
+
+func checkWazeroImplemented(root string) bool {
+	goModPath := filepath.Join(root, "substrate", "go.mod")
+	data, err := os.ReadFile(goModPath)
+	if err != nil {
+		return false
+	}
+	if !strings.Contains(string(data), "wazero") {
+		return false
+	}
+	engine, err := treesitter.GetDefaultEngine()
+	if err != nil || engine == nil {
+		return false
+	}
+	return engine.Module() != nil && engine.Runtime() != nil
 }
 

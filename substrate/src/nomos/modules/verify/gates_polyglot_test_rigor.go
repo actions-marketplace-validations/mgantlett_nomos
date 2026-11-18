@@ -225,3 +225,108 @@ func countPolyglotTestsAndAssertions(absFiles []string) (int, int) {
 	}
 	return cases, asserts
 }
+
+// resolveThresholds merges statutory DefaultThresholds with active nomos.yaml overrides.
+func resolveThresholds(ctx *vscope.VerifyContext) astdebt.Thresholds {
+	out := astdebt.DefaultThresholds()
+	out.MaxMagicStringDuplication = 10
+	cfg := vscope.ResolveVerifyConfig(ctx)
+	if cfg == nil {
+		return out
+	}
+	ct := cfg.Governance.QualityGates.Thresholds
+	if ct.MaxFileLOC > 0 {
+		out.MaxFileLOC = ct.MaxFileLOC
+	}
+	if ct.MaxFuncLOC > 0 {
+		out.MaxFuncLOC = ct.MaxFuncLOC
+	}
+	if ct.MaxCyclomaticComplexity > 0 {
+		out.MaxComplexity = ct.MaxCyclomaticComplexity
+	}
+	if ct.MaxCognitiveDebtScore > 0 {
+		out.MaxCDS = ct.MaxCognitiveDebtScore
+	}
+	if ct.MinCommentDensityPct >= 0 {
+		out.MinDocstringDensity = ct.MinCommentDensityPct
+	}
+	if ct.MinTestCoveragePct >= 0 {
+		out.MinCoverage = float64(ct.MinTestCoveragePct)
+	}
+	if ct.MinCloneLines > 0 {
+		out.MinCloneLines = ct.MinCloneLines
+	}
+	if ct.MaxFuncParams > 0 {
+		out.MaxFuncParams = ct.MaxFuncParams
+	}
+	if ct.MaxMagicStringDuplication > 0 {
+		out.MaxMagicStringDuplication = ct.MaxMagicStringDuplication
+	}
+	if ct.MaxPackageFiles > 0 {
+		out.MaxPackageFiles = ct.MaxPackageFiles
+	}
+	return out
+}
+
+// EvaluateCoverageViolations checks if test coverage meets minimum threshold.
+func EvaluateCoverageViolations(coverage, minCoverage float64) []string {
+	if coverage < minCoverage {
+		return []string{fmt.Sprintf("coverage %.1f%% failed test execution or is below threshold %.1f%%", coverage, minCoverage)}
+	}
+	return nil
+}
+
+// EvaluateCDSViolations checks if files exceed maximum cognitive debt.
+func EvaluateCDSViolations(files []astdebt.FileMetric, maxCDS int) []string {
+	var violations []string
+	for _, f := range files {
+		if f.CDS > maxCDS {
+			violations = append(violations, fmt.Sprintf("%s has cognitive debt %d (exceeds max %d)", f.Name, f.CDS, maxCDS))
+		}
+	}
+	return violations
+}
+
+// EvaluateDocstringViolations checks docstring density threshold.
+func EvaluateDocstringViolations(density, minDensity, documented, total int, missing []string) []string {
+	if density < minDensity {
+		if len(missing) > 0 {
+			return []string{fmt.Sprintf("docstring density is %d%% (%d/%d), minimum required is %d%%\nMissing:\n    - %s", density, documented, total, minDensity, strings.Join(missing, "\n    - "))}
+		}
+		return []string{fmt.Sprintf("docstring density is %d%% (%d/%d), minimum required is %d%%", density, documented, total, minDensity)}
+	}
+	return nil
+}
+
+// EvaluateComplexityViolations checks cyclomatic complexity and function LOC.
+func EvaluateComplexityViolations(funcs []astdebt.FunctionMetric, maxComplexity, maxFuncLOC int) []string {
+	var violations []string
+	for _, fn := range funcs {
+		if fn.Complexity > maxComplexity {
+			violations = append(violations, fmt.Sprintf("%s:%d (%s) cyclomatic complexity %d exceeds max %d", fn.File, fn.Line, fn.Name, fn.Complexity, maxComplexity))
+		}
+		if fn.LOC > maxFuncLOC {
+			violations = append(violations, fmt.Sprintf("%s:%d (%s) LOC %d exceeds max %d", fn.File, fn.Line, fn.Name, fn.LOC, maxFuncLOC))
+		}
+	}
+	return violations
+}
+
+// EvaluateFileLOCViolations checks file LOC limits.
+func EvaluateFileLOCViolations(files []astdebt.FileMetric, maxFileLOC int) []string {
+	var violations []string
+	for _, f := range files {
+		if f.LOC > maxFileLOC {
+			violations = append(violations, fmt.Sprintf("%s has %d LOC (exceeds max %d)", f.Name, f.LOC, maxFileLOC))
+		}
+	}
+	return violations
+}
+
+// EvaluateZeroFilesystemAliasViolations reports any detected symlink paths.
+func EvaluateZeroFilesystemAliasViolations(symlinks []string) []string {
+	if len(symlinks) > 0 {
+		return []string{fmt.Sprintf("detected %d filesystem symlink(s); symlinks are strictly prohibited under Law 6: %s", len(symlinks), strings.Join(symlinks, "; "))}
+	}
+	return nil
+}

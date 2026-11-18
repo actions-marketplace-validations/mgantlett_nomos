@@ -17,92 +17,12 @@ import (
 	"strings"
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/treesitter"
 )
 
 func init() {
 	RegisterGate("contract_parity", func() vscope.Gate { return &ContractParityGate{} })
 	RegisterGate("infra_ingress", func() vscope.Gate { return &InfraPortIngressGate{} })
 	RegisterGate("ui_anti_mask", func() vscope.Gate { return &UIAntiMaskSentinelGate{} })
-}
-
-// ArchitecturalEngineDescriptor captures an engine requirement declared in Intent.
-type ArchitecturalEngineDescriptor struct {
-	Name          string
-	IntentSpec    string
-	EnforcedBy    string
-	IsImplemented bool
-}
-
-// AuditArchitecturalEngines inspects Substrate implementation against Intent engine charters.
-func AuditArchitecturalEngines(root string) []ArchitecturalEngineDescriptor {
-	return []ArchitecturalEngineDescriptor{
-		{
-			Name:          "SQLite Persistence & Task Lifecycle Engine",
-			IntentSpec:    "task_lifecycle_cli_spec.md",
-			EnforcedBy:    "substrate/src/nomos/core/storage, substrate/src/nomos/modules/task",
-			IsImplemented: vscope.DirExists(filepath.Join(root, "substrate", "src", "nomos", "core", "storage")),
-		},
-		{
-			Name:          "Nomos Mneme Memory Engine",
-			IntentSpec:    "mneme_memory_spec.md",
-			EnforcedBy:    "substrate/src/nomos/modules/mem",
-			IsImplemented: vscope.DirExists(filepath.Join(root, "substrate", "src", "nomos", "modules", "mem")),
-		},
-		{
-			Name:          "Compiled Go & JSON Schema Contract Engine",
-			IntentSpec:    "go_ssot_and_json_schema_spec.md",
-			EnforcedBy:    "substrate/src/nomos/core/config/schema.go",
-			IsImplemented: vscope.FileExists(filepath.Join(root, "substrate", "src", "nomos", "core", "config", "schema.go")),
-		},
-		{
-			Name:       "Nomos Software Physics & CLI Surface Engine",
-			IntentSpec: "software_physics_engine_spec.md",
-			EnforcedBy: "substrate/cli/physics.go, substrate/cli/cmd_physics.go",
-			IsImplemented: vscope.FileExists(filepath.Join(root, "substrate", "cli", "physics.go")) &&
-				vscope.FileExists(filepath.Join(root, "substrate", "cli", "cmd_physics.go")),
-		},
-		{
-			Name:          "Hermetic Worktree & CapBAC Security Engine",
-			IntentSpec:    "nomos_hermetic_worktree_spec.md",
-			EnforcedBy:    "substrate/src/nomos/core/workspace, substrate/src/nomos/core/capbac",
-			IsImplemented: vscope.DirExists(filepath.Join(root, "substrate", "src", "nomos", "core", "workspace")),
-		},
-		{
-			Name:          "Polyglot Tree-sitter WASM AST Gate Engine",
-			IntentSpec:    "tree_sitter_ast_gate_spec.md",
-			EnforcedBy:    "substrate/src/nomos/modules/verify/treesitter",
-			IsImplemented: checkWazeroImplemented(root) && vscope.DirExists(filepath.Join(root, "substrate", "src", "nomos", "modules", "verify", "treesitter")),
-		},
-		{
-			Name:          "DoD 7x3 Gate Matrix & Obligation Compiler Engine",
-			IntentSpec:    "nomos_intent_traceability_spec.md",
-			EnforcedBy:    "substrate/src/nomos/modules/verify",
-			IsImplemented: vscope.DirExists(filepath.Join(root, "substrate", "src", "nomos", "modules", "verify")),
-		},
-		{
-			Name:          "Nomos Controlled Technical English (NCTE-100) Engine",
-			IntentSpec:    "nomos_controlled_technical_english_spec.md",
-			EnforcedBy:    "substrate/src/nomos/modules/ncte",
-			IsImplemented: vscope.DirExists(filepath.Join(root, "substrate", "src", "nomos", "modules", "ncte")),
-		},
-	}
-}
-
-func checkWazeroImplemented(root string) bool {
-	goModPath := filepath.Join(root, "substrate", "go.mod")
-	data, err := os.ReadFile(goModPath)
-	if err != nil {
-		return false
-	}
-	if !strings.Contains(string(data), "wazero") {
-		return false
-	}
-	engine, err := treesitter.GetDefaultEngine()
-	if err != nil || engine == nil {
-		return false
-	}
-	return engine.Module() != nil && engine.Runtime() != nil
 }
 
 func resolveBoundaryRoot(ctx *vscope.VerifyContext) string {

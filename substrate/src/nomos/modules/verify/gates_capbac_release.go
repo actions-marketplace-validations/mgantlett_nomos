@@ -22,6 +22,8 @@ import (
 func init() {
 	RegisterGate("capbac_lease", func() vscope.Gate { return &CapBACLeaseGate{} })
 	RegisterGate("release_receipt", func() vscope.Gate { return &ReleaseReceiptGate{} })
+	RegisterGate("zero_filesystem_alias", func() vscope.Gate { return &ZeroFilesystemAliasGate{} })
+	RegisterGate("plane_separation", func() vscope.Gate { return &PlaneSeparationGate{} })
 }
 
 // CapBACLeaseGate verifies active capability lease authorization (Cell 1.3, Law 1).
@@ -265,4 +267,78 @@ func countPolyglotFiles(root string, dirs []string) (int, error) {
 		}
 	}
 	return total, nil
+}
+
+// ZeroFilesystemAliasGate strictly enforces Law 6 by rejecting filesystem symlinks.
+type ZeroFilesystemAliasGate struct{}
+
+func (g *ZeroFilesystemAliasGate) Name() string { return "Zero Filesystem Alias Invariant" }
+
+func (g *ZeroFilesystemAliasGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
+	root := ctx.WorktreePath
+	if root == "" {
+		root = ctx.RepoRoot
+	}
+	var symlinks []string
+	err := vscope.WalkTargetFiles(ctx, root, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return nil
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			rel, rErr := filepath.Rel(root, path)
+			if rErr != nil {
+				rel = path
+			}
+			symlinks = append(symlinks, rel)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, types.NewNomosError(types.ErrCodeCore, "zero filesystem alias walk failed: %v", err)
+	}
+
+	violations := EvaluateZeroFilesystemAliasViolations(symlinks)
+	if len(violations) > 0 {
+		return &vscope.GateResult{
+			GateName: g.Name(),
+			Passed:   false,
+			Message:  violations[0],
+			Remedy:   "replace all filesystem symlinks with canonical physical files (Law 6)",
+		}, nil
+	}
+	return &vscope.GateResult{GateName: g.Name(), Passed: true, Message: "zero filesystem aliases (symlinks) detected"}, nil
+}
+
+// PlaneSeparationGate enforces Law 7 by rejecting cross-plane mutations (SUB mutating intent, INT mutating substrate).
+type PlaneSeparationGate struct{}
+
+func (g *PlaneSeparationGate) Name() string { return "Plane Separation Invariant" }
+
+func (g *PlaneSeparationGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
+	if ctx.TaskID == "" || ctx.IsBaseline {
+		return &vscope.GateResult{GateName: g.Name(), Passed: true, Message: "plane separation verified (baseline or unassigned task)"}, nil
+	}
+	workDir := ctx.WorktreePath
+	if workDir == "" {
+		workDir = ctx.RepoRoot
+	}
+	modified := vscope.GetModifiedFilesInScope(ctx, workDir)
+
+	cfg := vscope.ResolveVerifyConfig(ctx)
+	var intentRoots, substrateRoots []string
+	if cfg != nil {
+		intentRoots = cfg.Governance.QualityGates.IntentSourceRoots
+		substrateRoots = cfg.Governance.QualityGates.SubstrateSourceRoots
+	}
+
+	violations := EvaluatePlaneViolationsWithRoots(ctx.TaskID, modified, intentRoots, substrateRoots)
+	if len(violations) > 0 {
+		return &vscope.GateResult{
+			GateName: g.Name(),
+			Passed:   false,
+			Message:  violations[0],
+			Remedy:   PlaneSeparationRemedy(ctx.TaskID),
+		}, nil
+	}
+	return &vscope.GateResult{GateName: g.Name(), Passed: true, Message: "plane separation intact: zero cross-plane mutations"}, nil
 }

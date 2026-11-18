@@ -3,6 +3,7 @@ package verify
 import (
 	"fmt"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/polyrun"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"go/ast"
@@ -10,6 +11,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/types"
@@ -219,4 +221,142 @@ func resolveGoTargetDir(root string) string {
 		return root
 	}
 	return ""
+}
+
+// DefaultXrayMagicStringThreshold matches MagicStringDuplicationGate's statutory ceiling (Cell 5.1, Law 5).
+const DefaultXrayMagicStringThreshold = 10
+
+// CountFileUncheckedErrors counts swallowed or discarded error results in a single non-test source file (@intent tree_sitter_ast_gate_spec.md #XrayReport).
+func CountFileUncheckedErrors(relSlash string, data []byte) int {
+	if len(data) == 0 {
+		return 0
+	}
+	if strings.HasSuffix(relSlash, astdebt.ExtGo) {
+		fset := token.NewFileSet()
+		node, err := parser.ParseFile(fset, relSlash, data, 0)
+		if err != nil || node == nil {
+			return 0
+		}
+		var violations []string
+		checkUncheckedErrorsInFile(node, fset, relSlash, &violations)
+		return len(violations)
+	}
+	ext := strings.ToLower(filepath.Ext(relSlash))
+	return len(astdebt.CheckPolyglotUncheckedErrors(ext, relSlash, data))
+}
+
+// SplitFileSecretAndPathLeaks returns separate counts of credential secret tokens and hardcoded host-path literals in a single source file (@intent tree_sitter_ast_gate_spec.md #XrayReport).
+func SplitFileSecretAndPathLeaks(relSlash string, data []byte) (int, int) {
+	if len(data) == 0 {
+		return 0, 0
+	}
+	secretTokens := 0
+	if !isIgnoredSecretFile(relSlash) && impact.MatchSecretTokenLabel(string(data)) != "" {
+		secretTokens = 1
+	}
+	pathLeaks := 0
+	if !strings.HasSuffix(relSlash, "gates_governance.go") {
+		pathLeaks = countHostPathLiteralsInBytes(relSlash, data, defaultForbiddenLiterals())
+	}
+	return secretTokens, pathLeaks
+}
+
+// CountFileSecretAndPathLeaks counts hardcoded secret tokens and workstation path literals in a single source file (@intent tree_sitter_ast_gate_spec.md #XrayReport).
+func CountFileSecretAndPathLeaks(relSlash string, data []byte) int {
+	secretTokens, pathLeaks := SplitFileSecretAndPathLeaks(relSlash, data)
+	return secretTokens + pathLeaks
+}
+
+func countHostPathLiteralsInBytes(relSlash string, data []byte, patterns []string) int {
+	if len(patterns) == 0 {
+		return 0
+	}
+	if strings.HasSuffix(relSlash, astdebt.ExtGo) {
+		return countGoStringPathLiterals(relSlash, data, patterns)
+	}
+	return countPolyglotLinePathLiterals(string(data), patterns)
+}
+
+func countGoStringPathLiterals(relSlash string, data []byte, patterns []string) int {
+	fset := token.NewFileSet()
+	node, err := parser.ParseFile(fset, relSlash, data, 0)
+	if err != nil || node == nil {
+		return 0
+	}
+	hits := 0
+	ast.Inspect(node, func(n ast.Node) bool {
+		lit, ok := n.(*ast.BasicLit)
+		if !ok || lit.Kind != token.STRING {
+			return true
+		}
+		val := strings.Trim(lit.Value, "`\"")
+		for _, p := range patterns {
+			if strings.Contains(val, p) {
+				hits++
+			}
+		}
+		return true
+	})
+	return hits
+}
+
+func countPolyglotLinePathLiterals(text string, patterns []string) int {
+	hits := 0
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		for _, p := range patterns {
+			if strings.Contains(line, p) {
+				hits++
+			}
+		}
+	}
+	return hits
+}
+
+// CountCorpusMagicStringGroups counts package-scoped repeated string literal clusters exceeding maxDup (@intent tree_sitter_ast_gate_spec.md #XrayReport).
+func CountCorpusMagicStringGroups(sources map[string][]byte, maxDup int) int {
+	if len(sources) == 0 {
+		return 0
+	}
+	if maxDup <= 0 {
+		maxDup = DefaultXrayMagicStringThreshold
+	}
+	paths := make([]string, 0, len(sources))
+	for rel := range sources {
+		paths = append(paths, rel)
+	}
+	sort.Strings(paths)
+
+	byDir := make(map[string]map[string]map[string]int)
+	fset := token.NewFileSet()
+	for _, rel := range paths {
+		dirKey := filepath.ToSlash(filepath.Dir(rel))
+		if byDir[dirKey] == nil {
+			byDir[dirKey] = make(map[string]map[string]int)
+		}
+		data := sources[rel]
+		if strings.HasSuffix(rel, astdebt.ExtGo) {
+			collectGoStringLiteralsFromSrc(fset, rel, data, byDir[dirKey])
+			continue
+		}
+		collectPolyglotStringLiteralsFromBytes(rel, data, byDir[dirKey])
+	}
+	return countExceedingStringClusters(byDir, maxDup)
+}
+
+func countExceedingStringClusters(byDir map[string]map[string]map[string]int, maxDup int) int {
+	groups := 0
+	for _, pkgMaps := range byDir {
+		for _, pkgMap := range pkgMaps {
+			for _, cnt := range pkgMap {
+				if cnt > maxDup {
+					groups++
+				}
+			}
+		}
+	}
+	return groups
 }

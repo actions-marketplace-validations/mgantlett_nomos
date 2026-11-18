@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -264,4 +265,98 @@ func evaluateCorpusOracle(gateName string, ctx *vscope.VerifyContext, root strin
 		}
 	}
 	return "Corpus(0 regressions)", nil
+}
+
+func resolveClosestTrunkBaseRef(worktreeDir string) string {
+	bestBase := ""
+	bestDist := -1
+	for _, trunk := range workspace.ProtectedTrunkBranches {
+		if workspace.SafeGitCommand(worktreeDir, "rev-parse", "--verify", trunk).Run() != nil {
+			continue
+		}
+		mbOut, err := workspace.SafeGitCommand(worktreeDir, "merge-base", trunk, "HEAD").Output()
+		if err != nil {
+			continue
+		}
+		mb := strings.TrimSpace(string(mbOut))
+		if mb == "" {
+			continue
+		}
+		revOut, rErr := workspace.SafeGitCommand(worktreeDir, "rev-list", "--count", mb+"..HEAD").Output()
+		if rErr != nil {
+			continue
+		}
+		dist, cErr := strconv.Atoi(strings.TrimSpace(string(revOut)))
+		if cErr != nil {
+			continue
+		}
+		if bestBase == "" || dist < bestDist {
+			bestBase = mb
+			bestDist = dist
+		}
+	}
+	return bestBase
+}
+
+func collectChangedPathsAgainstBase(worktreeDir, baseRef string) []string {
+	seen := make(map[string]bool)
+	if diffOut, err := workspace.SafeGitCommand(worktreeDir, "diff", "--name-only", baseRef).Output(); err == nil {
+		for _, line := range nonEmptyLines(string(diffOut)) {
+			seen[filepath.ToSlash(line)] = true
+		}
+	}
+	if untrackedOut, err := workspace.SafeGitCommand(worktreeDir, "ls-files", "--others", "--exclude-standard").Output(); err == nil {
+		for _, line := range nonEmptyLines(string(untrackedOut)) {
+			seen[filepath.ToSlash(line)] = true
+		}
+	}
+	return sortedSetKeys(seen)
+}
+
+func evaluateBrownfieldArityRatchet(ctx *vscope.VerifyContext, root string, funcs []astdebt.FunctionMetric, thresh astdebt.Thresholds) []string {
+	if !vscope.IsBrownfieldRatchetActive(ctx) || isUpstreamSurgicalRatchet(ctx) || (ctx != nil && (ctx.IsBaseline || ctx.AllFiles)) {
+		return nil
+	}
+	seen := make(map[string]bool)
+	var files []string
+	for _, fn := range funcs {
+		if fn.File != "" && !seen[fn.File] {
+			seen[fn.File] = true
+			files = append(files, fn.File)
+		}
+	}
+	sort.Strings(files)
+	var violations []string
+	for _, rel := range files {
+		violations = append(violations, evaluateSingleFileArityRatchet(ctx, root, rel, thresh.MaxFuncParams)...)
+	}
+	return violations
+}
+
+func evaluateSingleFileArityRatchet(ctx *vscope.VerifyContext, root, rel string, maxParams int) []string {
+	if maxParams <= 0 {
+		maxParams = astdebt.MaxFunctionParams
+	}
+	absPath := filepath.Join(root, rel)
+	src, err := os.ReadFile(absPath)
+	if err != nil || len(src) == 0 {
+		return nil
+	}
+	allowed := maxParams
+	allowedNest := astdebt.MaxFunctionNesting
+	allowedCog := astdebt.DefaultMaxCognitiveComplexity(rel)
+	if baseBytes, ok := loadBaselineFileBytes(ctx, root, absPath); ok {
+		if !vscope.IsWorktreeContext(ctx, root) && bytes.Equal(src, baseBytes) {
+			return nil
+		}
+		baseMaxP, baseMaxN, baseHighA, baseDeepN := astdebt.SummarizeFileArityAndNesting(rel, baseBytes, maxParams, astdebt.MaxFunctionNesting)
+		if baseHighA >= 0 && baseDeepN >= 0 {
+			allowed = maxInt(maxParams, baseMaxP)
+			allowedNest = maxInt(astdebt.MaxFunctionNesting, baseMaxN)
+		}
+		allowedCog = maxInt(allowedCog, astdebt.MaxFileCognitiveComplexity(rel, baseBytes))
+	}
+	out := astdebt.EvaluateParameterArityViolations(rel, src, allowed)
+	out = append(out, astdebt.EvaluatePolyglotNestingViolations(rel, src, allowedNest)...)
+	return append(out, astdebt.EvaluatePolyglotCognitiveViolations(rel, src, allowedCog)...)
 }
