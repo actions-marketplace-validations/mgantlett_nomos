@@ -4,7 +4,7 @@
 
 # Nomos (Νόμος)
 
-**Agents guess; Git cannot. The deterministic execution substrate between any coding agent and Git.**
+**Agents guess; Git cannot. Zero-token AST & Git guardrails powered by your coding agent.**
 
 [![CI](https://github.com/mgantlett/nomos/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/mgantlett/nomos/actions/workflows/ci.yaml)
 [![Release](https://img.shields.io/github/v/release/mgantlett/nomos?color=0EA5E9)](https://github.com/mgantlett/nomos/releases/latest)
@@ -23,21 +23,19 @@
 
 ---
 
-Coding agents optimize for making their prompt finish, even when that means deleting failing tests, returning empty `// TODO` stubs, editing linter configs, or stuffing new complexity into fragile legacy files.
-
-**Nomos** is a single `~20 MB` static Go binary (`Apache 2.0`, zero cloud account, zero telemetry) that sits between your coding agent (**Claude Code**, **Cursor**, **OpenCode**, **Codex**, **Gemini CLI**, **Antigravity**, **Windsurf**, or **Aider**) and Git. Just as PostgreSQL placed ACID transactions between applications and raw disk, Nomos places **human-authored repository laws underneath machine speed** so nothing touches `main` without passing compiled AST verification on feature branches:
+**Nomos** is a single `~20 MB` static Go binary (`Apache 2.0`, `0` LLM tokens, zero cloud account) between your coding agent (**Claude Code**, **Cursor**, **OpenCode**, **Codex**, **Gemini CLI**, **Antigravity**, **Windsurf**, or **Aider**) and Git. Run `nomos init` once (or paste 1 prompt into your agent) - Nomos blocks skipped tests, hollow stubs, and leaked secrets in `24ms`, your agent fixes its own mess mid-turn, and your `feat/*` workflow never changes:
 
 ```text
 You            -> Same plain-English prompts, same IDE, normal feat/* PRs (0 new commands to learn)
   |
 Coding Agent   -> Claude Code · Cursor · OpenCode · Codex · Gemini CLI · Antigravity · Windsurf
   |
-Nomos Harness  -> Invisible ~4ms hooks + 42 AST gates + Day-0 debt ratchet (polices the agent, not you)
+Nomos Harness  -> Invisible ~4ms hooks + 42 AST gates + Day-0 debt ratchet (0 LLM tokens)
   |
 Git            -> main stays read-only & verified; shortcuts fail closed before commit
 ```
 
-> **Initialize once, then forget `nomos` exists.** Run `nomos xray .` anytime you want a 5-second codebase health scan. After `nomos init`, native agent + Git hooks run invisibly underneath your coding agent on normal `feat/*` branches - your agent deals with Nomos automatically while your daily workflow stays unchanged.
+> **Initialize once, then forget `nomos` exists.** Nomos supplies `0`-token repository physics; **your coding agent supplies the intelligence** to self-correct before ending its turn. Use `nomos xray .` anytime you want a 5-second codebase health scan.
 
 ### Two Ways to Set Up in 30 Seconds
 

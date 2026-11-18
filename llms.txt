@@ -1,6 +1,6 @@
 # Nomos Open-Core
 
-> Agents guess; Git cannot. Nomos is the open-source deterministic execution substrate between AI coding agents and Git - initialized once so branch guards, ~4ms security hooks, 42 polyglot AST gates, and brownfield debt ratchets run invisibly underneath normal feature-branch workflows.
+> Agents guess; Git cannot. Zero-token AST and Git guardrails powered by your coding agent - initialized once so ~4ms security hooks, 42 polyglot AST gates, and brownfield debt ratchets run invisibly underneath normal feature-branch workflows.
 
 - **License:** Apache-2.0
 - **Repository:** https://github.com/mgantlett/nomos
