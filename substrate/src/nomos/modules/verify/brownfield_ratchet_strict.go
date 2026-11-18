@@ -46,7 +46,7 @@ func evaluateNetNewBrownfieldClonesAndSlop(ctx *vscope.VerifyContext, root strin
 	}
 	sort.Strings(rels)
 	for _, rel := range rels {
-		if !strings.EqualFold(filepath.Ext(rel), astdebt.ExtPy) {
+		if !isBrownfieldDesignSlopTarget(rel) {
 			continue
 		}
 		cur := astdebt.DetectPolyglotDesignSlop(root, map[string][]byte{rel: changedSources[rel]})
@@ -56,6 +56,14 @@ func evaluateNetNewBrownfieldClonesAndSlop(ctx *vscope.VerifyContext, root strin
 		violations = append(violations, filtered...)
 	}
 	return violations
+}
+
+func isBrownfieldDesignSlopTarget(rel string) bool {
+	ext := filepath.Ext(rel)
+	if strings.EqualFold(ext, astdebt.ExtGo) || strings.EqualFold(ext, astdebt.ExtSvelte) {
+		return false
+	}
+	return isPolyglotTargetFile(rel)
 }
 
 func buildModifiedRelSet(modified []string) map[string]bool {

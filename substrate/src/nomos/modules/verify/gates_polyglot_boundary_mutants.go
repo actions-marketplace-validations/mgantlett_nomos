@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	maxBoundaryMutantProbes        = 4
+	maxBoundaryMutantProbes        = 6
 	maxBoundaryBaselineElapsed     = 1500 * time.Millisecond
 	boundaryMutantExecTimeout      = 1500 * time.Millisecond
 	minBoundaryMutantProdLOC       = 80
@@ -124,13 +124,9 @@ func collectFileBoundarySites(relPath string, data []byte) ([]boundaryMutantSite
 	for lineNum, raw := range strings.Split(text, "\n") {
 		nextStart := lineStart + len(raw) + 1
 		if isCandidateBoundaryLine(raw) {
-			if site, isStrong, ok := findBoundaryOpInLine(relPath, lineNum+1, lineStart, raw, data); ok {
-				if isStrong {
-					strong = append(strong, site)
-				} else {
-					weak = append(weak, site)
-				}
-			}
+			s1, s2 := findAllBoundaryOpsInLine(relPath, lineNum+1, lineStart, raw, data)
+			strong = append(strong, s1...)
+			weak = append(weak, s2...)
 		}
 		lineStart = nextStart
 	}
@@ -139,14 +135,17 @@ func collectFileBoundarySites(relPath string, data []byte) ([]boundaryMutantSite
 
 func isCandidateBoundaryLine(raw string) bool {
 	t := strings.TrimSpace(raw)
-	if t == "" || strings.HasPrefix(t, "#") || strings.HasPrefix(t, "//") {
+	if t == "" || strings.HasPrefix(t, "#") || strings.HasPrefix(t, "//") || strings.HasPrefix(t, "/*") || strings.HasPrefix(t, "*") {
 		return false
 	}
-	return strings.HasPrefix(t, "if ") || strings.HasPrefix(t, "if(") ||
-		strings.HasPrefix(t, "elif ") || strings.HasPrefix(t, "return ") || strings.HasPrefix(t, "while ")
+	if strings.HasPrefix(t, "if ") || strings.HasPrefix(t, "if(") ||
+		strings.HasPrefix(t, "elif ") || strings.HasPrefix(t, "return ") || strings.HasPrefix(t, "while ") {
+		return true
+	}
+	return strings.Contains(t, " if ") || strings.Contains(t, " = ")
 }
 
-func findBoundaryOpInLine(relPath string, lineNum, lineStart int, raw string, fullData []byte) (boundaryMutantSite, bool, bool) {
+func findAllBoundaryOpsInLine(relPath string, lineNum, lineStart int, raw string, fullData []byte) ([]boundaryMutantSite, []boundaryMutantSite) {
 	type opPair struct {
 		orig   string
 		mut    string
@@ -159,15 +158,37 @@ func findBoundaryOpInLine(relPath string, lineNum, lineStart int, raw string, fu
 		{" > ", " >= ", false},
 	}
 	quoteSafe := stripQuotedSpansKeepLen(raw)
-	for _, p := range pairs {
-		if idx := strings.Index(quoteSafe, p.orig); idx >= 0 {
-			return boundaryMutantSite{
-				relPath: relPath, lineNum: lineNum, offset: lineStart + idx,
-				origOp: p.orig, mutOp: p.mut, origBytes: fullData,
-			}, p.strong, true
+	var strong, weak []boundaryMutantSite
+	pos := 0
+	for pos < len(quoteSafe) {
+		bestIdx, bestPair := -1, opPair{}
+		for _, p := range pairs {
+			if idx := strings.Index(quoteSafe[pos:], p.orig); idx >= 0 && (bestIdx < 0 || idx < bestIdx) {
+				bestIdx, bestPair = idx, p
+			}
 		}
+		if bestIdx < 0 {
+			break
+		}
+		site := boundaryMutantSite{
+			relPath: relPath, lineNum: lineNum, offset: lineStart + pos + bestIdx,
+			origOp: bestPair.orig, mutOp: bestPair.mut, origBytes: fullData,
+		}
+		if bestPair.strong {
+			strong = append(strong, site)
+		} else {
+			weak = append(weak, site)
+		}
+		pos += bestIdx + len(bestPair.orig)
 	}
-	return boundaryMutantSite{}, false, false
+	return strong, weak
+}
+
+func isInlineCommentStart(b []byte, i int) bool {
+	if b[i] == '/' && i+1 < len(b) && b[i+1] == '/' {
+		return true
+	}
+	return b[i] == '#' && (i == 0 || b[i-1] == ' ' || b[i-1] == '\t')
 }
 
 func stripQuotedSpansKeepLen(s string) string {
@@ -188,6 +209,12 @@ func stripQuotedSpansKeepLen(s string) string {
 			}
 			b[i] = ' '
 			continue
+		}
+		if isInlineCommentStart(b, i) {
+			for j := i; j < len(b); j++ {
+				b[j] = ' '
+			}
+			break
 		}
 		if b[i] == '\'' || b[i] == '"' {
 			quote = b[i]

@@ -18,7 +18,10 @@ import (
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/treesitter"
 )
 
-var lineNumberStripRe = regexp.MustCompile(`:[0-9]+(?:-[0-9]+)?`)
+var (
+	lineNumberStripRe    = regexp.MustCompile(`:[0-9]+(?:-[0-9]+)?`)
+	embeddedCountStripRe = regexp.MustCompile(`\b[0-9]+\b`)
+)
 
 func collectPolyglotComplexityFromBytes(path, rel string, content []byte, out *[]astdebt.FunctionMetric) {
 	engine, err := treesitter.GetDefaultEngine()
@@ -164,6 +167,9 @@ func filterNetNewLineViolations(ctx *vscope.VerifyContext, root, absPath string,
 	}
 	var netNew []string
 	for _, v := range curViolations {
+		if isBrownfieldModuleCapViolation(v) {
+			continue
+		}
 		key := normalizeViolationKey(v)
 		if baseCounts[key] > 0 {
 			baseCounts[key]--
@@ -174,8 +180,14 @@ func filterNetNewLineViolations(ctx *vscope.VerifyContext, root, absPath string,
 	return netNew
 }
 
+func isBrownfieldModuleCapViolation(v string) bool {
+	return strings.Contains(v, "multi-caller one-line return micro-helpers") ||
+		strings.Contains(v, "repeats empty mutable default")
+}
+
 func normalizeViolationKey(v string) string {
-	return lineNumberStripRe.ReplaceAllString(v, "")
+	stripped := lineNumberStripRe.ReplaceAllString(v, "")
+	return embeddedCountStripRe.ReplaceAllString(stripped, "N")
 }
 
 func scanTempBaselineViolations(absPath string, baseBytes []byte, scanPath func(tempPath string) []string) []string {

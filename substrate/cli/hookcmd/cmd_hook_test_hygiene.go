@@ -13,10 +13,13 @@ import (
 )
 
 // evaluateTestPlacementHygieneAdvisory emits a one-time non-blocking tip when a net-new
-// test file is created outside .tmp/ inside a repository with zero baseline committed tests.
+// test file is created outside .tmp/ inside an initialized workspace (nomos.yaml) with zero baseline committed tests.
 func evaluateTestPlacementHygieneAdvisory(resolved, baseCwd string) string {
 	wsRoot := resolveHygieneRoot(resolved, baseCwd)
 	if wsRoot == "" || !isWorkspaceTestPath(resolved, wsRoot) {
+		return ""
+	}
+	if !hasExplicitNomosConfig(resolved, baseCwd) && !hasExplicitNomosConfig(resolved, wsRoot) {
 		return ""
 	}
 	rel, err := filepath.Rel(wsRoot, resolved)

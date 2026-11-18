@@ -23,6 +23,12 @@ func TestZeroBaselineContainerScratchTestHygieneAdvisory(t *testing.T) {
 	if err := os.WriteFile(testFile, []byte("def test_run():\n    assert True\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
+	if uninitMsg := EvaluateContainerPostToolHook(&HookPayload{ToolName: "Write", Cwd: dir, TargetFile: testFile}); uninitMsg != "" {
+		t.Fatalf("expected byte-for-byte silence without nomos.yaml, got %q", uninitMsg)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "nomos.yaml"), []byte("version: \"1\"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 	msg := EvaluateContainerPostToolHook(&HookPayload{ToolName: "Write", Cwd: dir, TargetFile: testFile})
 	if !strings.Contains(msg, "Nomos Deliverable Hygiene") || !strings.Contains(msg, ".tmp/tests/") {
 		t.Fatalf("expected non-blocking deliverable hygiene advisory steering to .tmp/tests/, got %q", msg)
@@ -43,6 +49,9 @@ func TestZeroBaselineContainerScratchTestHygieneAdvisory(t *testing.T) {
 	_ = workspace.SafeGitCommand(brownDir, "config", "user.email", "test@nomos.dev").Run()
 	_ = workspace.SafeGitCommand(brownDir, "config", "user.name", "Nomos").Run()
 	if err := os.MkdirAll(filepath.Join(brownDir, "tests"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(brownDir, "nomos.yaml"), []byte("version: \"1\"\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	baseTest := filepath.Join(brownDir, "tests", "test_base.py")
