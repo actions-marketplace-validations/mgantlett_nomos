@@ -4,6 +4,7 @@
 
 - **License:** Apache-2.0
 - **Repository:** https://github.com/mgantlett/nomos
+- **Agent Skill & Plugin Bootstrapper:** `npx skills add mgantlett/nomos` (`skills/nomos/SKILL.md`, `.claude-plugin/plugin.json`)
 - **Documentation:** https://sophialabs.ca/docs/introduction
 - **Full Documentation Corpus:** https://sophialabs.ca/llms-full.txt
 - **Engineering Handbook (12 Chapters):** https://sophialabs.ca/handbook

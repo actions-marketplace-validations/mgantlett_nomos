@@ -1,0 +1,22 @@
+{
+  "name": "nomos",
+  "description": "Thin binary bootstrapper for Nomos: zero-token 11-language AST & Git guardrails, 5s brownfield X-Ray, and ~4ms PreToolUse security airlock powered by your coding agent.",
+  "author": {
+    "name": "SophiaLabs",
+    "url": "https://sophialabs.ca"
+  },
+  "homepage": "https://sophialabs.ca/docs/introduction",
+  "repository": "https://github.com/mgantlett/nomos",
+  "license": "Apache-2.0",
+  "keywords": [
+    "ast",
+    "guardrails",
+    "git-hooks",
+    "pre-commit",
+    "brownfield",
+    "security",
+    "testing",
+    "mutation-testing"
+  ],
+  "skills": "./skills/"
+}

@@ -1,0 +1,17 @@
+{
+  "name": "nomos",
+  "owner": {
+    "name": "SophiaLabs",
+    "url": "https://sophialabs.ca"
+  },
+  "metadata": {
+    "description": "Official Nomos Open-Core (Apache-2.0) Thin Binary Bootstrapper plugin for coding agents."
+  },
+  "plugins": [
+    {
+      "name": "nomos",
+      "source": "./",
+      "description": "Zero-token 11-language AST & Git guardrails, 5s brownfield X-Ray, and ~4ms PreToolUse security airlock."
+    }
+  ]
+}

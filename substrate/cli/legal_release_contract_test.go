@@ -1,3 +1,4 @@
+// @intent task_lifecycle_cli_spec.md
 package cli
 
 import (
@@ -167,6 +168,37 @@ func operationalSurfaceContractCases() []repoContractCase {
 				"sha256sums_x86_64=",
 				"sha256sums_aarch64=",
 			},
+		},
+		{
+			name:    "Agent Skill SKILL.md stays a strict Thin Binary Bootstrapper",
+			relPath: filepath.Join("skills", "nomos", "SKILL.md"),
+			mustHave: []string{
+				"name: nomos",
+				"Thin Binary Bootstrapper",
+				"https://sophialabs.ca/install",
+				"nomos xray .",
+				"nomos init",
+			},
+			forbid: []string{"cockpit", "Autonomous Tier 2"},
+		},
+		{
+			name:    "Claude Plugin manifest wires skills directory under Apache-2.0",
+			relPath: filepath.Join(".claude-plugin", "plugin.json"),
+			mustHave: []string{
+				`"name": "nomos"`,
+				`"license": "Apache-2.0"`,
+				`"skills": "./skills/"`,
+			},
+			forbid: []string{"cockpit"},
+		},
+		{
+			name:    "Claude Marketplace manifest exposes nomos root plugin",
+			relPath: filepath.Join(".claude-plugin", "marketplace.json"),
+			mustHave: []string{
+				`"name": "nomos"`,
+				`"source": "./"`,
+			},
+			forbid: []string{"cockpit"},
 		},
 	}
 }

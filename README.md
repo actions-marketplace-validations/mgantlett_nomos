@@ -104,6 +104,10 @@ brew install --cask mgantlett/tap/nomos
 
 # Build from source (Go 1.26+; GOTOOLCHAIN=auto fetches Go 1.26+ automatically):
 GOTOOLCHAIN=auto CGO_ENABLED=0 go install github.com/mgantlett/nomos/substrate/cmd/nomos@main
+
+# Agent Skill & Claude Code Plugin Catalogs (Thin Binary Bootstrapper):
+npx skills add mgantlett/nomos
+# Or inside Claude Code: /plugin marketplace add mgantlett/nomos && /plugin install nomos
 ```
 
 Update or cleanly uninstall anytime:
