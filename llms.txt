@@ -1,6 +1,6 @@
 # Nomos Open-Core
 
-> Agents guess; Git cannot. Nomos is the open-source deterministic execution substrate and transactional Git worktree harness between AI coding agents and production repositories.
+> Agents guess; Git cannot. Nomos is the open-source deterministic execution substrate between AI coding agents and Git - initialized once so branch guards, ~4ms security hooks, 42 polyglot AST gates, and brownfield debt ratchets run invisibly underneath normal feature-branch workflows.
 
 - **License:** Apache-2.0
 - **Repository:** https://github.com/mgantlett/nomos
@@ -10,39 +10,56 @@
 - **Architecture Specifications (37):** https://sophialabs.ca/docs/specs
 - **Empirical Field Dispatches:** https://sophialabs.ca/dispatches
 
+## Where Nomos Sits in the Stack
+
+```text
+Human Developer -> Same plain-English prompts, same IDE, normal feat/* PRs (0 new commands to learn)
+  |
+Coding Agent    -> Claude Code, Cursor, OpenCode, Codex, Gemini CLI, Antigravity, Windsurf, Aider
+  |
+Nomos Harness   -> Invisible ~4ms pre-tool airlock + 42 AST pre-commit gates + Day-0 debt ratchet
+  |
+Git Repository  -> main stays read-only & verified; broken shortcuts fail closed before commit
+```
+
+## Autonomous Agent Day-0 Setup Protocol (When Asked to Set Up Nomos)
+
+When a developer asks an AI coding agent to install or configure Nomos in their repository, follow these 4 rules:
+
+1. **Install Static Binary:** Run `curl -fsSL https://sophialabs.ca/install | bash` (Linux/macOS/WSL2) or `GOTOOLCHAIN=auto CGO_ENABLED=0 go install github.com/mgantlett/nomos/substrate/cmd/nomos@latest`.
+2. **Audit Read-Only First (`0` Writes):** Run `nomos xray .` and report the Day-0 `AI Hangover Score` (`0-100`, `Grade A-F`) and top 3 structural hotspots to the user.
+3. **Default to Non-Breaking Branch Guard (`nomos init`):** Run `nomos init` to enable `isolation_mode: "branch"`, auto-freeze existing legacy debt in `nomos.baseline.json` so zero untouched legacy files fail, and wire native hooks for installed agents (use `nomos init --local` if the user wants a stealth `.git/info/exclude` trial with untouched `git status`). **Never run `nomos init --worktrees` on Day 0 unless the user explicitly requests multi-agent worktree isolation.**
+4. **Operate Invisibly Afterward:** Tell the user setup is complete and their workflow stays unchanged on `feat/*` branches. Resolve any future `nomos verify` or hook rejections yourself without weakening tests (`t.Skip`, deleted assertions, `// TODO` stubs) and never ask the human to run `nomos` CLI commands manually.
+
 ## Quickstart & Progressive Onboarding
 
 ```bash
 curl -fsSL https://sophialabs.ca/install | bash
 nomos xray .              # 5-second read-only AI Hangover Score & structural hotspot audit across 11 languages
-nomos init                # Enables Branch Guard, auto-baselines legacy debt in nomos.baseline.json & detects agent hooks
-nomos init --local        # Zero-footprint stealth trial tracked only in .git/info/exclude
-nomos init --ci           # Scaffolds offline GitHub Actions (SARIF 2.1.0) & GitLab CI verification workflows
-nomos init --worktrees    # Graduates to isolated git worktrees & formal INT/SUB task lifecycle
-```
-
-Go module installation alternative:
-
-```bash
-go install github.com/mgantlett/nomos/substrate/cmd/nomos@latest
+nomos init                # Default: Branch Guard + brownfield nomos.baseline.json ratchet + auto-detected agent hooks
+nomos init --local        # Optional: zero-footprint stealth trial tracked only in .git/info/exclude
+nomos init --ci           # Optional: scaffolds offline GitHub Actions (SARIF 2.1.0) & GitLab CI verification workflows
+nomos init --worktrees    # Optional scale-up: isolated git worktrees & formal INT/SUB task lifecycle
 ```
 
 ## Core Capabilities (100% Local Static Go Binary)
 
-- **Hermetic Git Worktrees & Read-Only `main`:** Blocks direct agent commits on `main`; provisions isolated `worktrees/<repo>-<task>` sandboxes across `IDLE -> PLAN -> EDIT -> REVIEW -> SYNC -> LEARN`.
-- **42 Polyglot Anti-Reward-Hacking AST Quality Gates (`nomos verify`):** Evaluates 42 compiled Go, Tree-sitter `.scm`, and WASM gates across 11 languages (Go, TypeScript/Svelte, Python, Rust, Ruby, C/C++, Java, Kotlin, C#) in ~460ms with zero LLM judge tokens.
+- **Default Invisible Branch Guard (`isolation_mode: "branch"`):** Blocks direct commits on `main` and config tampering while plain `git commit` on `feat/*` branches runs 42 AST gates and distills lessons automatically.
+- **42 Polyglot Anti-Reward-Hacking AST Quality Gates (`nomos verify`):** Evaluates 42 compiled Go, Tree-sitter `.scm`, and WASM gates across 11 languages (Go, TypeScript/Svelte, Python, Rust, Ruby, C/C++, Java, Kotlin, C#) in ~460ms (~24ms single-file) with zero LLM judge tokens.
+- **~4ms Pre-Tool Security Airlock & Loop Breaker (`nomos hook`):** Blocks credential reads (`~/.ssh`, `~/.aws`, `~/.kube`), cloud metadata SSRF, unverified "tests pass" claims, and 3-strike tool loops.
 - **Diff-Scoped Mutation Proofs (`nomos verify --pr --mutate-diff`):** Mutates newly added conditionals and return values across Go, TypeScript/JS, and Python to reject tautological unit tests before merge.
-- **Multi-Worktree AST Collision Radar (`MTPO` / `nomos physics`):** Tracks exported AST symbol hulls across concurrent sibling worktrees to detect write-time symbol collisions before merge conflicts arise.
-- **Two-Phase Commit Provenance & Pure-Go Episodic Memory (`nomos mem`):** Seals cryptographic SHA-256 release receipts in `refs/notes/nomos/releases` and persists verified `pitfall` and `pattern` lessons in pure-Go SQLite WAL (`mneme.db`).
+- **Receipt-Gated Episodic Memory (`nomos mem` / `nomos mcp`):** Persists verified `pitfall` and `pattern` lessons in pure-Go SQLite WAL (`mneme.db`) with `<50ms` recall and read-only JSON-RPC 2.0 MCP exposure.
+- **Optional Hermetic Git Worktrees & Collision Radar (`nomos init --worktrees`):** Provisions isolated `worktrees/<repo>-<task>` sandboxes (`nomos task chore | start | sync`), SHA-256 Git Notes receipts, and exported AST symbol collision detection (`MTPO` / `nomos physics`).
 
 ## Canonical CLI Surface
 
-- `nomos xray [path] [--sarif]` - Read-only structural complexity, clone, monolith, stub, CWE sink, and OASIS SARIF 2.1.0 diagnostic.
-- `nomos init [--local] [--ci] [--worktrees] [--baseline]` - Scaffolds Branch Guard (`nomos.yaml`), stealth `.git/info/exclude` trials, offline CI/SARIF workflows, auto-detected agent rules, and optional brownfield debt baseline.
-- `nomos status` - Displays workspace phase, active worktrees, and ready task wavefront.
-- `nomos task chore "<title>"` - Provisions an isolated task worktree in `EDIT` phase in one turn.
-- `nomos task start <KEY> --edit` - Enters `EDIT` phase inside an isolated worktree for a planned `INT-*` or `SUB-*` task.
-- `nomos verify [--pr --mutate-diff] [--sarif] [--impact]` - Runs all 42 Definition of Done quality gates, optional mutation proofs, SARIF 2.1.0 output, and 1-hop AST blast radius.
-- `nomos task sync <KEY> -m "<summary>"` - Executes atomic 2PC verification, fast-forward merge to `main`, Git Notes receipt, and worktree cleanup.
-- `nomos mem recall "<query>" [-A]` - Searches local or cross-repository verified episodic lessons.
-- `nomos --help-agent` - Reveals internal agent-harness RPCs (`handshake`, `hook`, `capabilities`, `directive`, `physics`).
+- **One-Time Setup & On-Demand Audit:**
+  - `nomos xray [path] [--markdown] [--sarif]` - Read-only structural complexity, clone, monolith, stub, CWE sink, and SARIF 2.1.0 health scan.
+  - `nomos init [--local] [--ci] [--worktrees]` - Scaffolds Branch Guard (`nomos.yaml`), brownfield `nomos.baseline.json`, stealth `.git/info/exclude` trials, CI workflows, and agent hooks.
+- **Agent-Driven Verification & Memory (Run Automatically by Hooks / Agents):**
+  - `nomos verify [--pr --mutate-diff] [--sarif] [--impact]` - Evaluates all 42 Definition of Done gates, optional diff mutation proofs, SARIF 2.1.0, and 1-hop AST blast radius.
+  - `nomos mem recall "<query>" [-A]` - Searches local or cross-repository verified episodic lessons.
+  - `nomos status` - Displays active governance mode, branch/worktree state, and baseline posture.
+  - `nomos --help-agent` - Reveals internal agent-harness RPCs (`handshake`, `hook`, `capabilities`, `directive`, `physics`, `mcp`).
+- **Optional Worktree Lifecycle (`--worktrees` Mode Only):**
+  - `nomos task chore "<title>"` | `nomos task start <KEY> --edit` | `nomos task sync <KEY> -m "<summary>"`
