@@ -247,7 +247,7 @@ func isStandaloneMetadataOnlyCmd(cmd string) bool {
 	if !metadataOnlyCmdRe.MatchString(cmd) {
 		return false
 	}
-	return !hasShellChainingOrSub(stripLeadingCdPrefix(cmd))
+	return !HasUnquotedShellChainingOrSub(stripLeadingCdPrefix(cmd))
 }
 
 func stripLeadingCdPrefix(cmd string) string {
@@ -255,53 +255,6 @@ func stripLeadingCdPrefix(cmd string) string {
 		return cmd[loc[1]:]
 	}
 	return cmd
-}
-
-type shellQuoteState struct {
-	inSingle bool
-	inDouble bool
-	escaped  bool
-}
-
-func (s *shellQuoteState) advance(ch byte) bool {
-	if s.escaped {
-		s.escaped = false
-		return true
-	}
-	if ch == '\\' && !s.inSingle {
-		s.escaped = true
-		return true
-	}
-	if ch == '\'' && !s.inDouble {
-		s.inSingle = !s.inSingle
-		return true
-	}
-	if ch == '"' && !s.inSingle {
-		s.inDouble = !s.inDouble
-		return true
-	}
-	return s.inSingle
-}
-
-func isUnquotedShellSeparator(ch byte) bool {
-	return ch == ';' || ch == '|' || ch == '&' || ch == '\n' || ch == '\r'
-}
-
-func hasShellChainingOrSub(cmd string) bool {
-	var qs shellQuoteState
-	for i := 0; i < len(cmd); i++ {
-		ch := cmd[i]
-		if qs.advance(ch) {
-			continue
-		}
-		if ch == '`' || (ch == '$' && i+1 < len(cmd) && cmd[i+1] == '(') {
-			return true
-		}
-		if !qs.inDouble && isUnquotedShellSeparator(ch) {
-			return true
-		}
-	}
-	return false
 }
 
 func appendDigestReadCandidates(out []string, digest string) []string {

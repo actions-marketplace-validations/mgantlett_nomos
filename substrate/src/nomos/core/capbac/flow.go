@@ -223,7 +223,7 @@ func isStandaloneVerifySanitizer(cmd string) bool {
 	if !verifySanitizerRe.MatchString(cmd) {
 		return false
 	}
-	if hasShellChainingOrSub(stripLeadingCdPrefix(cmd)) {
+	if HasUnquotedShellChainingOrSub(stripLeadingCdPrefix(cmd)) {
 		return false
 	}
 	lower := strings.ToLower(cmd)
