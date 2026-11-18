@@ -266,3 +266,49 @@ func TestReleaseNotesHybridLedgerAndFailClosed(t *testing.T) {
 		t.Fatalf("expected missing SemVer tag v99.99.99 to fail closed")
 	}
 }
+
+// TestReleaseNotesSubpackageScopeRouting verifies CLI/hook subpackages (e.g. hookcmd) and verify subpackages
+// (e.g. xray) classify into their canonical sections rather than falling through to Release & Packaging.
+func TestReleaseNotesSubpackageScopeRouting(t *testing.T) {
+	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("resolve repo root: %v", err)
+	}
+
+	v424Notes, v424Err := runRenderReleaseNotes(t, repoRoot, "v4.24.0")
+	if v424Err != nil {
+		t.Fatalf("render v4.24.0 release notes failed: %v (%s)", v424Err, v424Notes)
+	}
+	assertOrderedSubstrings(
+		t,
+		v424Notes,
+		"> Add polyglot design-slop",
+		"## Changelog",
+		"### Intent & Specifications",
+		"[INT-2126]",
+		"### CLI, Distribution & Hooks",
+		"[SUB-3201]",
+		"[SUB-3235]",
+		"### Verification & Quality Gates",
+		"[SUB-3241]",
+		"### Release & Packaging",
+		"[SUB-3202]",
+		"compare/v4.23.0...v4.24.0",
+		"<details>",
+		"<summary><strong>Release Notes &amp; Architecture Details</strong></summary>",
+	)
+
+	v4221Notes, v4221Err := runRenderReleaseNotes(t, repoRoot, "v4.22.1")
+	if v4221Err != nil {
+		t.Fatalf("render v4.22.1 release notes failed: %v (%s)", v4221Err, v4221Notes)
+	}
+	assertOrderedSubstrings(
+		t,
+		v4221Notes,
+		"## Changelog",
+		"### CLI, Distribution & Hooks",
+		"### Verification & Quality Gates",
+		"[SUB-3169]",
+		"### Release & Packaging",
+	)
+}
