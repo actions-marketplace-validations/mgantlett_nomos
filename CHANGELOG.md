@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v4.26.0] - 2026-11-18
+
+> Fast static binary install and baseline-only zero-config PR bootstrap in `action.yml`; Fix SQLite strftime CWE-89 false positive in DetectPolyglotCWESinks and add sophialabs.ca/xray link to README; Add Thin Binary Bootstrapper Agent Skill and Claude Plugin manifests for native agent discovery; Pin SemVer tag on README GitHub Action snippet and document sophialabs.ca URL swap (Apache 2.0)
+
+### Verification & Quality Gates (`nomos verify`, `README.md`)
+- **Fix SQLite strftime CWE-89 false positive in DetectPolyglotCWESinks and add sophialabs.ca/xray link to README (`SUB-3281`)**: Eliminate SQLite strftime CWE-89 false positive for 0/100 self-xray and surface sophialabs.ca/xray in README.
+
+### Release & Packaging (`README.md`)
+- **Pin SemVer tag on README GitHub Action snippet and document sophialabs.ca URL swap (`SUB-3283`)**: Pin SemVer tag on GitHub Action snippet and document sophialabs.ca URL swap.
+- **Fast static binary install and baseline-only zero-config PR bootstrap in `action.yml` (`INT-2144`, `SUB-3280`)**: Fast static binary install, zero-yaml baseline bootstrap, and sarif-path in `action.yml`.
+- **Add Thin Binary Bootstrapper Agent Skill and Claude Plugin manifests for native agent discovery (`INT-2139`, `SUB-3274`)**: `Skills/nomos/SKILL.md` and .claude-plugin manifests ship as strict Thin Binary Bootstrappers with zero Sovereign leaks.
+
+---
+
 ## [v4.25.0] - 2026-11-18
 
 > Clarify Init-and-Forget stack model, Agent-first setup, and Branch Guard stewardship; Log debug parse error in OpenCode `nomos.ts` template; Pre-push release-note sync, diff-scoped corpus clone index, and micro-file guard; Tighten `README.md` front-door tagline and subhead around 0-token physics powered by your coding agent (Apache 2.0)
