@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
 	"github.com/mgantlett/nomos/substrate/cli/selfupdate"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,6 +33,9 @@ func TestScaffoldOpenCodePlugin_PreservesUserPluginsAndIdempotentMerge(t *testin
 	firstNomosBytes, err := os.ReadFile(filepath.Join(pluginsDir, "nomos.ts"))
 	if err != nil {
 		t.Fatalf("read scaffolded nomos.ts: %v", err)
+	}
+	if violations := astdebt.CheckPolyglotUncheckedErrors(astdebt.ExtTS, ".opencode/plugins/nomos.ts", firstNomosBytes); len(violations) > 0 {
+		t.Fatalf("scaffolded .opencode/plugins/nomos.ts failed UncheckedErrorGate: %v", violations)
 	}
 	if err := executeInit(tempDir); err != nil {
 		t.Fatalf("second executeInit failed: %v", err)
