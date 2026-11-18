@@ -286,8 +286,8 @@ The Tree-sitter AST Gate Engine directly underpins six automated sensor probes i
 1. **`Cell 2.1 (anti_shim)`**: Detects empty AST blocks, stub bodies, or no-op returns (`return nil`, `{}`) via query `@empty_block`.
 2. **`Cell 2.1 (docstrings)`**: Evaluates docstring adjacency across all exported functions via `@func.doc`.
 3. **`Cell 1.1 (complexity)`**: Computes $M(F)$ via compiled `@branch` queries and rejects mid-switch `default:` clauses. Emits `file:start-end` extraction targets on complexity, LOC, or arity breaches.
-4. **`Cell 1.1 (max_file_loc)`**: Enforces file line limits and `max_package_files` (`40`). Under `ratchet_mode: upstream`, relaxes baseline file LOC/CDS ceilings while blocking collateral function moves and mismatched copyright emails.
-5. **`Cell 1.1 (cognitive_debt)`**: Enforces $CDS \le 45$ on strict files, preserves baselines across `git diff --find-renames=50%` moves, and emits `PrescribeRatchetedCDSRecipe` under `ratchet_mode: standard`.
+4. **`Cell 1.1 (max_file_loc)`**: Enforces file line limits and `max_package_files` (`40`). Under `ratchet_mode: upstream`, relaxes baseline file LOC/CDS ceilings while blocking collateral function moves and mismatched copyright emails. The gate also blocks net-new micro-files in high-fanout packages whenever receptive sibling files exist.
+5. **`Cell 1.1 (cognitive_debt)`**: Enforces $CDS \le 45$ on strict files, preserves baselines across `git diff --find-renames=50%` moves, and emits `PrescribeRatchetedCDSRecipe` under `ratchet_mode: standard`. Diff-scoped clone evaluation indexes live corpus AST skeletons to detect net-new cross-package clones.
 6. **`Cell 5.1 (magic_strings)`**: Scans string literal AST nodes across Go, TypeScript, and Svelte for unconfigured localhost ports or URLs.
 7. **`FastFileRadar (CWE-22)`**: Flags unconfined dynamic subpath reads under `base_dir`/`baseDir`, ignores constant literal subpaths, and emits language-specific 1-turn confinement recipes.
 8. **`Cell 2.2 (go_toolchain)` (`corpus_command`)**: Executes declarative reference-corpus regression checks with `NOMOS_BASELINE_REF` and fails closed on non-zero exit status.
