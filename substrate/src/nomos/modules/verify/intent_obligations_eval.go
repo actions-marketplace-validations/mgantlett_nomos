@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/config"
+	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/task"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/intentlint"
@@ -186,23 +187,60 @@ func checkStaleSpecObligations(gateName string, ctx *vscope.VerifyContext, root 
 }
 
 func collectInFlightSubSpecDigests(ctx *vscope.VerifyContext, root string, intentRoots []string) map[string]bool {
-	if ctx == nil || !strings.HasPrefix(strings.TrimSpace(ctx.TaskID), "SUB-") {
+	subKey, wt := resolveContractScanScope(ctx, root)
+	if !strings.HasPrefix(subKey, "SUB-") {
 		return nil
 	}
-	wt := ctx.WorktreePath
-	if wt == "" {
-		wt = root
+	trunkRoot := resolvePrimaryObligationRoot(wt, root)
+	twinKey := resolveActiveSubTwinKey(trunkRoot, subKey)
+	return collectInFlightSubSpecDigestsWithTwin(ctx, wt, twinKey, intentRoots)
+}
+
+func collectInFlightSubSpecDigestsWithTwin(ctx *vscope.VerifyContext, wt, twinKey string, intentRoots []string) map[string]bool {
+	var modified []string
+	if ctx != nil {
+		modified = vscope.GetModifiedFilesInScope(ctx, wt)
 	}
-	modified := vscope.GetModifiedFilesInScope(ctx, wt)
-	if len(modified) == 0 {
+	if len(modified) == 0 && twinKey == "" {
 		return nil
 	}
-	digests := task.CollectReferencedSpecDigestsWithRoots(wt, modified, "", intentRoots)
-	active := make(map[string]bool, len(digests))
-	for k := range digests {
+	active := make(map[string]bool)
+	for k := range task.CollectReferencedSpecDigestsWithRoots(wt, modified, twinKey, intentRoots) {
 		active[k] = true
 	}
+	trunkRoot := resolvePrimaryObligationRoot(wt, wt)
+	if twinKey != "" && trunkRoot != "" && trunkRoot != wt {
+		for k := range task.CollectReferencedSpecDigestsWithRoots(trunkRoot, nil, twinKey, intentRoots) {
+			active[k] = true
+		}
+	}
 	return active
+}
+
+func resolvePrimaryObligationRoot(wt, fallback string) string {
+	if pr, err := workspace.FindRepoRoot(wt); err == nil && pr != "" {
+		return pr
+	}
+	return fallback
+}
+
+func resolveActiveSubTwinKey(trunkRoot, subKey string) string {
+	store, err := task.NewDefaultSQLiteTaskStore()
+	if err != nil || store == nil {
+		return ""
+	}
+	defer func() {
+		if cErr := store.Close(); cErr != nil {
+			// best-effort read-only store close
+		}
+	}()
+	project := task.ResolveRepoProject(trunkRoot)
+	for _, rec := range task.FilterTasksByProject(store.ListTasks(), project, true) {
+		if rec.Key == subKey && strings.HasPrefix(strings.TrimSpace(rec.TwinKey), "INT-") {
+			return strings.TrimSpace(rec.TwinKey)
+		}
+	}
+	return ""
 }
 
 func evaluateConfiguredArchitectureBoundaries(gateName string, ctx *vscope.VerifyContext, root string, rules []config.ArchitectureBoundaryRule) *vscope.GateResult {

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/intentlint"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
@@ -64,6 +65,41 @@ func TestSelfDogfood_NomosBijectiveAndSurjectiveParity(t *testing.T) {
 	}
 	if surj := intentlint.VerifyNormativeRegistrySurjection(repoRoot, specRoots); len(surj) != 0 {
 		t.Fatalf("normative registry surjection gaps on nomos: %v", surj)
+	}
+}
+
+// @verifies TC-OBL-015
+func TestCollectInFlightSubSpecDigestsWithTwin_IncludesBoundTwinSpecsWithoutSourceTags(t *testing.T) {
+	repo := t.TempDir()
+	specFile := filepath.Join(repo, "intent", "architecture", "specs", "portal_spec.md")
+	svelteFile := filepath.Join(repo, "substrate", "membrane", "src", "GsiNavbar.svelte")
+	if err := os.MkdirAll(filepath.Dir(specFile), 0o755); err != nil {
+		t.Fatalf("mkdir spec: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(svelteFile), 0o755); err != nil {
+		t.Fatalf("mkdir svelte: %v", err)
+	}
+	if err := os.WriteFile(specFile, []byte("# Portal Spec\n"), 0o644); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+	if err := os.WriteFile(svelteFile, []byte("<header>Auto Light Dark</header>\n"), 0o644); err != nil {
+		t.Fatalf("write svelte: %v", err)
+	}
+	for _, args := range [][]string{
+		{"init"},
+		{"config", "user.email", "test@example.com"},
+		{"config", "user.name", "Test"},
+		{"add", "."},
+		{"commit", "-m", "[INT-2123] docs(specs): specify portal theme mode"},
+	} {
+		if out, err := workspace.SafeGitCommand(repo, args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v failed: %v (%s)", args, err, string(out))
+		}
+	}
+
+	got := collectInFlightSubSpecDigestsWithTwin(nil, repo, "INT-2123", nil)
+	if !got["intent/architecture/specs/portal_spec.md"] {
+		t.Fatalf("expected bound twin spec portal_spec.md in in-flight digests without @intent tag, got: %+v", got)
 	}
 }
 
