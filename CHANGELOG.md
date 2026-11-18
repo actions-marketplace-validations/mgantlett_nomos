@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v4.25.0] - 2026-11-18
+
+> Clarify Init-and-Forget stack model, Agent-first setup, and Branch Guard stewardship; Log debug parse error in OpenCode `nomos.ts` template; Pre-push release-note sync, diff-scoped corpus clone index, and micro-file guard; Tighten `README.md` front-door tagline and subhead around 0-token physics powered by your coding agent (Apache 2.0)
+
+### CLI, Distribution & Hooks (`nomos cli`, `README.md`)
+- **Clarify Init-and-Forget stack model, Agent-first setup, and Branch Guard stewardship (`INT-2136`, `SUB-3265`)**: Clarify Init-and-Forget stack layer, Agent-first setup, and Branch Guard stewardship.
+
+### Verification & Quality Gates (`nomos verify`, `capbac`)
+- **Enforce pre-push release-note sync, diff-scoped corpus clone index, and micro-file guard (`INT-2133`, `SUB-3255`)**: PrePushHookScript syncs refs/notes/nomos/releases, CognitiveDebtGate indexes live corpus AST skeletons for net-new clones, MaxFileLOCGate+FastFileRadar block net-new micro-files in high-fanout packages.
+- **Consolidate modules/verify gate fragments and reclaim package file headroom (`SUB-3251`)**: Consolidate gate fragments, reclaim package headroom, and prune surviving `gov_rule` moves.
+- **Share capbac shell quote lexer and consolidate hookcmd handlers (`INT-2130`, `SUB-3250`)**: Extract SplitUnquotedShellSegments, TokenizeQuotedShellWords, and HasUnquotedShellChainingOrSub into `core/capbac/shell_lex.go` and consolidate fragmented cli/hookcmd files.
+
+### Release & Packaging (`nomos init`, `README.md`)
+- **Log debug parse error in OpenCode `nomos.ts` template (`INT-2137`, `SUB-3267`)**: Log debug parse error in OpenCode `nomos.ts` template catch block.
+- **Tighten `README.md` front-door tagline and subhead around 0-token physics powered by your coding agent (`SUB-3269`)**: Tighten front-door tagline around zero-token physics powered by your coding agent.
+- **Route hookcmd and astdebt scopes in `render-release-notes.sh` (`SUB-3260`)**: Route hookcmd, inspectcmd, init, mcp, astdebt, xray, sarif, and vscope commit scopes in `render-release-notes.sh`.
+- **Unify polyglot wrapper, idiom, exception, and blueprint scanners in verify/astdebt (`INT-2129`, `SUB-3249`)**: Unify polyglot wrapper, idiom, exception, and blueprint scanners.
+
+---
+
 ## [v4.24.0] - 2026-11-17
 
 > Add polyglot design-slop, coverage-exclusion, manifest ImportError fallback, and wrapper-fragmentation AST sensors; Track Bash file mutations natively across PostToolUse and Stop hooks, surface manifest/module hull in SessionStart, harden NormativeSurfaceDelta Go AST extraction, and codify v4.24.0 specs (Apache 2.0)
