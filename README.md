@@ -40,7 +40,7 @@ Git            -> main stays read-only & verified; shortcuts fail closed before 
 
 ### Two Ways to Set Up in 30 Seconds (Or Scan in Browser First)
 
-> **Zero-Install Browser Scan (5s):** Paste any public GitHub repository at [**sophialabs.ca/xray**](https://sophialabs.ca/xray) to inspect its 11-language `AI Hangover Score` (`0-100`) and download a pre-computed `nomos.baseline.json` + 4-line GitHub Action PR gate before installing anything locally.
+> **Zero-Install Browser Scan (5s):** Paste any public GitHub repository at [**sophialabs.ca/xray**](https://sophialabs.ca/xray) - or just replace `github.com` with `sophialabs.ca` in your browser URL bar (e.g. `https://sophialabs.ca/go-chi/chi`) - to inspect its 11-language `AI Hangover Score` (`0-100`) and download a pre-computed `nomos.baseline.json` + 4-line GitHub Action PR gate before installing anything locally.
 
 **Path A - Paste 1 Prompt Into Your Coding Agent (Zero Manual Setup):**
 
@@ -136,7 +136,7 @@ nomos init --worktrees
 # Enforce zero-trust PR mutation proofs in GitHub Actions:
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }
-- uses: mgantlett/nomos@v4
+- uses: mgantlett/nomos@v4.25.0
   with: { base-ref: origin/main, mutate-diff: 'true' }
 ```
 
