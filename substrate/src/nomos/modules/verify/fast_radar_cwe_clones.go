@@ -21,7 +21,7 @@ var (
 	pyFStringSQLWhere    = regexp.MustCompile(`(?i)f["']\s*(?:SELECT|INSERT|UPDATE|DELETE)\b[^\n]*?\bWHERE\b[^\n]*?(?:=|\bLIKE\b|\bIN\b)\s*['"]?\{`)
 	pyUnboundExecFStr    = regexp.MustCompile(`(?i)\.execute\s*\(\s*f["']\s*(?:INSERT|UPDATE|DELETE)\b[^\n"']*\{`)
 	pyFormatConcatSQL    = regexp.MustCompile(`(?is)(?:SELECT|INSERT|UPDATE|DELETE)\b[^\n;]{0,160}(?:\.format\s*\(|%\s*\(|\+\s*[A-Za-z_])`)
-	pySQLValuesInterpRe  = regexp.MustCompile(`(?i)\bVALUES\s*\([^\n;)]*(?:\{|\.format\s*\(|%\s*|\+\s*[A-Za-z_])`)
+	pySQLValuesInterpRe  = regexp.MustCompile(`(?i)\bVALUES\s*\([^\n;)]*(?:\{|\.format\s*\(|\+\s*[A-Za-z_])|\bVALUES\s*\([^\n;)]*\)\s*['"]\s*%\s*[A-Za-z0-9_(]`)
 	sqlIdentQuoteGuardRe = regexp.MustCompile(`(?i)(?:\bquote(?:_ident|_id)?\s*\(|\b_?q\s*\(|\bvalidate_ident\b|\bisidentifier\s*\(|replace\s*\(\s*['"]"['"]\s*,\s*['"]""['"])`)
 	pyFStringOrderBy     = regexp.MustCompile(`(?i)f["']\s*SELECT\b[^\n]*?\bORDER\s+BY\s+\{`)
 	sqlAllowlistHintRe = regexp.MustCompile(`(?i)(?:allow|valid|whitelist|permitted|\.get\s*\(|\bin\s*[\(\[\{])`)

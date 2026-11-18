@@ -13,6 +13,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24240539.svg)](https://doi.org/10.5281/zenodo.24240539)
 [![Docs](https://img.shields.io/badge/Docs-sophialabs.ca-0EA5E9)](https://sophialabs.ca/docs/introduction)
+[![Web X-Ray](https://img.shields.io/badge/Web_X--Ray-0--Install_Scan-10B981)](https://sophialabs.ca/xray)
 [![Discussions](https://img.shields.io/github/discussions/mgantlett/nomos?color=0EA5E9&label=Discussions)](https://github.com/mgantlett/nomos/discussions)
 
 <br />
@@ -37,7 +38,9 @@ Git            -> main stays read-only & verified; shortcuts fail closed before 
 
 > **Initialize once, then forget `nomos` exists.** Nomos supplies `0`-token repository physics; **your coding agent supplies the intelligence** to self-correct before ending its turn. Use `nomos xray .` anytime you want a 5-second codebase health scan.
 
-### Two Ways to Set Up in 30 Seconds
+### Two Ways to Set Up in 30 Seconds (Or Scan in Browser First)
+
+> **Zero-Install Browser Scan (5s):** Paste any public GitHub repository at [**sophialabs.ca/xray**](https://sophialabs.ca/xray) to inspect its 11-language `AI Hangover Score` (`0-100`) and download a pre-computed `nomos.baseline.json` + 4-line GitHub Action PR gate before installing anything locally.
 
 **Path A - Paste 1 Prompt Into Your Coding Agent (Zero Manual Setup):**
 
@@ -133,10 +136,8 @@ nomos init --worktrees
 # Enforce zero-trust PR mutation proofs in GitHub Actions:
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }
-- uses: mgantlett/nomos@v4.22.1
-  with:
-    base-ref: origin/main
-    mutate-diff: 'true'
+- uses: mgantlett/nomos@v4
+  with: { base-ref: origin/main, mutate-diff: 'true' }
 ```
 
 > **Cheap Workhorse Stack (`OpenCode` + `OpenRouter` / Local `16GB` GPU):** Because `.opencode/plugins/nomos.ts` enforces frontier merge rules in local compiled Go (`0` middleman token tax), `14B-32B` open-weight models jump from `27.8%` to **`86.1%`** brownfield resolution (`3.1x` lift) while cutting token spend `-43%` to `-57%`.
