@@ -82,6 +82,11 @@ func VerifyNoOrphanedTestObligations(root string, specPaths []string) []string {
 	if len(declared) == 0 {
 		return nil
 	}
+	if delta := CollectActiveSiblingTwinDeltas(root, ExtractWorktreeSubTaskKey(root)); delta != nil {
+		for tc := range delta.RemovedTCs {
+			declared[tc] = true
+		}
+	}
 	return impact.ScanOrphanedGoTestObligations(root, declared)
 }
 

@@ -64,8 +64,9 @@ func evaluateContractObligationChecks(gateName string, ctx *vscope.VerifyContext
 	activeTaskID, scanRoot := resolveContractScanScope(ctx, root)
 	siblingDelta := intentlint.CollectActiveSiblingTwinDeltas(scanRoot, activeTaskID)
 	deferredSpecs := intentlint.CollectActiveSiblingTwinSpecs(scanRoot, activeTaskID)
+	scopedSpecRoots := intentlint.ResolveTaskContractSpecRoots(scanRoot, activeTaskID, contracts.SpecRoots)
 	if contracts.StrictTypes {
-		if sigRes := checkContractTypeParityWithDelta(gateName, scanRoot, targetDir, contracts.SpecRoots, siblingDelta); sigRes != nil {
+		if sigRes := checkContractTypeParityWithDelta(gateName, scanRoot, targetDir, scopedSpecRoots, siblingDelta); sigRes != nil {
 			return sigRes
 		}
 		if strings.EqualFold(strings.TrimSpace(cfg.Project), "nomos") {
@@ -75,8 +76,11 @@ func evaluateContractObligationChecks(gateName string, ctx *vscope.VerifyContext
 		}
 	}
 	if contracts.VerifyObligations {
-		if oblRes := checkExecutableObligationsWithDelta(gateName, scanRoot, contracts.SpecRoots, siblingDelta); oblRes != nil {
+		if oblRes := checkExecutableObligationsWithDelta(gateName, scanRoot, scopedSpecRoots, siblingDelta); oblRes != nil {
 			return oblRes
+		}
+		if orphanRes := checkNoOrphanedTestObligations(gateName, scanRoot, contracts.SpecRoots); orphanRes != nil {
+			return orphanRes
 		}
 	}
 	if contracts.FailOnStaleObligations {
@@ -137,6 +141,10 @@ func checkExecutableObligationsWithDelta(gateName, root string, specRoots []stri
 			Remedy:  "bind each TC-* vector in a unit test via '// @verifies <TC-ID>' (or '# @verifies <TC-ID>') (Law 2 & Law 4)",
 		}
 	}
+	return nil
+}
+
+func checkNoOrphanedTestObligations(gateName, root string, specRoots []string) *vscope.GateResult {
 	orphanIssues := intentlint.VerifyNoOrphanedTestObligations(root, specRoots)
 	if len(orphanIssues) > 0 {
 		return &vscope.GateResult{

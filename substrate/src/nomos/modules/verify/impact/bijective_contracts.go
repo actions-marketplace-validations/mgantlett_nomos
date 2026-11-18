@@ -313,7 +313,7 @@ func diffOneSpecStruct(relSpec string, key SpecStructKey, expected map[string]st
 		}
 	}
 	for _, actField := range sortedMapKeys(actual) {
-		if _, ok := expected[actField]; !ok {
+		if _, ok := expected[actField]; !ok && !delta.HasRemovedField(key.Name, actField) {
 			issues = append(issues, fmt.Sprintf("%s: struct %s has undocumented compiled field %s omitted from specification", relSpec, key.Name, actField))
 		}
 	}

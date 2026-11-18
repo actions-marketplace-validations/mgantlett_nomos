@@ -75,10 +75,14 @@ func CollectActiveSiblingTwinSpecs(scanRoot, activeSubKey string) map[string]boo
 	if len(tasks) == 0 {
 		return nil
 	}
-	ownSpecs := resolveOwnTwinSpecs(trunkRoot, cleanKey, tasks)
+	return collectDeferredSiblingSpecsFromTasks(trunkRoot, scanRoot, cleanKey, tasks)
+}
+
+func collectDeferredSiblingSpecsFromTasks(trunkRoot, scanRoot, activeSubKey string, tasks []task.TaskRecord) map[string]bool {
+	ownSpecs := resolveOwnTwinSpecs(trunkRoot, activeSubKey, tasks)
 	deferred := make(map[string]bool)
 	for _, rec := range tasks {
-		if !isEligibleSiblingRecord(trunkRoot, scanRoot, cleanKey, rec) {
+		if !isEligibleSiblingRecord(trunkRoot, scanRoot, activeSubKey, rec) {
 			continue
 		}
 		for sp := range listTwinCommitSpecFiles(trunkRoot, strings.TrimSpace(rec.TwinKey)) {
@@ -156,15 +160,23 @@ func accumulateTwinCommitDelta(repoRoot, twinKey string, into *impact.SiblingDel
 }
 
 func subtractOwnDelta(sibling, own *impact.SiblingDelta) {
-	for tc := range own.AddedTCs {
-		delete(sibling.AddedTCs, tc)
+	subtractStringSet(sibling.AddedTCs, own.AddedTCs)
+	subtractStringSet(sibling.RemovedTCs, own.RemovedTCs)
+	subtractStringSet(sibling.AddedStructs, own.AddedStructs)
+	subtractFieldSet(sibling.AddedFields, own.AddedFields)
+	subtractFieldSet(sibling.RemovedFields, own.RemovedFields)
+}
+
+func subtractStringSet(dst, own map[string]bool) {
+	for k := range own {
+		delete(dst, k)
 	}
-	for st := range own.AddedStructs {
-		delete(sibling.AddedStructs, st)
-	}
-	for st, fields := range own.AddedFields {
+}
+
+func subtractFieldSet(dst, own map[string]map[string]bool) {
+	for st, fields := range own {
 		for f := range fields {
-			delete(sibling.AddedFields[st], f)
+			delete(dst[st], f)
 		}
 	}
 }
