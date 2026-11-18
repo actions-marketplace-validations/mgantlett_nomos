@@ -95,8 +95,56 @@ func scanPythonExtraIdioms(relPath string, lines []string, funcs []pyScopedFunc)
 	var out []string
 	out = append(out, scanPyUnnecessaryElseAfterJump(relPath, funcs)...)
 	out = append(out, scanPyTypeGuardClutter(relPath, lines)...)
+	out = append(out, scanPyDefensiveIsinstanceReturnSprawl(relPath, funcs)...)
 	out = append(out, scanPyCollectionAndNoneIdioms(relPath, lines)...)
 	return out
+}
+
+func scanPyDefensiveIsinstanceReturnSprawl(relPath string, funcs []pyScopedFunc) []string {
+	count := 0
+	for _, fn := range funcs {
+		if pyFuncHasDefensiveIsinstanceReturn(fn.bodyLines) {
+			count++
+		}
+	}
+	if count >= 4 {
+		return []string{fmt.Sprintf("%s:1: module repeats 'if not isinstance(...): return ...' across %d functions; consolidate per-field validation into a declarative schema table or boundary validator (Law 6)", relPath, count)}
+	}
+	return nil
+}
+
+func pyFuncHasDefensiveIsinstanceReturn(body []string) bool {
+	for i := 0; i < len(body); i++ {
+		cleaned := stripInlineStringsAndHashComment(strings.TrimSpace(body[i]))
+		if !strings.HasPrefix(cleaned, "if not isinstance(") && !strings.HasPrefix(cleaned, "if (not isinstance(") {
+			continue
+		}
+		suite, hasColon := splitPyTopLevelColonTail(cleaned)
+		if !hasColon {
+			continue
+		}
+		if suite != "" {
+			if strings.HasPrefix(strings.TrimSpace(suite), "return") {
+				return true
+			}
+			continue
+		}
+		if nextPyExecLineReturns(body, i+1, countLeadingIndentCols(body[i])) {
+			return true
+		}
+	}
+	return false
+}
+
+func nextPyExecLineReturns(body []string, start, ifIndent int) bool {
+	for j := start; j < len(body); j++ {
+		t := strings.TrimSpace(stripInlineStringsAndHashComment(body[j]))
+		if t == "" {
+			continue
+		}
+		return countLeadingIndentCols(body[j]) > ifIndent && strings.HasPrefix(t, "return")
+	}
+	return false
 }
 
 func scanPyUnnecessaryElseAfterJump(relPath string, funcs []pyScopedFunc) []string {

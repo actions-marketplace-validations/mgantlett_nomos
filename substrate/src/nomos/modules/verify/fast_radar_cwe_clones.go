@@ -18,10 +18,12 @@ import (
 
 var (
 	dbExecSinkRe       = regexp.MustCompile(`(?i)\.(?:execute(?:many)?|Query(?:Row|Context)?|Exec(?:Context)?)\s*\(`)
-	pyFStringSQLWhere  = regexp.MustCompile(`(?i)f["']\s*(?:SELECT|INSERT|UPDATE|DELETE)\b[^\n]*?\bWHERE\b[^\n]*?(?:=|\bLIKE\b|\bIN\b)\s*['"]?\{`)
-	pyUnboundExecFStr  = regexp.MustCompile(`(?i)\.execute\s*\(\s*f["']\s*(?:INSERT|UPDATE|DELETE)\b[^\n"']*\{`)
-	pyFormatConcatSQL  = regexp.MustCompile(`(?is)(?:SELECT|INSERT|UPDATE|DELETE)\b[^\n;]{0,160}(?:\.format\s*\(|%\s*\(|\+\s*[A-Za-z_])`)
-	pyFStringOrderBy   = regexp.MustCompile(`(?i)f["']\s*SELECT\b[^\n]*?\bORDER\s+BY\s+\{`)
+	pyFStringSQLWhere    = regexp.MustCompile(`(?i)f["']\s*(?:SELECT|INSERT|UPDATE|DELETE)\b[^\n]*?\bWHERE\b[^\n]*?(?:=|\bLIKE\b|\bIN\b)\s*['"]?\{`)
+	pyUnboundExecFStr    = regexp.MustCompile(`(?i)\.execute\s*\(\s*f["']\s*(?:INSERT|UPDATE|DELETE)\b[^\n"']*\{`)
+	pyFormatConcatSQL    = regexp.MustCompile(`(?is)(?:SELECT|INSERT|UPDATE|DELETE)\b[^\n;]{0,160}(?:\.format\s*\(|%\s*\(|\+\s*[A-Za-z_])`)
+	pySQLValuesInterpRe  = regexp.MustCompile(`(?i)\bVALUES\s*\([^\n;)]*(?:\{|\.format\s*\(|%\s*|\+\s*[A-Za-z_])`)
+	sqlIdentQuoteGuardRe = regexp.MustCompile(`(?i)(?:\bquote(?:_ident|_id)?\s*\(|\b_?q\s*\(|\bvalidate_ident\b|\bisidentifier\s*\(|replace\s*\(\s*['"]"['"]\s*,\s*['"]""['"])`)
+	pyFStringOrderBy     = regexp.MustCompile(`(?i)f["']\s*SELECT\b[^\n]*?\bORDER\s+BY\s+\{`)
 	sqlAllowlistHintRe = regexp.MustCompile(`(?i)(?:allow|valid|whitelist|permitted|\.get\s*\(|\bin\s*[\(\[\{])`)
 	goSprintfSQLRe     = regexp.MustCompile(`(?is)fmt\.Sprintf\s*\(\s*["` + "`" + `]\s*(?:SELECT|INSERT|UPDATE|DELETE)\b[^"` + "`" + `]*?%[svq]`)
 
@@ -64,13 +66,23 @@ func detectCWE89SQLSink(src string) string {
 	if !dbExecSinkRe.MatchString(src) {
 		return ""
 	}
-	if pyFStringSQLWhere.MatchString(src) || pyUnboundExecFStr.MatchString(src) || pyFormatConcatSQL.MatchString(src) || goSprintfSQLRe.MatchString(src) {
+	if hasUnquotedDynamicSQLSink(src) {
 		return "CWE-89 dynamic SQL interpolation at execution sink; use '?' parameter binding and allowlist identifiers (SecurityGate) -> [1-TURN RECIPE: pass user values via execute(sql, (val,)) '?' placeholders and map dynamic sort/column names through an explicit ALLOWED dict]"
 	}
 	if pyFStringOrderBy.MatchString(src) && !sqlAllowlistHintRe.MatchString(src) {
 		return "CWE-89 unvalidated dynamic ORDER BY identifier interpolation; map sort columns through a strict allowlist (SecurityGate) -> [1-TURN RECIPE: map sort_col via ALLOWED = {'col': 'col'} before interpolating ORDER BY]"
 	}
 	return ""
+}
+
+func hasUnquotedDynamicSQLSink(src string) bool {
+	if pyFStringSQLWhere.MatchString(src) || pySQLValuesInterpRe.MatchString(src) || goSprintfSQLRe.MatchString(src) {
+		return true
+	}
+	if pyUnboundExecFStr.MatchString(src) || pyFormatConcatSQL.MatchString(src) {
+		return !sqlIdentQuoteGuardRe.MatchString(src)
+	}
+	return false
 }
 
 func detectCWE22PathSink(slashRel, src string) string {

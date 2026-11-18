@@ -127,18 +127,18 @@ func TestContainerStop_PreToolFailingBashWriteMultiStrikeAndPostVerifyRead(t *te
 		"hook_event_name": "Stop",
 		"cwd":             repoDir,
 	})
-	if dec1 := parseDecision(t, stop1); dec1.Decision != "block" || !strings.Contains(dec1.Reason, "attempt 1/4") || !strings.Contains(dec1.Reason, "Nomos Radar Breach") {
-		t.Fatalf("expected strike 1 block with inline radar breach, got %+v (%s)", dec1, stop1)
+	if dec1 := parseDecision(t, stop1); dec1.Decision != "block" || !strings.Contains(dec1.Reason, "attempt 1/6") || !strings.Contains(dec1.Reason, "Headless autonomous session") || !strings.Contains(dec1.Reason, "Nomos Radar Breach") {
+		t.Fatalf("expected configured strike 1/6 block with headless mandate & inline radar breach, got %+v (%s)", dec1, stop1)
 	}
 
-	for attempt := 2; attempt <= 4; attempt++ {
+	for attempt := 2; attempt <= 6; attempt++ {
 		stopRetry := executeHookCmd(t, []string{"stop", "--container-sandbox"}, map[string]any{
 			"hook_event_name":  "Stop",
 			"cwd":              repoDir,
 			"stop_hook_active": true,
 		})
 		if dec := parseDecision(t, stopRetry); dec.Decision != "block" {
-			t.Fatalf("expected strike %d/4 to stay blocked under container sandbox, got %+v", attempt, dec)
+			t.Fatalf("expected strike %d/6 to stay blocked under configured container sandbox, got %+v", attempt, dec)
 		}
 	}
 	stopCap := executeHookCmd(t, []string{"stop", "--container-sandbox"}, map[string]any{
@@ -147,7 +147,7 @@ func TestContainerStop_PreToolFailingBashWriteMultiStrikeAndPostVerifyRead(t *te
 		"stop_hook_active": true,
 	})
 	if stopCap != "{}" {
-		t.Fatalf("expected container stop cap after 4 strikes to allow {}, got %s", stopCap)
+		t.Fatalf("expected container stop cap after 6 strikes to allow {}, got %s", stopCap)
 	}
 
 	if err := os.WriteFile(filepath.Join(repoDir, "etl.py"), []byte("def route(op):\n    return 0\n"), 0644); err != nil {

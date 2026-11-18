@@ -16,6 +16,7 @@ var (
 	tsVerboseNullishRe    = regexp.MustCompile(`\b([A-Za-z_][A-Za-z0-9_\.]*)\s*!==\s*(?:null|undefined)\s*&&\s*([A-Za-z_][A-Za-z0-9_\.]*)\s*!==\s*(?:undefined|null)\s*\?\s*([A-Za-z_][A-Za-z0-9_\.]*)\s*:`)
 	braceIfFalseRetRe     = regexp.MustCompile(`^\s*if\s*\(.+\)\s*\{\s*return\s+(false|true)\s*;?\s*\}\s*$`)
 	braceSimpleBoolRetRe  = regexp.MustCompile(`^\s*return\s+(.+?)\s*;?\s*$`)
+	braceTypeofReturnRe   = regexp.MustCompile(`\bif\s*\(\s*typeof\s+[^)]+!==[^)]+\)\s*(?:\{\s*)?return\b`)
 
 	polyglotTupleCheckExts = map[string]bool{
 		ExtTS: true, ExtTSX: true, ExtJS: true, ExtJSX: true,
@@ -35,10 +36,28 @@ func scanPolyglotIdiomAndControlFlowSlop(_, relPath, text string) []string {
 	lines := strings.Split(text, "\n")
 	var out []string
 	out = append(out, scanPolyglotTypeGuardSprawl(relPath, ext, lines)...)
+	out = append(out, scanPolyglotDefensiveTypeofReturnSprawl(relPath, lines)...)
 	out = append(out, scanPolyglotEqChainAndBoolReturn(relPath, lines)...)
 	out = append(out, scanPolyglotArrayTupleReturns(relPath, ext, lines)...)
 	out = append(out, scanTSNullishVerbosity(relPath, ext, lines)...)
 	return out
+}
+
+func scanPolyglotDefensiveTypeofReturnSprawl(relPath string, lines []string) []string {
+	count := 0
+	for _, raw := range lines {
+		code, cmt := splitSlashLineCommentOutsideStrings(raw)
+		if strings.TrimSpace(code) == "" && cmt != "" {
+			continue
+		}
+		if braceTypeofReturnRe.MatchString(code) {
+			count++
+		}
+	}
+	if count >= 4 {
+		return []string{fmt.Sprintf("%s:1: module repeats 'if (typeof ... !== ...): return ...' across %d checks; consolidate field validation into a declarative schema validator (Law 6)", relPath, count)}
+	}
+	return nil
 }
 
 // scanPolyglotTypeGuardSprawl flags scattered runtime type-guard throws across polyglot non-Go modules.

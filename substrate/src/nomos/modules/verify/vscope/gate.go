@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/config"
+	"github.com/mgantlett/nomos/substrate/src/nomos/core/constants"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/types"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
 )
@@ -294,8 +295,20 @@ func WalkTargetFiles(ctx *VerifyContext, root string, fn filepath.WalkFunc) erro
 	return walkExplicitRelativeFiles(modified, absWorkDir, absRoot, excludes, fn)
 }
 
+func hasDefaultIntermediateSegment(rel string) bool {
+	for _, seg := range strings.Split(filepath.ToSlash(filepath.Clean(rel)), "/") {
+		if seg == constants.DirWorktrees || workspace.IsDefaultIntermediateDir(seg) {
+			return true
+		}
+	}
+	return false
+}
+
 func walkExplicitRelativeFiles(relFiles []string, absWorkDir, absRoot string, excludes []string, fn filepath.WalkFunc) error {
 	for _, rel := range relFiles {
+		if hasDefaultIntermediateSegment(rel) {
+			continue
+		}
 		fullPath := filepath.Join(absWorkDir, rel)
 		if !strings.HasPrefix(fullPath, absRoot) {
 			continue

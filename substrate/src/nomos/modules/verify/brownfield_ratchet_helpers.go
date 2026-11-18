@@ -182,7 +182,9 @@ func filterNetNewLineViolations(ctx *vscope.VerifyContext, root, absPath string,
 
 func isBrownfieldModuleCapViolation(v string) bool {
 	return strings.Contains(v, "multi-caller one-line return micro-helpers") ||
-		strings.Contains(v, "repeats empty mutable default")
+		strings.Contains(v, "repeats empty mutable default") ||
+		strings.Contains(v, "repeats 'if not isinstance(...): return") ||
+		strings.Contains(v, "repeats 'if (typeof ")
 }
 
 func normalizeViolationKey(v string) string {

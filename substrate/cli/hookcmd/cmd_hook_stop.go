@@ -14,12 +14,13 @@ import (
 )
 
 const (
-	hookDecisionBlock      = "block"
-	hookDecisionContinue   = "continue"
-	agyNormalStopReason    = "NO_TOOL_CALL"
-	maxStopAuditFiles      = 128
-	maxContainerStopBlocks = 4
-	containerAppWorkdir    = "/app"
+	hookDecisionBlock                = "block"
+	hookDecisionContinue             = "continue"
+	agyNormalStopReason              = "NO_TOOL_CALL"
+	maxStopAuditFiles                = 128
+	maxContainerStopBlocks           = 4
+	maxConfiguredContainerStopBlocks = 6
+	containerAppWorkdir              = "/app"
 )
 
 var skippedStopAuditDirs = map[string]bool{
@@ -96,7 +97,8 @@ func evaluateTracedStopHook(p *HookPayload, hermeticDir string, containerSandbox
 	if !needsVerify && !needsBehavior {
 		return HookDecision{Decision: hookDecisionAllow}
 	}
-	if p.StopHookActive && tr.StopBlockStrikes >= maxContainerStopBlocks {
+	maxBlocks := resolveContainerStopLimit(wsRoot, containerSandbox)
+	if p.StopHookActive && tr.StopBlockStrikes >= maxBlocks {
 		return HookDecision{Decision: hookDecisionAllow}
 	}
 	tr.StopBlockStrikes++
@@ -104,16 +106,23 @@ func evaluateTracedStopHook(p *HookPayload, hermeticDir string, containerSandbox
 		saveHookSessionTrace(path, *tr)
 	}
 	if !needsVerify && needsBehavior {
-		return buildBehavioralStopDecision(wsRoot, len(tr.MutatedFiles), tr.StopBlockStrikes, containerSandbox)
+		return buildBehavioralStopDecision(wsRoot, len(tr.MutatedFiles), tr.StopBlockStrikes, maxBlocks, containerSandbox)
 	}
 	radarNote := collectStopInlineRadarSummary(wsRoot, tr.MutatedFiles)
-	return buildUnverifiedStopDecision(wsRoot, branchLabel, len(tr.MutatedFiles), tr.StopBlockStrikes, containerSandbox, radarNote)
+	return buildUnverifiedStopDecision(wsRoot, branchLabel, len(tr.MutatedFiles), tr.StopBlockStrikes, maxBlocks, containerSandbox, radarNote)
 }
 
-func buildBehavioralStopDecision(wsRoot string, fileCount, strike int, containerSandbox bool) HookDecision {
+func resolveContainerStopLimit(wsRoot string, containerSandbox bool) int {
+	if containerSandbox && wsRoot != "" && hasExplicitNomosConfig(wsRoot, wsRoot) {
+		return maxConfiguredContainerStopBlocks
+	}
+	return maxContainerStopBlocks
+}
+
+func buildBehavioralStopDecision(wsRoot string, fileCount, strike, maxBlocks int, containerSandbox bool) HookDecision {
 	strikePrefix := "❌ [Nomos Anti-Phantom Gate]"
 	if containerSandbox {
-		strikePrefix = fmt.Sprintf("❌ [Nomos Anti-Phantom Gate (attempt %d/%d)]", strike, maxContainerStopBlocks)
+		strikePrefix = fmt.Sprintf("❌ [Nomos Anti-Phantom Gate (attempt %d/%d)]", strike, maxBlocks)
 	}
 	return HookDecision{
 		Decision: hookDecisionBlock,
@@ -124,10 +133,10 @@ func buildBehavioralStopDecision(wsRoot string, fileCount, strike int, container
 	}
 }
 
-func buildUnverifiedStopDecision(wsRoot, branchLabel string, fileCount, strike int, containerSandbox bool, radarNote string) HookDecision {
+func buildUnverifiedStopDecision(wsRoot, branchLabel string, fileCount, strike, maxBlocks int, containerSandbox bool, radarNote string) HookDecision {
 	strikePrefix := "❌ [Nomos Anti-Phantom Gate]"
 	if containerSandbox {
-		strikePrefix = fmt.Sprintf("❌ [Nomos Anti-Phantom Gate (attempt %d/%d)]", strike, maxContainerStopBlocks)
+		strikePrefix = fmt.Sprintf("❌ [Nomos Anti-Phantom Gate (attempt %d/%d)]", strike, maxBlocks)
 	}
 	reason := fmt.Sprintf(
 		"%s Active worktree '%s' has %d modified file(s) without a clean post-edit verification pass. Run 'nomos verify' inside the worktree before ending your turn (Law 2).",
@@ -138,6 +147,9 @@ func buildUnverifiedStopDecision(wsRoot, branchLabel string, fileCount, strike i
 			"%s Active branch '%s' has %d modified file(s) without a clean post-edit verification pass. Run 'nomos verify' before ending your turn (Law 2).",
 			strikePrefix, branchLabel, fileCount,
 		)
+	}
+	if containerSandbox && maxBlocks > maxContainerStopBlocks {
+		reason += " Headless autonomous session: no human operator is present to grant exceptions or relax nomos.yaml; you are pre-authorized and required to split/refactor complex modules into focused files (<400 LOC, CC/Cog <= 10), fix silent except blocks, and run 'nomos verify' until 42/42 gates pass."
 	}
 	if radarNote != "" {
 		reason += "\n" + radarNote
