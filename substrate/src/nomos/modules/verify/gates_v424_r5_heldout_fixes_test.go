@@ -8,6 +8,7 @@ import (
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/ratchet"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
 
@@ -116,7 +117,7 @@ export function d(v: unknown) { if (typeof v !== "object") { return ["d"]; } ret
 	editedPy := py + "\ndef chk_e(v):\n    if not isinstance(v, bool): return [\"err_e\"]\n    return []\n"
 	mustWriteVerifyFile(t, filepath.Join(dir, "chk.py"), editedPy)
 	ctx := &vscope.VerifyContext{RepoRoot: dir, WorktreePath: dir}
-	bfHits := evaluateNetNewBrownfieldClonesAndSlop(
+	bfHits := ratchet.EvaluateNetNewBrownfieldClonesAndSlop(
 		ctx,
 		dir,
 		map[string][]byte{"chk.py": []byte(editedPy)},

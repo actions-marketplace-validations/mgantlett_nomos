@@ -3,9 +3,6 @@ package verify
 
 import (
 	"fmt"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"go/parser"
 	"go/token"
 	"os"
@@ -14,6 +11,10 @@ import (
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/mem"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/ratchet"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
 
 const (
@@ -60,8 +61,8 @@ func EvaluateFastFileRadar(repoRoot, filePath string) (*FastFileRadarResult, err
 	evaluateFastDesignSlopAndHygiene(ctx, wtRoot, absPath, res.File, data, res)
 	warnPct := applyHotScopeRadarReflex(ctx, repoRoot, wtRoot, absPath, data, res)
 	evaluateFastASTBudgets(ctx, wtRoot, absPath, data, warnPct, res)
-	t := resolveThresholds(ctx)
-	if v := evaluateNetNewMicroFileViolation(ctx, wtRoot, absPath, t.MaxPackageFiles, t.MaxFileLOC, countBytesLines(data)); v != "" {
+	t := ratchet.ResolveThresholds(ctx)
+	if v := ratchet.EvaluateNetNewMicroFileViolation(ctx, wtRoot, absPath, t.MaxPackageFiles, t.MaxFileLOC, ratchet.CountBytesLines(data)); v != "" {
 		res.Breaches = append(res.Breaches, v)
 	}
 	return res, nil
@@ -144,12 +145,12 @@ func evaluateFastForbiddenLiterals(ctx *vscope.VerifyContext, wtRoot, absPath st
 		return
 	}
 	hits := scanFileForLiterals(wtRoot, absPath, clean)
-	hits = filterRatchetedForbiddenLiterals(ctx, wtRoot, absPath, clean, hits)
+	hits = ratchet.FilterRatchetedForbiddenLiterals(ctx, wtRoot, absPath, clean, hits, scanFileForLiterals)
 	res.Breaches = append(res.Breaches, hits...)
 }
 
 func evaluateFastASTBudgets(ctx *vscope.VerifyContext, wtRoot, absPath string, data []byte, warnPct int, res *FastFileRadarResult) {
-	t := resolveThresholds(ctx)
+	t := ratchet.ResolveThresholds(ctx)
 	rep, err := astdebt.AnalyzeFileDebt(absPath, data, t.MaxComplexity, t.MaxFuncLOC)
 	if err != nil || rep == nil {
 		return
@@ -159,9 +160,9 @@ func evaluateFastASTBudgets(ctx *vscope.VerifyContext, wtRoot, absPath string, d
 	evaluateFastGoIdiomAndUpstreamChecks(ctx, wtRoot, absPath, data, res)
 
 	if vscope.IsBrownfieldRatchetActive(ctx) {
-		if baseBytes, ok := loadBaselineFileBytes(ctx, wtRoot, absPath); ok {
+		if baseBytes, ok := ratchet.LoadBaselineFileBytes(ctx, wtRoot, absPath); ok {
 			if baseRep, bErr := astdebt.AnalyzeFileDebt(absPath, baseBytes, t.MaxComplexity, t.MaxFuncLOC); bErr == nil && baseRep != nil {
-				evaluateRatchetedFastBudgets(rep, baseRep, t, warnPct, isUpstreamSurgicalRatchet(ctx), res)
+				evaluateRatchetedFastBudgets(rep, baseRep, t, warnPct, ratchet.IsUpstreamSurgicalRatchet(ctx), res)
 				enrichRatchetedCDSBreach(res, data, baseBytes, t)
 				return
 			}
@@ -183,20 +184,20 @@ func evaluateFastGoIdiomAndUpstreamChecks(ctx *vscope.VerifyContext, wtRoot, abs
 	if strings.HasSuffix(absPath, ".go") {
 		fset := token.NewFileSet()
 		if node, err := parser.ParseFile(fset, absPath, data, 0); err == nil {
-			cur := CheckGoSwitchDefaultOrder(node, fset, res.File)
-			res.Breaches = append(res.Breaches, filterNetNewLineViolations(ctx, wtRoot, absPath, cur, func(baseBytes []byte) []string {
+			cur := ratchet.CheckGoSwitchDefaultOrder(node, fset, res.File)
+			res.Breaches = append(res.Breaches, ratchet.FilterNetNewLineViolations(ctx, wtRoot, absPath, cur, func(baseBytes []byte) []string {
 				bFset := token.NewFileSet()
 				bNode, bErr := parser.ParseFile(bFset, absPath, baseBytes, 0)
 				if bErr != nil {
 					return nil
 				}
-				return CheckGoSwitchDefaultOrder(bNode, bFset, res.File)
+				return ratchet.CheckGoSwitchDefaultOrder(bNode, bFset, res.File)
 			})...)
 		}
 	}
-	if isUpstreamSurgicalRatchet(ctx) {
-		if _, existed := loadBaselineFileBytes(ctx, wtRoot, absPath); !existed {
-			if v := checkNetNewCopyrightEmail(res.File, data, resolveGitAuthorEmail(ctx, wtRoot)); v != "" {
+	if ratchet.IsUpstreamSurgicalRatchet(ctx) {
+		if _, existed := ratchet.LoadBaselineFileBytes(ctx, wtRoot, absPath); !existed {
+			if v := ratchet.CheckNetNewCopyrightEmail(res.File, data, ratchet.ResolveGitAuthorEmail(ctx, wtRoot)); v != "" {
 				res.Breaches = append(res.Breaches, v)
 			}
 		}
@@ -210,7 +211,7 @@ func evaluateRatchetedFastBudgets(rep, baseRep *astdebt.FileDebtReport, t astdeb
 			checkRatchetedMetricWithPct("cognitive debt", rep.DebtScore, baseRep.DebtScore, t.MaxCDS, warnPct, res)
 		}
 	}
-	baseFns := indexBaselineFunctionDebts(baseRep.Functions)
+	baseFns := ratchet.IndexBaselineFunctionDebts(baseRep.Functions)
 	effMaxComp := astdebt.EffectiveMaxComplexity(res.File, t.MaxComplexity)
 	for _, fn := range rep.Functions {
 		bfn, existed := baseFns[fn.Name]
@@ -224,26 +225,11 @@ func evaluateRatchetedFastBudgets(rep, baseRep *astdebt.FileDebtReport, t astdeb
 	}
 }
 
-func indexBaselineFunctionDebts(funcs []astdebt.FunctionDebt) map[string]astdebt.FunctionDebt {
-	byName := make(map[string]astdebt.FunctionDebt, len(funcs))
-	for _, bfn := range funcs {
-		prev, exists := byName[bfn.Name]
-		if !exists {
-			byName[bfn.Name] = bfn
-			continue
-		}
-		prev.LOC = maxInt(prev.LOC, bfn.LOC)
-		prev.Complexity = maxInt(prev.Complexity, bfn.Complexity)
-		byName[bfn.Name] = prev
-	}
-	return byName
-}
-
 func checkRatchetedMetricWithPct(label string, val, baseVal, limit, warnPct int, res *FastFileRadarResult) {
 	if limit <= 0 {
 		return
 	}
-	ceil := maxInt(limit, baseVal)
+	ceil := ratchet.MaxInt(limit, baseVal)
 	if val > ceil {
 		res.Breaches = append(res.Breaches, formatRatchetedBreachWithRecipe(res.File, label, val, ceil, baseVal))
 		return
@@ -269,7 +255,7 @@ func formatRatchetedBreachWithRecipe(relFile, label string, val, ceil, baseVal i
 func enrichRatchetedCDSBreach(res *FastFileRadarResult, curSrc, baseSrc []byte, t astdebt.Thresholds) {
 	for i, b := range res.Breaches {
 		if strings.HasPrefix(b, "cognitive debt ") {
-			res.Breaches[i] = PrescribeRatchetedCDSRecipe(res.File, curSrc, baseSrc, t)
+			res.Breaches[i] = ratchet.PrescribeRatchetedCDSRecipe(res.File, curSrc, baseSrc, t)
 			return
 		}
 	}
@@ -311,7 +297,7 @@ func resolveRadarPrimaryRoot(repoRoot, wtRoot string) string {
 }
 
 func evaluateFastHotScopeProbes(ctx *vscope.VerifyContext, absPath, relFile string, data []byte, res *FastFileRadarResult) {
-	maxParams := resolveThresholds(ctx).MaxFuncParams
+	maxParams := ratchet.ResolveThresholds(ctx).MaxFuncParams
 	if maxParams <= 0 {
 		maxParams = astdebt.MaxFunctionParams
 	}
@@ -326,54 +312,4 @@ func evaluateFastHotScopeProbes(ctx *vscope.VerifyContext, absPath, relFile stri
 		return
 	}
 	res.Breaches = append(res.Breaches, scanPolyglotAntiShim(absPath, relFile)...)
-}
-
-const maxSatelliteMicroFileLOC = 90
-
-var canonicalStructFileNames = map[string]bool{
-	"doc.go": true, "main.go": true, "constants.go": true, "types.go": true,
-	"errors.go": true, "mod.rs": true, "lib.rs": true, "__init__.py": true,
-	"index.ts": true, "index.js": true,
-}
-
-// evaluateNetNewMicroFileViolation flags net-new micro-files in crowded packages when a sibling can absorb them.
-func evaluateNetNewMicroFileViolation(ctx *vscope.VerifyContext, root, absPath string, maxFiles, maxFileLOC, fileLOC int) string {
-	if maxFiles <= 0 {
-		maxFiles = astdebt.DefaultThresholds().MaxPackageFiles
-	}
-	if maxFiles < 10 || fileLOC <= 0 || fileLOC >= maxSatelliteMicroFileLOC || !isNetNewMicroFileCandidate(ctx, root, absPath) {
-		return ""
-	}
-	curCount := countDirNonTestSourceFiles(filepath.Dir(absPath))
-	if curCount < (maxFiles*65+99)/100 {
-		return ""
-	}
-	bestName, bestLOC := findSmallestReceptiveSibling(absPath, maxFileLOC, fileLOC)
-	if bestName == "" {
-		return ""
-	}
-	relSlash := relativeOrFullPath(root, absPath)
-	return fmt.Sprintf("%s (%d LOC) is a net-new micro-file fragment in high-fanout package %s (%d/%d files) -> [1-TURN RECIPE: fold %s into cohesive sibling %s (%d LOC) or extract a sub-package (Law 6)]",
-		relSlash, fileLOC, filepath.ToSlash(filepath.Dir(relSlash)), curCount, maxFiles, filepath.Base(absPath), bestName, bestLOC)
-}
-
-func isNetNewMicroFileCandidate(ctx *vscope.VerifyContext, root, absPath string) bool {
-	if ctx != nil && (ctx.AllFiles || ctx.IsBaseline || isUpstreamSurgicalRatchet(ctx)) {
-		return false
-	}
-	ext := filepath.Ext(absPath)
-	if strings.EqualFold(ext, astdebt.ExtSvelte) || canonicalStructFileNames[strings.ToLower(filepath.Base(absPath))] {
-		return false
-	}
-	if strings.EqualFold(ext, astdebt.ExtGo) {
-		if raw, err := os.ReadFile(absPath); err == nil && hasLeadingGoBuildTag(raw) {
-			return false
-		}
-	}
-	gitRoot := resolveGitTreeRootForPath(ctx, root, absPath)
-	if gitRoot == "" || resolveBaselineCommitRef(ctx, gitRoot) == "" {
-		return false
-	}
-	_, existed := loadBaselineFileBytes(ctx, root, absPath)
-	return !existed
 }

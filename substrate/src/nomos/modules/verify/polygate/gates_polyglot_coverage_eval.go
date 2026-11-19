@@ -1,13 +1,10 @@
-// Package verify implements polyglot statement coverage evaluation across LCOV, Cobertura/JaCoCo, SimpleCov, and Python trace.
-package verify
+// Package polygate implements polyglot statement coverage evaluation across LCOV, Cobertura/JaCoCo, SimpleCov, and Python trace.
+package polygate
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/polyrun"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -18,9 +15,14 @@ import (
 	"time"
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/config"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/polyrun"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/ratchet"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
 
-const probeIDCoverage = "coverage"
+// ProbeIDCoverage identifies the canonical statement coverage probe.
+const ProbeIDCoverage = "coverage"
 
 const pyStdlibTraceRunner = `import importlib.util, inspect, io, os, sys, trace, unittest
 root = os.path.realpath(sys.argv[1])
@@ -128,28 +130,29 @@ if tot > 0:
     print("NOMOS_PY_COV:{:.2f}".format((hit * 100.0) / tot))
 `
 
-func evaluatePolyglotCoverageGate(gateName string, ctx *vscope.VerifyContext, root string) *vscope.GateResult {
+// EvaluatePolyglotCoverageGate measures polyglot statement coverage, test breadth, and boundary mutants.
+func EvaluatePolyglotCoverageGate(gateName string, ctx *vscope.VerifyContext, root string) *vscope.GateResult {
 	start := time.Now()
 	pct, source, failMsg := measureWorkspacePolyglotCoverage(ctx, root)
 	elapsed := time.Since(start)
 	if failMsg != "" {
 		return &vscope.GateResult{
-			GateName: gateName, ProbeID: probeIDCoverage, Law: 2, Ring: RingDynamic,
+			GateName: gateName, ProbeID: ProbeIDCoverage, Law: 2, Ring: ringDynamic,
 			Passed: false, Message: failMsg,
 			Remedy: "resolve failing polyglot unit tests before evaluating statement coverage",
 		}
 	}
 	if source == "" {
 		return &vscope.GateResult{
-			GateName: gateName, ProbeID: probeIDCoverage, Law: 2, Ring: RingDynamic,
+			GateName: gateName, ProbeID: ProbeIDCoverage, Law: 2, Ring: ringDynamic,
 			Passed: true, Message: "no Go or polyglot coverage suite detected in scope",
 		}
 	}
-	configured := resolveThresholds(ctx).MinCoverage
+	configured := ratchet.ResolveThresholds(ctx).MinCoverage
 	effThreshold := resolveEffectivePolyglotCoverageThreshold(ctx, root, configured, pct)
 	if pct < effThreshold {
 		return &vscope.GateResult{
-			GateName: gateName, ProbeID: probeIDCoverage, Law: 2, Ring: RingDynamic,
+			GateName: gateName, ProbeID: ProbeIDCoverage, Law: 2, Ring: ringDynamic,
 			Passed:  false,
 			Message: fmt.Sprintf("polyglot statement coverage %.1f%% (%s) is below minimum required %.1f%%", pct, source, effThreshold),
 			Remedy:  resolvePolyglotCoverageRemedy(root, effThreshold),
@@ -162,7 +165,7 @@ func evaluatePolyglotCoverageGate(gateName string, ctx *vscope.VerifyContext, ro
 		return mutRes
 	}
 	return &vscope.GateResult{
-		GateName: gateName, ProbeID: probeIDCoverage, Law: 2, Ring: RingDynamic,
+		GateName: gateName, ProbeID: ProbeIDCoverage, Law: 2, Ring: ringDynamic,
 		Passed:  true,
 		Message: fmt.Sprintf("polyglot statement coverage %.1f%% (%s) meets required threshold (>= %.1f%%)", pct, source, effThreshold),
 	}
@@ -191,7 +194,7 @@ func measureWorkspacePolyglotCoverage(ctx *vscope.VerifyContext, root string) (f
 	if pct, label, ok := discoverCoverageArtifact(root); ok {
 		return pct, label, ""
 	}
-	if resolveEffectiveCoverageMode(ctx) == config.CoverageModeArtifact {
+	if ResolveEffectiveCoverageMode(ctx) == config.CoverageModeArtifact {
 		return 0, "", ""
 	}
 	return runLivePolyglotCoverageProbes(ctx, root)

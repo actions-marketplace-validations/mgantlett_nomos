@@ -1,5 +1,5 @@
-// Package verify implements 11-language TDD paired-test verification across strict, ratchet, diff, and off modes.
-package verify
+// Package polygate implements 11-language TDD paired-test verification across strict, ratchet, diff, and off modes.
+package polygate
 
 import (
 	"fmt"
@@ -13,6 +13,7 @@ import (
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/config"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/ratchet"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
 
@@ -23,7 +24,8 @@ var tddImplIgnoredNames = map[string]bool{
 	"app.d.ts": true, "ambient.d.ts": true, "env.d.ts": true,
 }
 
-func resolveEffectiveTDDMode(ctx *vscope.VerifyContext) string {
+// ResolveEffectiveTDDMode computes the active TDD mode considering strict_mode overrides.
+func ResolveEffectiveTDDMode(ctx *vscope.VerifyContext) string {
 	cfg := vscope.ResolveVerifyConfig(ctx)
 	if cfg != nil && strings.TrimSpace(cfg.Governance.QualityGates.TDDMode) != "" {
 		mode := cfg.Governance.QualityGates.EffectiveTDDMode()
@@ -41,7 +43,8 @@ func resolveEffectiveTDDMode(ctx *vscope.VerifyContext) string {
 	return config.TDDModeStrict
 }
 
-func resolveEffectiveCoverageMode(ctx *vscope.VerifyContext) string {
+// ResolveEffectiveCoverageMode computes the active coverage execution mode considering strict_mode overrides.
+func ResolveEffectiveCoverageMode(ctx *vscope.VerifyContext) string {
 	cfg := vscope.ResolveVerifyConfig(ctx)
 	if cfg != nil && (ctx == nil || !ctx.Strict) {
 		return cfg.Governance.QualityGates.EffectiveCoverageMode()
@@ -64,7 +67,8 @@ func hasGoPairedTestsForModified(root, absDir string, modified []string) bool {
 	return true
 }
 
-func isPolyglotImplFileForTDD(name string) bool {
+// IsPolyglotImplFileForTDD reports whether name is a non-test polyglot implementation file subject to TDD checks.
+func IsPolyglotImplFileForTDD(name string) bool {
 	lower := strings.ToLower(name)
 	if isPolyglotTestFilePath(lower) || strings.HasSuffix(lower, ".d.ts") || tddImplIgnoredNames[lower] || vscope.IsNonLogicToolConfigFile(lower) {
 		return false
@@ -141,7 +145,7 @@ func classifyPolyglotDirEntries(entries []os.DirEntry) ([]string, bool) {
 		}
 		if isPolyglotTestFilePath(name) {
 			hasLocalTest = true
-		} else if isPolyglotImplFileForTDD(name) {
+		} else if IsPolyglotImplFileForTDD(name) {
 			implFiles = append(implFiles, name)
 		}
 	}
@@ -170,7 +174,7 @@ func evaluateBrownfieldPolyglotTDD(ctx *vscope.VerifyContext, root string, modif
 	if len(polyFiles) == 0 {
 		return nil
 	}
-	mode := resolveEffectiveTDDMode(ctx)
+	mode := ResolveEffectiveTDDMode(ctx)
 	hasModTest := hasModifiedTestFile(modified) || (mode != config.TDDModeDiff && HasScratchPolyglotTests(root))
 	hasRepoSuite := hasRepositoryPolyglotTests(root)
 	hasManifest := hasPolyglotTestManifest(root)
@@ -191,7 +195,7 @@ func evaluateBrownfieldPolyglotTDD(ctx *vscope.VerifyContext, root string, modif
 }
 
 func isPolyglotFileSatisfyingBrownfieldTDD(ctx *vscope.VerifyContext, root, rel, mode string, hasModTest, hasRepoSuite, hasManifest bool) bool {
-	if !isPolyglotImplFileForTDD(filepath.Base(rel)) || vscope.IsTDDExcludedRel(ctx, root, rel) {
+	if !IsPolyglotImplFileForTDD(filepath.Base(rel)) || vscope.IsTDDExcludedRel(ctx, root, rel) {
 		return true
 	}
 	absPath := filepath.Join(root, rel)
@@ -211,7 +215,7 @@ func satisfiesUnpairedPolyglotTDD(ctx *vscope.VerifyContext, root, absPath, mode
 	if mode == config.TDDModeStrict {
 		return !hasManifest && !hasRepoSuite
 	}
-	_, existedOnBaseline := loadBaselineFileBytes(ctx, root, absPath)
+	_, existedOnBaseline := ratchet.LoadBaselineFileBytes(ctx, root, absPath)
 	if existedOnBaseline {
 		return hasRepoSuite || !hasManifest
 	}
@@ -220,7 +224,8 @@ func satisfiesUnpairedPolyglotTDD(ctx *vscope.VerifyContext, root, absPath, mode
 
 const maxTestComplexity = 25
 
-func evaluateTestComplexityViolations(ctx *vscope.VerifyContext, root string) []string {
+// EvaluateTestComplexityViolations enforces cyclomatic complexity ceilings on test functions.
+func EvaluateTestComplexityViolations(ctx *vscope.VerifyContext, root string) []string {
 	var testFuncs []astdebt.FunctionMetric
 	fset := token.NewFileSet()
 
@@ -237,11 +242,11 @@ func evaluateTestComplexityViolations(ctx *vscope.VerifyContext, root string) []
 		}
 		if strings.HasSuffix(path, astdebt.ExtGo) {
 			if node, pErr := parser.ParseFile(fset, path, nil, 0); pErr == nil {
-				collectFunctionMetrics(node, fset, rel, &testFuncs)
+				ratchet.CollectFunctionMetrics(node, fset, rel, &testFuncs)
 			}
 			return nil
 		}
-		collectPolyglotComplexity(path, rel, &testFuncs)
+		ratchet.CollectPolyglotComplexity(path, rel, &testFuncs)
 		return nil
 	})
 	if walkErr != nil {
@@ -258,26 +263,26 @@ func evaluateTestComplexityViolations(ctx *vscope.VerifyContext, root string) []
 }
 
 func filterRatchetedTestComplexity(ctx *vscope.VerifyContext, root string, funcs []astdebt.FunctionMetric) []astdebt.FunctionMetric {
-	ratchet := vscope.IsBrownfieldRatchetActive(ctx)
+	ratchetActive := vscope.IsBrownfieldRatchetActive(ctx)
 	baseCache := make(map[string]map[string]astdebt.FunctionMetric)
 	var out []astdebt.FunctionMetric
 	for _, fn := range funcs {
 		if fn.Complexity <= maxTestComplexity {
 			continue
 		}
-		if !ratchet {
+		if !ratchetActive {
 			out = append(out, fn)
 			continue
 		}
 		baseMap, loaded := baseCache[fn.File]
 		if !loaded {
 			absPath := filepath.Join(root, fn.File)
-			if baseBytes, ok := loadBaselineFileBytes(ctx, root, absPath); ok {
-				baseMap = parseBaselineFunctions(absPath, fn.File, baseBytes)
+			if baseBytes, ok := ratchet.LoadBaselineFileBytes(ctx, root, absPath); ok {
+				baseMap = ratchet.ParseBaselineFunctions(absPath, fn.File, baseBytes)
 			}
 			baseCache[fn.File] = baseMap
 		}
-		if baseMap != nil && fn.Complexity <= maxInt(maxTestComplexity, baseMap[fn.Name].Complexity) {
+		if baseMap != nil && fn.Complexity <= ratchet.MaxInt(maxTestComplexity, baseMap[fn.Name].Complexity) {
 			continue
 		}
 		out = append(out, fn)
@@ -285,9 +290,8 @@ func filterRatchetedTestComplexity(ctx *vscope.VerifyContext, root string, funcs
 	return out
 }
 
-// hasCoupledGoPackageTests verifies that *_test.go files in dir reference at least one
-// local package symbol when production .go files declare testable functions or types.
-func hasCoupledGoPackageTests(dir string) bool {
+// HasCoupledGoPackageTests verifies that *_test.go files in dir reference at least one declared package symbol.
+func HasCoupledGoPackageTests(dir string) bool {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return false
@@ -302,7 +306,6 @@ func hasCoupledGoPackageTests(dir string) bool {
 		}
 		parsed, pErr := parser.ParseFile(fset, filepath.Join(dir, e.Name()), nil, 0)
 		if pErr != nil {
-			// Defer syntax error reporting to GoToolchainGate rather than double-flagging TDD.
 			return true
 		}
 		if strings.HasSuffix(e.Name(), astdebt.SuffixGoTest) {

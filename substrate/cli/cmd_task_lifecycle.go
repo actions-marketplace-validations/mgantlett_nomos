@@ -4,7 +4,6 @@ package cli
 
 import (
 	"fmt"
-	"github.com/mgantlett/nomos/substrate/cli/diag"
 	"github.com/mgantlett/nomos/substrate/cli/taskui"
 	"github.com/mgantlett/nomos/substrate/cli/tui"
 	"io"
@@ -19,8 +18,6 @@ import (
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/mem"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/task"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"github.com/spf13/cobra"
 )
 
@@ -275,57 +272,6 @@ func updateActiveLeasePhase(taskKey, phase string) {
 			fmt.Fprintf(os.Stderr, "⚠️  Warning: failed to update lease phase: %v\n", sErr)
 		}
 	}
-}
-
-func executeGateCheckForTask(taskKey string) (*verify.PipelineReport, error) {
-	repoRoot, worktreePath := resolveTaskGateTargets(taskKey)
-	if cached := loadValidWorktreeVerifyReceipt(repoRoot, worktreePath, taskKey, time.Now()); cached != nil {
-		fmt.Printf("🔍 %s %s %s\n",
-			tui.UiSuccessStyle.Render("DoD Verification Succeeded:"),
-			tui.UiBoldValueStyle.Render(fmt.Sprintf("%d/%d gates passed", cached.GatesPassed, cached.GatesTotal)),
-			tui.UiMutedStyle.Render("(clean-tree receipt cache)"))
-		return cached, nil
-	}
-
-	ctx := &vscope.VerifyContext{
-		RepoRoot:     repoRoot,
-		WorktreePath: worktreePath,
-		TaskID:       taskKey,
-		Phase:        "REVIEW",
-	}
-	pipeline := verify.NewPipeline(verify.DefaultBaselineGates())
-	report, err := pipeline.Execute(ctx)
-	diag.RecordVerificationAnomalies(repoRoot, taskKey, "task-review", report, err)
-	if err != nil {
-		invalidateWorktreeVerifyReceipt(repoRoot, worktreePath)
-		return nil, err
-	}
-	if !report.Passed {
-		invalidateWorktreeVerifyReceipt(repoRoot, worktreePath)
-		recordFailedReportTraps(repoRoot, worktreePath, taskKey, report)
-		return nil, formatFailedTaskGateReport(report)
-	}
-	saveWorktreeVerifyReceipt(repoRoot, worktreePath, taskKey, report)
-	fmt.Printf("🔍 %s %s\n",
-		tui.UiSuccessStyle.Render("DoD Verification Succeeded:"),
-		tui.UiBoldValueStyle.Render(fmt.Sprintf("%d/%d gates passed", report.GatesPassed, report.GatesTotal)))
-	return report, nil
-}
-
-func formatFailedTaskGateReport(report *verify.PipelineReport) error {
-	var failedMsgs []string
-	for _, res := range report.GateResults {
-		if !res.Passed {
-			if res.GateName == "Plane Separation Invariant" {
-				nErr := types.NewNomosError(types.ErrCodeCrossPlaneMutation, "%s", res.Message)
-				nErr.Remedy = res.Remedy
-				return nErr
-			}
-			failedMsgs = append(failedMsgs, fmt.Sprintf("%s: %s", res.GateName, res.Message))
-		}
-	}
-	return types.NewNomosError(types.ErrCodeInvariant, "DoD verification failed: %d/%d gates passed\n  - %s",
-		report.GatesPassed, report.GatesTotal, strings.Join(failedMsgs, "\n  - "))
 }
 
 func newTaskAbortCmd() *cobra.Command {

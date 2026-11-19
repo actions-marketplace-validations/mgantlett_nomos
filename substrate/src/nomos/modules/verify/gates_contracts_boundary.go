@@ -304,3 +304,61 @@ func readDeclaredEnvVars(filePath string) (map[string]bool, error) {
 	}
 	return declared, scanner.Err()
 }
+
+func scanProhibitedCommands(root string, prohibited []string) []string {
+	if len(prohibited) == 0 {
+		return nil
+	}
+	banned := make(map[string]bool, len(prohibited))
+	for _, p := range prohibited {
+		if clean := strings.TrimSpace(p); clean != "" {
+			banned[clean] = true
+		}
+	}
+	cliDirs := []string{filepath.Join(root, "substrate", "cli"), filepath.Join(root, "cli")}
+	fset := token.NewFileSet()
+	var violations []string
+	for _, dir := range cliDirs {
+		if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+			continue
+		}
+		if wErr := filepath.Walk(dir, func(path string, info os.FileInfo, walkErr error) error {
+			if walkErr != nil || info.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+				return nil
+			}
+			violations = append(violations, scanFileProhibitedCobraUse(fset, path, banned)...)
+			return nil
+		}); wErr != nil {
+			continue
+		}
+	}
+	return violations
+}
+
+func scanFileProhibitedCobraUse(fset *token.FileSet, path string, banned map[string]bool) []string {
+	node, err := parser.ParseFile(fset, path, nil, 0)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	ast.Inspect(node, func(n ast.Node) bool {
+		kv, ok := n.(*ast.KeyValueExpr)
+		if !ok {
+			return true
+		}
+		ident, ok := kv.Key.(*ast.Ident)
+		if !ok || ident.Name != "Use" {
+			return true
+		}
+		lit, ok := kv.Value.(*ast.BasicLit)
+		if !ok || lit.Kind != token.STRING {
+			return true
+		}
+		fields := strings.Fields(strings.Trim(lit.Value, "`\""))
+		if len(fields) > 0 && banned[fields[0]] {
+			out = append(out, fmt.Sprintf("%s: registers prohibited CLI command %q", path, fields[0]))
+		}
+		return true
+	})
+	return out
+}

@@ -1,12 +1,9 @@
-// Package verify implements zero-dependency live coverage probes for Node V8, Ruby stdlib Coverage, and .NET XPlat.
-package verify
+// Package polygate implements zero-dependency live coverage probes for Node V8, Ruby stdlib Coverage, and .NET XPlat.
+package polygate
 
 import (
 	"context"
 	"encoding/json"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/polyrun"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"net/url"
 	"os"
 	"os/exec"
@@ -14,6 +11,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/polyrun"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/ratchet"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
 
 const rubyStdlibCoverageScript = `require "coverage"
@@ -142,7 +144,7 @@ func collectV8ScriptRanges(absRoot string, raw []byte, out map[string][]v8RangeC
 		if scriptPath == "" || !strings.HasPrefix(scriptPath, absRoot+string(filepath.Separator)) {
 			continue
 		}
-		if vscope.IsExcludedPolyglotDir(filepath.ToSlash(scriptPath)) || !isPolyglotImplFileForTDD(filepath.Base(scriptPath)) {
+		if vscope.IsExcludedPolyglotDir(filepath.ToSlash(scriptPath)) || !IsPolyglotImplFileForTDD(filepath.Base(scriptPath)) {
 			continue
 		}
 		for _, fn := range s.Functions {
@@ -191,7 +193,7 @@ func evaluateV8ByteHits(srcLen int, ranges []v8RangeCov) []bool {
 		widths[i] = srcLen + 1
 	}
 	for _, r := range ranges {
-		start := maxInt(0, r.StartOffset)
+		start := ratchet.MaxInt(0, r.StartOffset)
 		end := astdebt.MinInt(srcLen, r.EndOffset)
 		span := end - start
 		if span <= 0 {

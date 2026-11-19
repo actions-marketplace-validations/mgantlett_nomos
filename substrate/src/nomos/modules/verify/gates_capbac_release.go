@@ -4,7 +4,6 @@ package verify
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -17,6 +16,9 @@ import (
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/storage"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/types"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/polygate"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/ratchet"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
 
 func init() {
@@ -252,12 +254,32 @@ func collectPolyglotStringLiteralsFromBytes(path string, data []byte, counts map
 	}
 }
 
+func isIgnoredLiteral(val string) bool {
+	if len(val) <= 3 {
+		return true
+	}
+	if strings.Contains(val, "%") || strings.HasPrefix(val, "http") || strings.HasPrefix(val, "SELECT") {
+		return true
+	}
+	if strings.Contains(val, "/") || strings.Contains(val, "\n") || strings.Contains(val, `\n`) || strings.Contains(val, "- ") || strings.HasSuffix(val, ".go") || strings.Contains(val, `:"`) {
+		return true
+	}
+	common := map[string]bool{
+		"intent": true, "substrate": true, "main": true, "REVIEW": true,
+		"EDIT": true, "PLAN": true, "IDLE": true, "SYNC": true, "DONE": true,
+		"strings": true, "status": true, "error": true, "nomos": true,
+		"message": true, "id": true, "data": true,
+		"type": true, "name": true, "json": true, "ok": true, "text": true,
+	}
+	return common[val]
+}
+
 func countPolyglotFiles(root string, dirs []string) (int, error) {
 	total := 0
 	for _, relDir := range dirs {
 		fullDir := filepath.Join(root, relDir)
 		err := filepath.Walk(fullDir, func(p string, info os.FileInfo, err error) error {
-			if err == nil && info != nil && !info.IsDir() && isPolyglotTargetFile(p) {
+			if err == nil && info != nil && !info.IsDir() && ratchet.IsPolyglotTargetFile(p) {
 				total++
 			}
 			return nil
@@ -299,7 +321,7 @@ func (g *ZeroFilesystemAliasGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.G
 		return nil, types.NewNomosError(types.ErrCodeCore, "zero filesystem alias walk failed: %v", err)
 	}
 
-	violations := EvaluateZeroFilesystemAliasViolations(symlinks)
+	violations := polygate.EvaluateZeroFilesystemAliasViolations(symlinks)
 	if len(violations) > 0 {
 		return &vscope.GateResult{
 			GateName: g.Name(),

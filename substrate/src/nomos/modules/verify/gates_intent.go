@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/config"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/ratchet"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
 
@@ -36,7 +37,7 @@ func (g *IntentTraceabilityGate) Name() string { return "Intent Traceability Val
 // Evaluate verifies exported functions possess valid @intent traceability tags.
 func (g *IntentTraceabilityGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
 	root := resolveIntentRoot(ctx)
-	targetDir := findSubstrateSrc(root)
+	targetDir := ratchet.FindSubstrateSrc(root)
 	if oblFailure := evaluateConfiguredObligations(g.Name(), ctx, root, targetDir); oblFailure != nil {
 		return oblFailure, nil
 	}
@@ -249,7 +250,7 @@ func (g *ThresholdIntegrityGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.Ga
 			Passed: true, Message: "strict_mode disabled; custom repository thresholds active",
 		}, nil
 	}
-	t := resolveThresholds(ctx)
+	t := ratchet.ResolveThresholds(ctx)
 	if t.MaxComplexity > 15 || t.MaxFileLOC > 400 || t.MaxFuncLOC > 60 || t.MinCoverage < 55.0 {
 		return &vscope.GateResult{
 			GateName: g.Name(), ProbeID: probeThresholdIntegrity, Law: 7, Ring: RingCryptographic,

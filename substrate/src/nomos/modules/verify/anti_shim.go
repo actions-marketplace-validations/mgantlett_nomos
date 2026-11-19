@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/ratchet"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"go/ast"
 	"go/parser"
@@ -170,7 +171,7 @@ func (g *AntiShimGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, 
 	var violations []string
 
 	err := vscope.WalkTargetFiles(ctx, root, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil || info == nil || info.IsDir() || !isPolyglotTargetFile(path) {
+		if walkErr != nil || info == nil || info.IsDir() || !ratchet.IsPolyglotTargetFile(path) {
 			return nil
 		}
 		violations = append(violations, evaluateAntiShimTargetFile(ctx, root, path, forbiddenShims)...)
@@ -198,9 +199,9 @@ func evaluateAntiShimTargetFile(ctx *vscope.VerifyContext, root, path string, fo
 		relPath = path
 	}
 	fileViolations := collectLiveAntiShimViolations(ctx, root, path, relPath, forbiddenShims)
-	return filterNetNewLineViolations(ctx, root, path, fileViolations, func(baseBytes []byte) []string {
+	return ratchet.FilterNetNewLineViolations(ctx, root, path, fileViolations, func(baseBytes []byte) []string {
 		baseOut := scanCoverageAndImportFallbackViolations(root, relPath, baseBytes)
-		tempOut := scanTempBaselineViolations(path, baseBytes, func(tmpPath string) []string {
+		tempOut := ratchet.ScanTempBaselineViolations(path, baseBytes, func(tmpPath string) []string {
 			out := scanCustomForbiddenShims(tmpPath, relPath, forbiddenShims)
 			if !strings.HasSuffix(path, ".go") {
 				return append(out, scanPolyglotAntiShim(tmpPath, relPath)...)

@@ -3,18 +3,19 @@ package verify
 
 import (
 	"fmt"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/polyrun"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/polygate"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/polyrun"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/ratchet"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
 
 func init() {
@@ -66,7 +67,7 @@ func scanBoundaryLeaks(root string, prohibited []string) []string {
 	}
 	fset := token.NewFileSet()
 	var violations []string
-	filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+	if wErr := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
@@ -83,9 +84,10 @@ func scanBoundaryLeaks(root string, prohibited []string) []string {
 			}
 		}
 		return nil
-	})
-	violations = append(violations, scanPolyglotBoundaryLeaks(root, prohibited)...)
-	return violations
+	}); wErr != nil {
+		return violations
+	}
+	return append(violations, polygate.ScanPolyglotBoundaryLeaks(root, prohibited)...)
 }
 
 // EcosystemDriftGate asserts zero uncommitted trunk mutations (Cell 3.2, Law 3).
@@ -219,15 +221,10 @@ func (g *MagicStringsGate) Name() string {
 	return "Magic Strings & Topology Hardcoding Gate (Law 5)"
 }
 
-var (
-	rawPortLiteralRe   = regexp.MustCompile(`['"]:(?:[1-9][0-9]{3,4})['"]`)
-	localhostLiteralRe = regexp.MustCompile(`https?://(?:localhost|127\.0\.0\.1):[0-9]{4,5}`)
-)
-
 // Evaluate checks source files for hardcoded network literals.
 func (g *MagicStringsGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
 	root := resolveArchRoot(ctx)
-	targetDir := findSubstrateSrc(root)
+	targetDir := ratchet.FindSubstrateSrc(root)
 	if targetDir == "" {
 		return &vscope.GateResult{
 			GateName: g.Name(), ProbeID: "magic_strings", Law: 5, Ring: RingSyntactic,
@@ -235,24 +232,7 @@ func (g *MagicStringsGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResu
 		}, nil
 	}
 
-	var findings []string
-	vscope.WalkTargetFiles(ctx, targetDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		if !isPolyglotTargetFile(path) && !strings.HasSuffix(path, ".go") {
-			return nil
-		}
-		if hasNetNewMagicNetworkLiteral(ctx, targetDir, path) {
-			rel, rErr := filepath.Rel(targetDir, path)
-			if rErr != nil {
-				rel = path
-			}
-			findings = append(findings, rel)
-		}
-		return nil
-	})
-
+	findings := collectNetNewMagicNetworkFindings(ctx, targetDir)
 	if len(findings) > 0 {
 		return &vscope.GateResult{
 			GateName: g.Name(), ProbeID: "magic_strings", Law: 5, Ring: RingSyntactic,
@@ -268,21 +248,6 @@ func (g *MagicStringsGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResu
 	}, nil
 }
 
-func hasNetNewMagicNetworkLiteral(ctx *vscope.VerifyContext, targetDir, path string) bool {
-	data, err := os.ReadFile(path)
-	if err != nil || !matchesMagicNetworkLiteral(string(data)) {
-		return false
-	}
-	if baseBytes, ok := loadBaselineFileBytes(ctx, targetDir, path); ok && matchesMagicNetworkLiteral(string(baseBytes)) {
-		return false
-	}
-	return true
-}
-
-func matchesMagicNetworkLiteral(s string) bool {
-	return rawPortLiteralRe.MatchString(s) || localhostLiteralRe.MatchString(s)
-}
-
 // MagicStringDuplicationGate detects repeated string literals in code (Cell 5.1, Law 5).
 type MagicStringDuplicationGate struct{}
 
@@ -292,7 +257,7 @@ func (g *MagicStringDuplicationGate) Name() string { return "Magic String Duplic
 // Evaluate scans AST for string literals repeated > 2 times within packages.
 func (g *MagicStringDuplicationGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
 	root := resolveArchRoot(ctx)
-	targetDir := findSubstrateSrc(root)
+	targetDir := ratchet.FindSubstrateSrc(root)
 	if targetDir == "" {
 		return &vscope.GateResult{
 			GateName: g.Name(), ProbeID: "magic_string_duplication", Law: 5, Ring: RingSyntactic,
@@ -303,24 +268,26 @@ func (g *MagicStringDuplicationGate) Evaluate(ctx *vscope.VerifyContext) (*vscop
 	counts := make(map[string]map[string]int)
 	baseCounts := make(map[string]map[string]int)
 	fset := token.NewFileSet()
-	vscope.WalkTargetFiles(ctx, targetDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info == nil || info.IsDir() || !isPolyglotTargetFile(path) {
+	if wErr := vscope.WalkTargetFiles(ctx, targetDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info == nil || info.IsDir() || !ratchet.IsPolyglotTargetFile(path) {
 			return nil
 		}
-		collectBaselineStringLiterals(ctx, targetDir, path, fset, baseCounts)
+		ratchet.CollectBaselineStringLiterals(ctx, targetDir, path, fset, baseCounts, collectPolyglotStringLiteralsFromBytes, collectGoStringLiteralsFromSrc)
 		if !strings.HasSuffix(path, ".go") {
 			collectPolyglotStringLiterals(path, counts)
 			return nil
 		}
 		collectGoStringLiterals(fset, path, counts)
 		return nil
-	})
+	}); wErr != nil {
+		return nil, wErr
+	}
 
-	maxDup := resolveThresholds(ctx).MaxMagicStringDuplication
+	maxDup := ratchet.ResolveThresholds(ctx).MaxMagicStringDuplication
 	var duplicates []string
 	for pkg, m := range counts {
 		for str, cnt := range m {
-			ceil := maxInt(maxDup, baseCounts[pkg][str])
+			ceil := ratchet.MaxInt(maxDup, baseCounts[pkg][str])
 			if cnt > ceil {
 				duplicates = append(duplicates, fmt.Sprintf("%s: %q repeated %d times", pkg, str, cnt))
 			}
@@ -340,26 +307,6 @@ func (g *MagicStringDuplicationGate) Evaluate(ctx *vscope.VerifyContext) (*vscop
 		GateName: g.Name(), ProbeID: "magic_string_duplication", Law: 5, Ring: RingSyntactic,
 		Passed: true, Message: "zero magic string duplications detected",
 	}, nil
-}
-
-func isIgnoredLiteral(val string) bool {
-	if len(val) <= 3 {
-		return true
-	}
-	if strings.Contains(val, "%") || strings.HasPrefix(val, "http") || strings.HasPrefix(val, "SELECT") {
-		return true
-	}
-	if strings.Contains(val, "/") || strings.Contains(val, "\n") || strings.Contains(val, `\n`) || strings.Contains(val, "- ") || strings.HasSuffix(val, ".go") || strings.Contains(val, `:"`) {
-		return true
-	}
-	common := map[string]bool{
-		"intent": true, "substrate": true, "main": true, "REVIEW": true,
-		"EDIT": true, "PLAN": true, "IDLE": true, "SYNC": true, "DONE": true,
-		"strings": true, "status": true, "error": true, "nomos": true,
-		"message": true, "id": true, "data": true,
-		"type": true, "name": true, "json": true, "ok": true, "text": true,
-	}
-	return common[val]
 }
 
 func resolveArchRoot(ctx *vscope.VerifyContext) string {

@@ -1,5 +1,5 @@
-// Package verify enforces zero-baseline .tmp/tests/ steering and polyglot test-breadth rigor (Law 2).
-package verify
+// Package polygate enforces zero-baseline .tmp/tests/ steering and polyglot test-breadth rigor (Law 2).
+package polygate
 
 import (
 	"fmt"
@@ -55,7 +55,8 @@ func hasZeroBaselineTrackedTests(root string) bool {
 	return true
 }
 
-func resolveTDDRemedy(root string) string {
+// ResolveTDDRemedy returns a context-appropriate TDD remediation guidance message for root.
+func ResolveTDDRemedy(root string) string {
 	if hasZeroBaselineTrackedTests(root) {
 		return "keep deliverables clean by authoring tests under .tmp/tests/ (.tmp/tests/test_<module>.py, .tmp/tests/<module>.test.ts, .tmp/tests/<module>_test.rb, *_test.go, #[cfg(test)])"
 	}
@@ -77,7 +78,7 @@ func evaluatePolyglotTestRigor(ctx *vscope.VerifyContext, root, source string) *
 	if !isZeroBase && (ctx == nil || !ctx.Strict) {
 		return nil
 	}
-	implFiles, prodLOC := collectRigorImplFilesAndLOC(ctx, root)
+	_, prodLOC := collectRigorImplFilesAndLOC(ctx, root)
 	if prodLOC < minProdLOCForBreadthGate {
 		return nil
 	}
@@ -85,13 +86,12 @@ func evaluatePolyglotTestRigor(ctx *vscope.VerifyContext, root, source string) *
 	cases, asserts := countPolyglotTestsAndAssertions(testFiles)
 	if cases < minPolyglotTestCases || asserts < minPolyglotAssertions {
 		return &vscope.GateResult{
-			GateName: "Statement Coverage Invariant (Law 2)", ProbeID: probeIDCoverage, Law: 2, Ring: RingDynamic,
+			GateName: "Statement Coverage Invariant (Law 2)", ProbeID: ProbeIDCoverage, Law: 2, Ring: ringDynamic,
 			Passed:  false,
 			Message: fmt.Sprintf("shallow polyglot test breadth for %d production LOC (%d test case(s), %d assertion(s)); minimum %d test cases and %d assertions required", prodLOC, cases, asserts, minPolyglotTestCases, minPolyglotAssertions),
 			Remedy:  "add >= 8 distinct test cases in .tmp/tests/ covering exact boundary inclusivity (<= vs <), multi-item/multi-trigger sequences, wildcard globs, and invalid inputs",
 		}
 	}
-	_ = implFiles
 	return nil
 }
 
@@ -100,9 +100,12 @@ func collectRigorImplFilesAndLOC(ctx *vscope.VerifyContext, root string) ([]stri
 		return scoped, sumNonEmptyCodeLOC(scoped)
 	}
 	var files []string
-	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	if walkErr := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		return visitRigorImplEntry(root, path, d, err, &files)
-	})
+	}); walkErr != nil {
+		sort.Strings(files)
+		return files, sumNonEmptyCodeLOC(files)
+	}
 	sort.Strings(files)
 	return files, sumNonEmptyCodeLOC(files)
 }
@@ -194,7 +197,7 @@ func collectWorkspaceAndScratchTests(root string) []string {
 }
 
 func walkTestFilesUnder(dir string, dst *[]string) {
-	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+	if walkErr := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d == nil {
 			return nil
 		}
@@ -208,7 +211,9 @@ func walkTestFilesUnder(dir string, dst *[]string) {
 			*dst = append(*dst, path)
 		}
 		return nil
-	})
+	}); walkErr != nil {
+		return
+	}
 }
 
 func countPolyglotTestsAndAssertions(absFiles []string) (int, int) {
@@ -224,48 +229,6 @@ func countPolyglotTestsAndAssertions(absFiles []string) (int, int) {
 		}
 	}
 	return cases, asserts
-}
-
-// resolveThresholds merges statutory DefaultThresholds with active nomos.yaml overrides.
-func resolveThresholds(ctx *vscope.VerifyContext) astdebt.Thresholds {
-	out := astdebt.DefaultThresholds()
-	out.MaxMagicStringDuplication = 10
-	cfg := vscope.ResolveVerifyConfig(ctx)
-	if cfg == nil {
-		return out
-	}
-	ct := cfg.Governance.QualityGates.Thresholds
-	if ct.MaxFileLOC > 0 {
-		out.MaxFileLOC = ct.MaxFileLOC
-	}
-	if ct.MaxFuncLOC > 0 {
-		out.MaxFuncLOC = ct.MaxFuncLOC
-	}
-	if ct.MaxCyclomaticComplexity > 0 {
-		out.MaxComplexity = ct.MaxCyclomaticComplexity
-	}
-	if ct.MaxCognitiveDebtScore > 0 {
-		out.MaxCDS = ct.MaxCognitiveDebtScore
-	}
-	if ct.MinCommentDensityPct >= 0 {
-		out.MinDocstringDensity = ct.MinCommentDensityPct
-	}
-	if ct.MinTestCoveragePct >= 0 {
-		out.MinCoverage = float64(ct.MinTestCoveragePct)
-	}
-	if ct.MinCloneLines > 0 {
-		out.MinCloneLines = ct.MinCloneLines
-	}
-	if ct.MaxFuncParams > 0 {
-		out.MaxFuncParams = ct.MaxFuncParams
-	}
-	if ct.MaxMagicStringDuplication > 0 {
-		out.MaxMagicStringDuplication = ct.MaxMagicStringDuplication
-	}
-	if ct.MaxPackageFiles > 0 {
-		out.MaxPackageFiles = ct.MaxPackageFiles
-	}
-	return out
 }
 
 // EvaluateCoverageViolations checks if test coverage meets minimum threshold.

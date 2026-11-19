@@ -14,6 +14,7 @@ import (
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/storage"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/task"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/ratchet"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
 
@@ -75,11 +76,11 @@ func InspectWorktreeNormativeSurface(worktreeDir string) NormativeSurfaceDelta {
 	if strings.TrimSpace(worktreeDir) == "" {
 		return NormativeSurfaceDelta{}
 	}
-	baseRef := resolveClosestTrunkBaseRef(worktreeDir)
+	baseRef := ratchet.ResolveClosestTrunkBaseRef(worktreeDir)
 	if baseRef == "" {
 		return NormativeSurfaceDelta{}
 	}
-	changedPaths := collectChangedPathsAgainstBase(worktreeDir, baseRef)
+	changedPaths := ratchet.CollectChangedPathsAgainstBase(worktreeDir, baseRef)
 	if len(changedPaths) == 0 {
 		return NormativeSurfaceDelta{}
 	}
@@ -96,10 +97,10 @@ func InspectWorktreeNormativeSurface(worktreeDir string) NormativeSurfaceDelta {
 	pruneSurvivingPackageGovTokens(worktreeDir, govSet)
 
 	return NormativeSurfaceDelta{
-		CLISurface:      sortedSetKeys(cliSet),
-		ConfigSchema:    sortedSetKeys(cfgSet),
-		GovernanceRules: sortedSetKeys(govSet),
-		TemplateAssets:  sortedSetKeys(tplSet),
+		CLISurface:      ratchet.SortedSetKeys(cliSet),
+		ConfigSchema:    ratchet.SortedSetKeys(cfgSet),
+		GovernanceRules: ratchet.SortedSetKeys(govSet),
+		TemplateAssets:  ratchet.SortedSetKeys(tplSet),
 	}
 }
 

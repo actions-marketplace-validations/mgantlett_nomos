@@ -5,6 +5,7 @@ import (
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/polyrun"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/ratchet"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"go/ast"
 	"go/parser"
@@ -32,7 +33,7 @@ func (g *UncheckedErrorsGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateR
 	var violations []string
 
 	err := vscope.WalkTargetFiles(ctx, root, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil || info == nil || info.IsDir() || !isPolyglotTargetFile(path) {
+		if walkErr != nil || info == nil || info.IsDir() || !ratchet.IsPolyglotTargetFile(path) {
 			return nil
 		}
 		if !strings.HasSuffix(path, ".go") {
@@ -49,7 +50,7 @@ func (g *UncheckedErrorsGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateR
 		}
 		var fileViolations []string
 		checkUncheckedErrorsInFile(node, fset, rel, &fileViolations)
-		violations = append(violations, filterNetNewLineViolations(ctx, root, path, fileViolations, func(baseBytes []byte) []string {
+		violations = append(violations, ratchet.FilterNetNewLineViolations(ctx, root, path, fileViolations, func(baseBytes []byte) []string {
 			baseFset := token.NewFileSet()
 			baseNode, bErr := parser.ParseFile(baseFset, path, baseBytes, 0)
 			if bErr != nil {
@@ -138,7 +139,7 @@ func evaluatePolyglotUncheckedFile(ctx *vscope.VerifyContext, root, path string)
 	}
 	rel = filepath.ToSlash(rel)
 	cur := astdebt.CheckPolyglotUncheckedErrors(ext, rel, raw)
-	return filterNetNewLineViolations(ctx, root, path, cur, func(baseBytes []byte) []string {
+	return ratchet.FilterNetNewLineViolations(ctx, root, path, cur, func(baseBytes []byte) []string {
 		return astdebt.CheckPolyglotUncheckedErrors(ext, rel, baseBytes)
 	})
 }
@@ -179,7 +180,7 @@ func (g *GoToolchainGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResul
 		return polyFail, nil
 	}
 	stacks = append(stacks, polyStacks...)
-	if corpusLabel, corpusFail := evaluateCorpusOracle(g.Name(), ctx, root); corpusFail != nil {
+	if corpusLabel, corpusFail := ratchet.EvaluateCorpusOracle(g.Name(), ctx, root); corpusFail != nil {
 		return corpusFail, nil
 	} else if corpusLabel != "" {
 		stacks = append(stacks, corpusLabel)

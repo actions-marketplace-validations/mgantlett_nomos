@@ -1,5 +1,5 @@
-// Package verify implements upstream surgical ratchet checks, Go switch default order AST analysis, and corpus probes.
-package verify
+// Package ratchet implements upstream surgical ratchet checks, Go switch default order AST analysis, and corpus probes.
+package ratchet
 
 import (
 	"bufio"
@@ -36,7 +36,8 @@ type upstreamBaseSnapshot struct {
 	curBytes  []byte
 }
 
-func isUpstreamSurgicalRatchet(ctx *vscope.VerifyContext) bool {
+// IsUpstreamSurgicalRatchet reports whether upstream surgical ratchet mode is active.
+func IsUpstreamSurgicalRatchet(ctx *vscope.VerifyContext) bool {
 	if !vscope.IsBrownfieldRatchetActive(ctx) {
 		return false
 	}
@@ -46,7 +47,7 @@ func isUpstreamSurgicalRatchet(ctx *vscope.VerifyContext) bool {
 
 // EvaluateUpstreamSurgicalViolations blocks collateral baseline function extractions and mismatched copyright emails (@intent tree_sitter_ast_gate_spec.md #QualityGatesConfig).
 func EvaluateUpstreamSurgicalViolations(ctx *vscope.VerifyContext, root string, metrics []astdebt.FileMetric) []string {
-	if !isUpstreamSurgicalRatchet(ctx) {
+	if !IsUpstreamSurgicalRatchet(ctx) {
 		return nil
 	}
 	newFiles, baseSnaps := partitionUpstreamFiles(ctx, root, metrics)
@@ -54,13 +55,13 @@ func EvaluateUpstreamSurgicalViolations(ctx *vscope.VerifyContext, root string, 
 		return nil
 	}
 	var violations []string
-	gitEmail := resolveGitAuthorEmail(ctx, root)
+	gitEmail := ResolveGitAuthorEmail(ctx, root)
 	for _, rel := range newFiles {
 		raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
 		if err != nil {
 			continue
 		}
-		if v := checkNetNewCopyrightEmail(rel, raw, gitEmail); v != "" {
+		if v := CheckNetNewCopyrightEmail(rel, raw, gitEmail); v != "" {
 			violations = append(violations, v)
 		}
 	}
@@ -73,7 +74,7 @@ func partitionUpstreamFiles(ctx *vscope.VerifyContext, root string, metrics []as
 	var baseSnaps []upstreamBaseSnapshot
 	for _, m := range metrics {
 		absPath := filepath.Join(root, m.Name)
-		baseBytes, ok := loadBaselineFileBytes(ctx, root, absPath)
+		baseBytes, ok := LoadBaselineFileBytes(ctx, root, absPath)
 		if !ok {
 			newFiles = append(newFiles, filepath.ToSlash(m.Name))
 			continue
@@ -100,8 +101,8 @@ func detectCollateralFunctionMoves(root string, newFiles []string, baseSnaps []u
 	}
 	var violations []string
 	for _, snap := range baseSnaps {
-		baseFns := parseBaselineFunctions(snap.absPath, snap.rel, snap.baseBytes)
-		curFns := parseBaselineFunctions(snap.absPath, snap.rel, snap.curBytes)
+		baseFns := ParseBaselineFunctions(snap.absPath, snap.rel, snap.baseBytes)
+		curFns := ParseBaselineFunctions(snap.absPath, snap.rel, snap.curBytes)
 		for _, fnName := range sortedMetricMapKeys(baseFns) {
 			if _, retained := curFns[fnName]; retained {
 				continue
@@ -122,7 +123,7 @@ func indexNewFileFunctions(root string, newFiles []string) map[string]string {
 		if err != nil {
 			continue
 		}
-		for fnName := range parseBaselineFunctions(absPath, rel, raw) {
+		for fnName := range ParseBaselineFunctions(absPath, rel, raw) {
 			if _, exists := owners[fnName]; !exists {
 				owners[fnName] = rel
 			}
@@ -140,7 +141,8 @@ func sortedMetricMapKeys(m map[string]astdebt.FunctionMetric) []string {
 	return keys
 }
 
-func resolveGitAuthorEmail(ctx *vscope.VerifyContext, root string) string {
+// ResolveGitAuthorEmail returns the git user.email configured for root.
+func ResolveGitAuthorEmail(ctx *vscope.VerifyContext, root string) string {
 	gitRoot := resolveGitTreeRootForPath(ctx, root, root)
 	if gitRoot == "" {
 		gitRoot = root
@@ -152,7 +154,8 @@ func resolveGitAuthorEmail(ctx *vscope.VerifyContext, root string) string {
 	return strings.TrimSpace(string(out))
 }
 
-func checkNetNewCopyrightEmail(rel string, content []byte, gitEmail string) string {
+// CheckNetNewCopyrightEmail flags mismatched third-party copyright emails in leading header comments.
+func CheckNetNewCopyrightEmail(rel string, content []byte, gitEmail string) string {
 	scanner := bufio.NewScanner(bytes.NewReader(content))
 	for lineIdx := 0; lineIdx < 15 && scanner.Scan(); lineIdx++ {
 		line := strings.TrimSpace(scanner.Text())
@@ -209,7 +212,8 @@ func checkSwitchBodyClauseOrder(stmts []ast.Stmt, fset *token.FileSet, relPath s
 	return out
 }
 
-func evaluateGoSwitchIdiomViolations(ctx *vscope.VerifyContext, root string) []string {
+// EvaluateGoSwitchIdiomViolations walks target Go files and flags non-terminal default clauses.
+func EvaluateGoSwitchIdiomViolations(ctx *vscope.VerifyContext, root string) []string {
 	var violations []string
 	walkErr := vscope.WalkTargetFiles(ctx, root, func(path string, info os.FileInfo, wErr error) error {
 		if wErr != nil || info == nil || info.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
@@ -219,9 +223,9 @@ func evaluateGoSwitchIdiomViolations(ctx *vscope.VerifyContext, root string) []s
 		if pErr != nil || node == nil {
 			return nil
 		}
-		rel := relativeOrFullPath(root, path)
+		rel := RelativeOrFullPath(root, path)
 		cur := CheckGoSwitchDefaultOrder(node, fset, rel)
-		violations = append(violations, filterNetNewLineViolations(ctx, root, path, cur, func(baseBytes []byte) []string {
+		violations = append(violations, FilterNetNewLineViolations(ctx, root, path, cur, func(baseBytes []byte) []string {
 			bFset := token.NewFileSet()
 			bNode, bErr := parser.ParseFile(bFset, path, baseBytes, 0)
 			if bErr != nil {
@@ -237,7 +241,8 @@ func evaluateGoSwitchIdiomViolations(ctx *vscope.VerifyContext, root string) []s
 	return violations
 }
 
-func evaluateCorpusOracle(gateName string, ctx *vscope.VerifyContext, root string) (string, *vscope.GateResult) {
+// EvaluateCorpusOracle executes governance.quality_gates.corpus_command when configured.
+func EvaluateCorpusOracle(gateName string, ctx *vscope.VerifyContext, root string) (string, *vscope.GateResult) {
 	cfg := vscope.ResolveVerifyConfig(ctx)
 	if cfg == nil || strings.TrimSpace(cfg.Governance.QualityGates.CorpusCommand) == "" {
 		return "", nil
@@ -267,7 +272,8 @@ func evaluateCorpusOracle(gateName string, ctx *vscope.VerifyContext, root strin
 	return "Corpus(0 regressions)", nil
 }
 
-func resolveClosestTrunkBaseRef(worktreeDir string) string {
+// ResolveClosestTrunkBaseRef returns the closest protected trunk merge-base SHA for worktreeDir.
+func ResolveClosestTrunkBaseRef(worktreeDir string) string {
 	bestBase := ""
 	bestDist := -1
 	for _, trunk := range workspace.ProtectedTrunkBranches {
@@ -298,23 +304,25 @@ func resolveClosestTrunkBaseRef(worktreeDir string) string {
 	return bestBase
 }
 
-func collectChangedPathsAgainstBase(worktreeDir, baseRef string) []string {
+// CollectChangedPathsAgainstBase lists tracked diff paths against baseRef plus untracked paths.
+func CollectChangedPathsAgainstBase(worktreeDir, baseRef string) []string {
 	seen := make(map[string]bool)
 	if diffOut, err := workspace.SafeGitCommand(worktreeDir, "diff", "--name-only", baseRef).Output(); err == nil {
-		for _, line := range nonEmptyLines(string(diffOut)) {
+		for _, line := range NonEmptyLines(string(diffOut)) {
 			seen[filepath.ToSlash(line)] = true
 		}
 	}
 	if untrackedOut, err := workspace.SafeGitCommand(worktreeDir, "ls-files", "--others", "--exclude-standard").Output(); err == nil {
-		for _, line := range nonEmptyLines(string(untrackedOut)) {
+		for _, line := range NonEmptyLines(string(untrackedOut)) {
 			seen[filepath.ToSlash(line)] = true
 		}
 	}
-	return sortedSetKeys(seen)
+	return SortedSetKeys(seen)
 }
 
-func evaluateBrownfieldArityRatchet(ctx *vscope.VerifyContext, root string, funcs []astdebt.FunctionMetric, thresh astdebt.Thresholds) []string {
-	if !vscope.IsBrownfieldRatchetActive(ctx) || isUpstreamSurgicalRatchet(ctx) || (ctx != nil && (ctx.IsBaseline || ctx.AllFiles)) {
+// EvaluateBrownfieldArityRatchet evaluates parameter arity, nesting, and cognitive ratchets on modified files.
+func EvaluateBrownfieldArityRatchet(ctx *vscope.VerifyContext, root string, funcs []astdebt.FunctionMetric, thresh astdebt.Thresholds) []string {
+	if !vscope.IsBrownfieldRatchetActive(ctx) || IsUpstreamSurgicalRatchet(ctx) || (ctx != nil && (ctx.IsBaseline || ctx.AllFiles)) {
 		return nil
 	}
 	seen := make(map[string]bool)
@@ -345,16 +353,16 @@ func evaluateSingleFileArityRatchet(ctx *vscope.VerifyContext, root, rel string,
 	allowed := maxParams
 	allowedNest := astdebt.MaxFunctionNesting
 	allowedCog := astdebt.DefaultMaxCognitiveComplexity(rel)
-	if baseBytes, ok := loadBaselineFileBytes(ctx, root, absPath); ok {
+	if baseBytes, ok := LoadBaselineFileBytes(ctx, root, absPath); ok {
 		if !vscope.IsWorktreeContext(ctx, root) && bytes.Equal(src, baseBytes) {
 			return nil
 		}
 		baseMaxP, baseMaxN, baseHighA, baseDeepN := astdebt.SummarizeFileArityAndNesting(rel, baseBytes, maxParams, astdebt.MaxFunctionNesting)
 		if baseHighA >= 0 && baseDeepN >= 0 {
-			allowed = maxInt(maxParams, baseMaxP)
-			allowedNest = maxInt(astdebt.MaxFunctionNesting, baseMaxN)
+			allowed = MaxInt(maxParams, baseMaxP)
+			allowedNest = MaxInt(astdebt.MaxFunctionNesting, baseMaxN)
 		}
-		allowedCog = maxInt(allowedCog, astdebt.MaxFileCognitiveComplexity(rel, baseBytes))
+		allowedCog = MaxInt(allowedCog, astdebt.MaxFileCognitiveComplexity(rel, baseBytes))
 	}
 	out := astdebt.EvaluateParameterArityViolations(rel, src, allowed)
 	out = append(out, astdebt.EvaluatePolyglotNestingViolations(rel, src, allowedNest)...)

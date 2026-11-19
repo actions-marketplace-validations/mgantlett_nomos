@@ -2,6 +2,7 @@ package verify
 
 import (
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/polygate"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/polyrun"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"os"
@@ -91,12 +92,12 @@ func TestHasCoupledGoPackageTests(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteGoFixture(t, filepath.Join(dir, "svc.go"), "package svc\n\ntype Config struct{ Port int }\nfunc Start(c Config) int { return c.Port }\n")
 	mustWriteGoFixture(t, filepath.Join(dir, "svc_test.go"), "package svc\n\nimport \"testing\"\nfunc TestNothing(t *testing.T) { if 1 != 1 { t.Fatal() } }\n")
-	if hasCoupledGoPackageTests(dir) {
+	if polygate.HasCoupledGoPackageTests(dir) {
 		t.Fatalf("expected hollow test referencing zero package symbols to return false")
 	}
 
 	mustWriteGoFixture(t, filepath.Join(dir, "svc_test.go"), "package svc\n\nimport \"testing\"\nfunc TestStart(t *testing.T) { if Start(Config{Port: 80}) != 80 { t.Fatal() } }\n")
-	if !hasCoupledGoPackageTests(dir) {
+	if !polygate.HasCoupledGoPackageTests(dir) {
 		t.Fatalf("expected coupled test referencing Start and Config to return true")
 	}
 }

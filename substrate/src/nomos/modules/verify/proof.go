@@ -2,8 +2,6 @@
 package verify
 
 import (
-	"fmt"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -13,6 +11,8 @@ import (
 	"time"
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/types"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/polygate"
 )
 
 // ProofReport summarizes the outcomes of the Three Mathematical Proofs of Gate Integrity (#GateIntegrityReport).
@@ -91,7 +91,6 @@ func EvaluateGateIntegrityAttestation(repoRoot string) (*ProofReport, error) {
 	return rep, nil
 }
 
-// findCodebaseGoFiles searches the root directory for scannable Go source files.
 func findCodebaseGoFiles(root string) []string {
 	var files []string
 	if wErr := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
@@ -115,7 +114,6 @@ func findCodebaseGoFiles(root string) []string {
 	return files
 }
 
-// sampleRealFunctions selects up to maxSamples representative functions distributed across distinct files.
 func sampleRealFunctions(files []string, maxSamples int) []*ast.FuncDecl {
 	if maxSamples <= 0 {
 		return nil
@@ -169,7 +167,7 @@ func EvaluateMutationSensitivity(root string, files []string) (int, int, error) 
 	killed, total := evaluateSampleAntiShimMutants(samples)
 
 	sprawlMetrics := []astdebt.FileMetric{{Name: "mutant_sprawl.go", LOC: 75}}
-	if len(EvaluateFileLOCViolations(sprawlMetrics, 60)) > 0 {
+	if len(polygate.EvaluateFileLOCViolations(sprawlMetrics, 60)) > 0 {
 		killed++
 	}
 	total++
@@ -259,7 +257,7 @@ func EvaluateMetamorphicSpecificity(scannedFiles []string) (int, int, error) {
 	}
 
 	cleanMetrics := []astdebt.FileMetric{{Name: "clean.go", LOC: 42}}
-	if len(EvaluateFileLOCViolations(cleanMetrics, 60)) == 0 {
+	if len(polygate.EvaluateFileLOCViolations(cleanMetrics, 60)) == 0 {
 		passed++
 	}
 	total++
@@ -292,62 +290,4 @@ func EvaluateMetamorphicSpecificity(scannedFiles []string) (int, int, error) {
 	total++
 
 	return passed, total, nil
-}
-
-func scanProhibitedCommands(root string, prohibited []string) []string {
-	if len(prohibited) == 0 {
-		return nil
-	}
-	banned := make(map[string]bool, len(prohibited))
-	for _, p := range prohibited {
-		if clean := strings.TrimSpace(p); clean != "" {
-			banned[clean] = true
-		}
-	}
-	cliDirs := []string{filepath.Join(root, "substrate", "cli"), filepath.Join(root, "cli")}
-	fset := token.NewFileSet()
-	var violations []string
-	for _, dir := range cliDirs {
-		if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
-			continue
-		}
-		if wErr := filepath.Walk(dir, func(path string, info os.FileInfo, walkErr error) error {
-			if walkErr != nil || info.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-				return nil
-			}
-			violations = append(violations, scanFileProhibitedCobraUse(fset, path, banned)...)
-			return nil
-		}); wErr != nil {
-			continue
-		}
-	}
-	return violations
-}
-
-func scanFileProhibitedCobraUse(fset *token.FileSet, path string, banned map[string]bool) []string {
-	node, err := parser.ParseFile(fset, path, nil, 0)
-	if err != nil {
-		return nil
-	}
-	var out []string
-	ast.Inspect(node, func(n ast.Node) bool {
-		kv, ok := n.(*ast.KeyValueExpr)
-		if !ok {
-			return true
-		}
-		ident, ok := kv.Key.(*ast.Ident)
-		if !ok || ident.Name != "Use" {
-			return true
-		}
-		lit, ok := kv.Value.(*ast.BasicLit)
-		if !ok || lit.Kind != token.STRING {
-			return true
-		}
-		fields := strings.Fields(strings.Trim(lit.Value, "`\""))
-		if len(fields) > 0 && banned[fields[0]] {
-			out = append(out, fmt.Sprintf("%s: registers prohibited CLI command %q", path, fields[0]))
-		}
-		return true
-	})
-	return out
 }
