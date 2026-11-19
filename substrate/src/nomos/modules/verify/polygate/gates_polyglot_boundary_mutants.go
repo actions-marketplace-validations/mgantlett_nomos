@@ -1,5 +1,5 @@
-// Package verify executes fast isolated relational boundary-mutant spot-checks on zero-baseline polyglot suites (Law 2).
-package verify
+// Package polygate executes fast isolated relational boundary-mutant spot-checks on zero-baseline polyglot suites (Law 2).
+package polygate
 
 import (
 	"context"
@@ -16,6 +16,7 @@ import (
 )
 
 const (
+	ringDynamic                    = "dynamic"
 	maxBoundaryMutantProbes        = 6
 	maxBoundaryBaselineElapsed     = 1500 * time.Millisecond
 	boundaryMutantExecTimeout      = 1500 * time.Millisecond
@@ -73,7 +74,7 @@ func evaluatePolyglotBoundaryMutants(ctx *vscope.VerifyContext, root, source str
 	survivors := probeBoundaryMutantsIsolated(ctx, root, source, sites)
 	if len(survivors) >= minBoundarySurvivingToFailGate {
 		return &vscope.GateResult{
-			GateName: "Statement Coverage Invariant (Law 2)", ProbeID: probeIDCoverage, Law: 2, Ring: RingDynamic,
+			GateName: "Statement Coverage Invariant (Law 2)", ProbeID: ProbeIDCoverage, Law: 2, Ring: ringDynamic,
 			Passed:  false,
 			Message: fmt.Sprintf("boundary-mutant spot-check failed (%d/%d relational boundary flips survived: %s)", len(survivors), len(sites), strings.Join(survivors, ", ")),
 			Remedy:  "verify exact <= vs < inclusivity against the specification and add explicit boundary test cases in .tmp/tests/",

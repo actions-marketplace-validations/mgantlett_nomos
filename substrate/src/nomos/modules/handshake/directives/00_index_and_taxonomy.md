@@ -59,7 +59,7 @@ Directives are mapped deterministically to agent reasoning phases via their fron
 
 | Directive Group | Filename Pattern | Governing Phases | Purpose & Machine Invariants |
 | :--- | :--- | :--- | :--- |
-| **Orientation** | `00_*.md` | `[IDLE, PLAN]` | System architecture, Tier 1 indirect control harness, taxonomy index. |
+| **Orientation** | `00_*.md` | `[IDLE, PLAN]` | System architecture, Tier 1 indirect control substrate, taxonomy index. |
 | **Handshake** | `handshake_*.md` | `[IDLE, PLAN]` | Workspace topology, dynamic path discovery, worktree boundaries. |
 | **Planning** | `plan_*.md` | `[PLAN]` | Task sizing, DAG dependencies, 2-plane singularity (`INT-*` / `SUB-*`). |
 | **Mutation** | `edit_*.md` | `[EDIT]` | Hermetic worktree mutations, refactoring disciplines, deprecated terms, Go & JSON Schema synthesis. |

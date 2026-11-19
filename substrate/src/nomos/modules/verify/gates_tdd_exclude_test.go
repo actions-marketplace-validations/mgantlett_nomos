@@ -1,6 +1,7 @@
 package verify
 
 import (
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/polygate"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"os"
 	"path/filepath"
@@ -28,10 +29,10 @@ func TestMatchTDDExcludeGlobAndConfigHygiene(t *testing.T) {
 		}
 	}
 
-	if isPolyglotImplFileForTDD("vite.config.ts") || isPolyglotImplFileForTDD("svelte.config.js") || isPolyglotImplFileForTDD("app.d.ts") {
+	if polygate.IsPolyglotImplFileForTDD("vite.config.ts") || polygate.IsPolyglotImplFileForTDD("svelte.config.js") || polygate.IsPolyglotImplFileForTDD("app.d.ts") {
 		t.Fatalf("expected build config and ambient declaration files to be ignored by TDDGate")
 	}
-	if !isPolyglotImplFileForTDD("trafficOverlay.ts") {
+	if !polygate.IsPolyglotImplFileForTDD("trafficOverlay.ts") {
 		t.Fatalf("expected TypeScript logic module to be tracked by TDDGate")
 	}
 }

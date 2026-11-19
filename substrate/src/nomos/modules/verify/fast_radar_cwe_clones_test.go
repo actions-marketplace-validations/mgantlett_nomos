@@ -23,6 +23,14 @@ func TestDetectPolyglotCWESinks_AndFastRadarCloneHint(t *testing.T) {
 	if hits := DetectPolyglotCWESinks("sqlglot/generator.py", transpilerSQL); len(hits) != 0 {
 		t.Fatalf("expected non-executing SQL string transpiler to pass, got: %v", hits)
 	}
+	sqliteStrftimeSQL := []byte("package storage\nimport \"database/sql\"\nfunc save(db *sql.DB, id string) error {\n\t_, err := db.Exec(`INSERT INTO leases (id, issued_at) VALUES (?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`, id)\n\treturn err\n}\n")
+	if hits := DetectPolyglotCWESinks("substrate/src/nomos/core/storage/leases.go", sqliteStrftimeSQL); len(hits) != 0 {
+		t.Fatalf("expected parameterized SQLite strftime VALUES clause to pass, got: %v", hits)
+	}
+	pyPercentInterpSQL := []byte("def insert_user(conn, name):\n    q = \"INSERT INTO users VALUES ('%s')\" % (name,)\n    conn.execute(q)\n")
+	if hits := DetectPolyglotCWESinks("repo/users.py", pyPercentInterpSQL); len(hits) == 0 || !strings.Contains(hits[0], "CWE-89") {
+		t.Fatalf("expected Python %%-interpolated VALUES SQLi to trigger CWE-89, got: %v", hits)
+	}
 
 	// 2. CWE-22 unconfined path traversal vs confined relative_to
 	vulnPath := []byte("from pathlib import Path\ndef read_tenant(base_dir, rel):\n    return (Path(base_dir) / rel).read_text()\n")

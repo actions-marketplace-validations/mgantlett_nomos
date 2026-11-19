@@ -1,11 +1,8 @@
-// Package verify implements baseline AST delta ratcheting for brownfield repositories.
-package verify
+// Package ratchet implements baseline AST delta ratcheting for brownfield repositories.
+package ratchet
 
 import (
-	"bytes"
 	"fmt"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"go/parser"
 	"go/token"
 	"os"
@@ -14,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
 
 func resolveGitTreeRootForPath(ctx *vscope.VerifyContext, fallbackRoot, absFile string) string {
@@ -62,7 +61,8 @@ func resolveBaselineCommitRef(ctx *vscope.VerifyContext, gitRoot string) string 
 	return ""
 }
 
-func loadBaselineFileBytes(ctx *vscope.VerifyContext, fallbackRoot, targetPath string) ([]byte, bool) {
+// LoadBaselineFileBytes reads targetPath from the closest Git baseline commit, resolving renames when moved.
+func LoadBaselineFileBytes(ctx *vscope.VerifyContext, fallbackRoot, targetPath string) ([]byte, bool) {
 	absFile, err := filepath.Abs(targetPath)
 	gitRoot := resolveGitTreeRootForPath(ctx, fallbackRoot, absFile)
 	if err != nil || gitRoot == "" {
@@ -85,25 +85,8 @@ func loadBaselineFileBytes(ctx *vscope.VerifyContext, fallbackRoot, targetPath s
 	return renamedOut, rShowErr == nil
 }
 
-func countBytesLines(data []byte) int {
-	if len(data) == 0 {
-		return 0
-	}
-	lines := bytes.Count(data, []byte{'\n'})
-	if data[len(data)-1] != '\n' {
-		lines++
-	}
-	return lines
-}
-
-func maxInt(a, b int) int {
-	if b > a {
-		return b
-	}
-	return a
-}
-
-func filterRatchetedFileLOC(ctx *vscope.VerifyContext, root string, metrics []astdebt.FileMetric, thresh astdebt.Thresholds) []astdebt.FileMetric {
+// FilterRatchetedFileLOC filters file LOC metrics against brownfield baseline ceilings.
+func FilterRatchetedFileLOC(ctx *vscope.VerifyContext, root string, metrics []astdebt.FileMetric, thresh astdebt.Thresholds) []astdebt.FileMetric {
 	if !vscope.IsBrownfieldRatchetActive(ctx) {
 		return metrics
 	}
@@ -112,15 +95,15 @@ func filterRatchetedFileLOC(ctx *vscope.VerifyContext, root string, metrics []as
 		if m.LOC <= thresh.MaxFileLOC {
 			continue
 		}
-		baseBytes, ok := loadBaselineFileBytes(ctx, root, filepath.Join(root, m.Name))
+		baseBytes, ok := LoadBaselineFileBytes(ctx, root, filepath.Join(root, m.Name))
 		if !ok {
 			filtered = append(filtered, m)
 			continue
 		}
-		if isUpstreamSurgicalRatchet(ctx) {
+		if IsUpstreamSurgicalRatchet(ctx) {
 			continue
 		}
-		baseLOC := countBytesLines(baseBytes)
+		baseLOC := CountBytesLines(baseBytes)
 		allowed := thresh.MaxFileLOC
 		if baseLOC > thresh.MaxFileLOC {
 			allowed = baseLOC + thresh.MaxFuncLOC
@@ -132,29 +115,31 @@ func filterRatchetedFileLOC(ctx *vscope.VerifyContext, root string, metrics []as
 	return filtered
 }
 
-func parseBaselineFunctions(absPath, rel string, content []byte) map[string]astdebt.FunctionMetric {
+// ParseBaselineFunctions parses baseline function metrics for Go or polyglot source bytes.
+func ParseBaselineFunctions(absPath, rel string, content []byte) map[string]astdebt.FunctionMetric {
 	var list []astdebt.FunctionMetric
 	if strings.HasSuffix(absPath, ".go") {
 		fset := token.NewFileSet()
 		if node, err := parser.ParseFile(fset, absPath, content, 0); err == nil {
-			collectFunctionMetrics(node, fset, rel, &list)
+			CollectFunctionMetrics(node, fset, rel, &list)
 		}
 	} else {
-		collectPolyglotComplexityFromBytes(absPath, rel, content, &list)
+		CollectPolyglotComplexityFromBytes(absPath, rel, content, &list)
 	}
 	byName := make(map[string]astdebt.FunctionMetric, len(list))
 	for _, fn := range list {
 		prev, exists := byName[fn.Name]
 		if exists {
-			fn.Complexity = maxInt(prev.Complexity, fn.Complexity)
-			fn.LOC = maxInt(prev.LOC, fn.LOC)
+			fn.Complexity = MaxInt(prev.Complexity, fn.Complexity)
+			fn.LOC = MaxInt(prev.LOC, fn.LOC)
 		}
 		byName[fn.Name] = fn
 	}
 	return byName
 }
 
-func filterRatchetedComplexity(ctx *vscope.VerifyContext, root string, funcs []astdebt.FunctionMetric, thresh astdebt.Thresholds) ([]astdebt.FunctionMetric, bool) {
+// FilterRatchetedComplexity filters function complexity and LOC metrics against brownfield baselines.
+func FilterRatchetedComplexity(ctx *vscope.VerifyContext, root string, funcs []astdebt.FunctionMetric, thresh astdebt.Thresholds) ([]astdebt.FunctionMetric, bool) {
 	if !vscope.IsBrownfieldRatchetActive(ctx) {
 		return filterStrictNonWorktreeComplexity(ctx, root, funcs)
 	}
@@ -176,8 +161,8 @@ func evaluateSingleRatchetedFunc(ctx *vscope.VerifyContext, root string, fn astd
 	baseMap, loaded := baseCache[fn.File]
 	if !loaded {
 		absPath := filepath.Join(root, fn.File)
-		if baseBytes, ok := loadBaselineFileBytes(ctx, root, absPath); ok {
-			baseMap = parseBaselineFunctions(absPath, fn.File, baseBytes)
+		if baseBytes, ok := LoadBaselineFileBytes(ctx, root, absPath); ok {
+			baseMap = ParseBaselineFunctions(absPath, fn.File, baseBytes)
 		}
 		baseCache[fn.File] = baseMap
 	}
@@ -186,10 +171,10 @@ func evaluateSingleRatchetedFunc(ctx *vscope.VerifyContext, root string, fn astd
 	}
 	baseFn := baseMap[fn.Name]
 	adj := fn
-	if fn.Complexity <= maxInt(effMax, baseFn.Complexity) {
+	if fn.Complexity <= MaxInt(effMax, baseFn.Complexity) {
 		adj.Complexity = effMax
 	}
-	if fn.LOC <= maxInt(maxLOC, baseFn.LOC) {
+	if fn.LOC <= MaxInt(maxLOC, baseFn.LOC) {
 		adj.LOC = maxLOC
 	}
 	return adj, adj.Complexity > effMax || adj.LOC > maxLOC
@@ -209,7 +194,7 @@ func EvaluatePackageFanOutViolations(ctx *vscope.VerifyContext, root string, met
 		}
 	}
 	for _, m := range metrics {
-		if v := evaluateNetNewMicroFileViolation(ctx, root, filepath.Join(root, m.Name), maxFiles, thresh.MaxFileLOC, m.LOC); v != "" {
+		if v := EvaluateNetNewMicroFileViolation(ctx, root, filepath.Join(root, m.Name), maxFiles, thresh.MaxFileLOC, m.LOC); v != "" {
 			violations = append(violations, v)
 		}
 	}
@@ -239,7 +224,7 @@ func evaluateSingleDirFanOut(ctx *vscope.VerifyContext, root, relDir string, max
 	ratchet := vscope.IsBrownfieldRatchetActive(ctx) || (ctx != nil && !ctx.Strict && !ctx.AllFiles && vscope.IsWorktreeContext(ctx, root))
 	if ratchet {
 		if baseCount, ok := countBaselineDirSourceFiles(ctx, root, absDir); ok {
-			ceil := maxInt(maxFiles, baseCount)
+			ceil := MaxInt(maxFiles, baseCount)
 			if curCount <= ceil {
 				return ""
 			}
@@ -258,7 +243,7 @@ func countDirNonTestSourceFiles(absDir string) int {
 	}
 	count := 0
 	for _, e := range entries {
-		if !e.IsDir() && isPolyglotTargetFile(filepath.Join(absDir, e.Name())) {
+		if !e.IsDir() && IsPolyglotTargetFile(filepath.Join(absDir, e.Name())) {
 			count++
 		}
 	}
@@ -289,7 +274,7 @@ func countBaselineDirSourceFiles(ctx *vscope.VerifyContext, fallbackRoot, absDir
 	}
 	count := 0
 	for _, name := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if name != "" && isPolyglotTargetFile(filepath.Join(cleanAbs, name)) {
+		if name != "" && IsPolyglotTargetFile(filepath.Join(cleanAbs, name)) {
 			count++
 		}
 	}
@@ -327,7 +312,6 @@ func subsetFuncsByModified(funcs []astdebt.FunctionMetric, modified []string) []
 	return out
 }
 
-// hasLeadingGoBuildTag detects Go build constraint comments before package declarations.
 func hasLeadingGoBuildTag(raw []byte) bool {
 	for _, line := range strings.Split(string(raw), "\n") {
 		trimmed := strings.TrimSpace(line)
@@ -344,7 +328,6 @@ func hasLeadingGoBuildTag(raw []byte) bool {
 	return false
 }
 
-// findSmallestReceptiveSibling returns the smallest same-extension sibling with headroom to absorb fileLOC.
 func findSmallestReceptiveSibling(absPath string, maxFileLOC, fileLOC int) (string, int) {
 	entries, err := os.ReadDir(filepath.Dir(absPath))
 	if err != nil || maxFileLOC <= 15 {
@@ -366,12 +349,12 @@ func findSmallestReceptiveSibling(absPath string, maxFileLOC, fileLOC int) (stri
 }
 
 func readReceptiveSiblingLOC(sibAbs string, isGo bool) int {
-	if !isPolyglotTargetFile(sibAbs) {
+	if !IsPolyglotTargetFile(sibAbs) {
 		return 0
 	}
 	sibRaw, err := os.ReadFile(sibAbs)
 	if err != nil || (isGo && hasLeadingGoBuildTag(sibRaw)) {
 		return 0
 	}
-	return countBytesLines(sibRaw)
+	return CountBytesLines(sibRaw)
 }

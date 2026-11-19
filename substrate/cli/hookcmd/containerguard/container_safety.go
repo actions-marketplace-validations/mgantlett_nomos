@@ -1,6 +1,4 @@
-// Package hookcmd implements Tier 1 agent adapters, software physics telemetry,
-// release readiness, upgrades, and CLI command dispatch contracts.
-package hookcmd
+package containerguard
 
 import (
 	"fmt"
@@ -8,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/capbac"
 )
 
@@ -17,18 +16,12 @@ var (
 	autonomousPrivEscRe   = regexp.MustCompile(`(?i)(?:--role\s+(?:maintainer|admin|owner)|--skip-checks|--recipient\s+[^\s]+@[^\s]+)`)
 	autonomousKeySealRe   = regexp.MustCompile(`(?i)\bseal\b[^\n]*(?:key|sign|secret|report)`)
 	autonomousDropFlagRe  = regexp.MustCompile(`(?i)\bdrop\b[^\n]*(?:--table|\btable\b)`)
-	heredocHeaderDelimRe  = regexp.MustCompile(`(?:^|[^<])<<-?\s*['"]?([A-Za-z_][A-Za-z0-9_]*)['"]?`)
-	heredocPipeExecRe     = regexp.MustCompile(`(?i)\|\s*(?:sqlite3|psql|mysql|mariadb|duckdb|sqlcmd|mongosh|redis-cli|sh|bash|dash|zsh|ksh|python3?|ruby|node)\b`)
-	hiddenDotScriptRe     = regexp.MustCompile(`(?i)(?:^|[\s"'=/])(\.[A-Za-z0-9_-]+)/([^\s"'` + "`" + `]+\.(?:py|sh|rb|pl|js))\b`)
 	untrustedOptScriptRe  = regexp.MustCompile(`(?i)/opt/([^/\s]+)/[^\s]+\.(?:py|sh)\b`)
 	postExfilTransportRe  = regexp.MustCompile(`(?i)(?:\bcurl\b[^\n]*(?:\s-(?:d|F|T)\b|--(?:data|data-raw|data-binary|data-urlencode|form|json|upload-file)\b|-X\s*(?:POST|PUT|PATCH)\b)|\bwget\b[^\n]*--post-(?:data|file)\b|requests\.(?:post|put|patch)\(|Request\([^\n]*method\s*=\s*['"](?:POST|PUT|PATCH)['"]|fetch\([^\n]*method\s*[:=]\s*['"](?:POST|PUT|PATCH)['"])`)
 
 	carrierInjectionCues = []string{
 		"--live", "--all", "curl -x post", "--data ", "drop table", "admin_exec",
 		"collaborator", "--role ", "curl ", "wget ", "chmod +x",
-	}
-	allowedHiddenDotDirs = map[string]bool{
-		".venv": true, ".tox": true, ".pytest_cache": true, ".nomos-bin": true, ".pyenv": true,
 	}
 	ifcSafeRuntimeTools = map[string]bool{
 		"sh": true, "bash": true, "dash": true, "python": true, "python3": true,
@@ -54,13 +47,14 @@ var (
 	}
 )
 
-func evaluateContainerMCPAndTrustGuard(p *HookPayload, baseCwd string, pol containerSandboxPolicy) HookDecision {
+// EvaluateMCPAndTrustGuard enforces MCP server/tool policies, ingress taint recording, and untrusted helper blocks.
+func EvaluateMCPAndTrustGuard(p *shellguard.HookPayload, baseCwd string, pol SandboxPolicy) shellguard.HookDecision {
 	if p == nil {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.AllowDecision()
 	}
 	if mcpInv, ok := capbac.ParseMCPInvocation(p.ToolName, p.TargetFile, p.ArgsDigest); ok {
 		if reason := checkMCPServerAndToolLists(mcpInv.Server, mcpInv.Action, pol); reason != "" {
-			return denyDecision(reason)
+			return shellguard.DenyDecision(reason)
 		}
 		recordContainerMCPReadTaint(baseCwd, mcpInv)
 	}
@@ -69,10 +63,10 @@ func evaluateContainerMCPAndTrustGuard(p *HookPayload, baseCwd string, pol conta
 	}
 	if p.CommandLine != "" {
 		if reason := checkShellMCPAndUntrustedExec(p.CommandLine, pol); reason != "" {
-			return denyDecision(reason)
+			return shellguard.DenyDecision(reason)
 		}
 	}
-	return HookDecision{Decision: hookDecisionAllow}
+	return shellguard.AllowDecision()
 }
 
 func recordContainerMCPReadTaint(baseCwd string, mcpInv capbac.MCPInvocation) {
@@ -93,7 +87,7 @@ func recordContainerUntrustedTaint(baseCwd string, label capbac.TaintLabel, sour
 	}
 }
 
-func checkMCPServerAndToolLists(server, action string, pol containerSandboxPolicy) string {
+func checkMCPServerAndToolLists(server, action string, pol SandboxPolicy) string {
 	if pol.UntrustedProject {
 		if len(pol.AllowedMCPServers) == 0 || !containsIgnoreCase(pol.AllowedMCPServers, server) {
 			return fmt.Sprintf("❌ [NOMOS INTERCEPT] Project Trust Violation (Law 7): Workspace MCP tool '%s.%s' is blocked in untrusted project mode.", server, action)
@@ -117,8 +111,8 @@ func checkMCPServerAndToolLists(server, action string, pol containerSandboxPolic
 	return ""
 }
 
-func checkShellMCPAndUntrustedExec(cmdLine string, pol containerSandboxPolicy) string {
-	for _, inv := range extractAllContainerCommandInvocations(cmdLine) {
+func checkShellMCPAndUntrustedExec(cmdLine string, pol SandboxPolicy) string {
+	for _, inv := range shellguard.ExtractAllContainerCommandInvocations(cmdLine) {
 		if strings.Contains(inv.Exe, "mcp") && len(inv.Args) > 0 {
 			action := inv.Args[0]
 			if containsIgnoreCase(pol.DeniedMCPTools, action) {
@@ -136,7 +130,7 @@ func checkShellMCPAndUntrustedExec(cmdLine string, pol containerSandboxPolicy) s
 }
 
 func isUntrustedHelperExec(raw string) bool {
-	if hasDisallowedHiddenDotScript(raw, true) {
+	if shellguard.HasDisallowedHiddenDotScript(raw, true) {
 		return true
 	}
 	for _, m := range untrustedOptScriptRe.FindAllStringSubmatch(raw, -1) {
@@ -150,34 +144,35 @@ func isUntrustedHelperExec(raw string) bool {
 	return false
 }
 
-func evaluateContainerSupplyChainEgress(p *HookPayload, pol containerSandboxPolicy) HookDecision {
+// EvaluateSupplyChainEgress enforces --ignore-scripts on Node installs and blocks non-loopback HTTP uploads.
+func EvaluateSupplyChainEgress(p *shellguard.HookPayload, pol SandboxPolicy) shellguard.HookDecision {
 	if p == nil || p.CommandLine == "" {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.AllowDecision()
 	}
 	if pol.IgnoreNpmScripts || pol.EgressMode == "offline" || pol.EgressMode == "allowlist" {
-		if dec := checkNodePkgInstallIgnoreScripts(p.CommandLine); dec.Decision == hookDecisionDeny {
+		if dec := checkNodePkgInstallIgnoreScripts(p.CommandLine); dec.Decision == shellguard.DecisionDeny {
 			return dec
 		}
 	}
 	if !pol.DisableAutonomousSideEffectGuard && postExfilTransportRe.MatchString(p.CommandLine) && !targetsOnlyLoopbackURLs(p) {
-		return denyDecision("❌ [NOMOS INTERCEPT] Outbound Payload Airlock (Law 7): HTTP state-mutating upload/POST to non-loopback endpoint is prohibited in autonomous sandbox mode.")
+		return shellguard.DenyDecision("❌ [NOMOS INTERCEPT] Outbound Payload Airlock (Law 7): HTTP state-mutating upload/POST to non-loopback endpoint is prohibited in autonomous sandbox mode.")
 	}
-	return HookDecision{Decision: hookDecisionAllow}
+	return shellguard.AllowDecision()
 }
 
-func checkNodePkgInstallIgnoreScripts(cmdLine string) HookDecision {
-	for _, inv := range extractAllContainerCommandInvocations(cmdLine) {
+func checkNodePkgInstallIgnoreScripts(cmdLine string) shellguard.HookDecision {
+	for _, inv := range shellguard.ExtractAllContainerCommandInvocations(cmdLine) {
 		if (inv.Exe == "npm" || inv.Exe == "pnpm" || inv.Exe == "yarn") && len(inv.Args) > 0 {
 			sub := strings.ToLower(inv.Args[0])
 			if (sub == "install" || sub == "ci" || sub == "i" || sub == "add") && !containsIgnoreCase(inv.Args, "--ignore-scripts") {
-				return denyDecision("❌ [NOMOS INTERCEPT] Supply-Chain Lifecycle Guard (Law 7): Package manager install in sandboxed network mode requires '--ignore-scripts' to prevent postinstall exfiltration.")
+				return shellguard.DenyDecision("❌ [NOMOS INTERCEPT] Supply-Chain Lifecycle Guard (Law 7): Package manager install in sandboxed network mode requires '--ignore-scripts' to prevent postinstall exfiltration.")
 			}
 		}
 	}
-	return HookDecision{Decision: hookDecisionAllow}
+	return shellguard.AllowDecision()
 }
 
-func targetsOnlyLoopbackURLs(p *HookPayload) bool {
+func targetsOnlyLoopbackURLs(p *shellguard.HookPayload) bool {
 	urls := extractAllCandidateURLs(p)
 	if len(urls) == 0 {
 		return false
@@ -190,24 +185,25 @@ func targetsOnlyLoopbackURLs(p *HookPayload) bool {
 	return true
 }
 
-func evaluateContainerAutonomousSafetyGuard(p *HookPayload, baseCwd string, pol containerSandboxPolicy) HookDecision {
+// EvaluateAutonomousSafetyGuard blocks destructive bulk operations, live mutations, and tainted admin CLI calls.
+func EvaluateAutonomousSafetyGuard(p *shellguard.HookPayload, baseCwd string, pol SandboxPolicy) shellguard.HookDecision {
 	if p == nil || p.CommandLine == "" || pol.DisableAutonomousSideEffectGuard {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.AllowDecision()
 	}
 	if strings.Contains(strings.ToLower(p.CommandLine), ".claude/settings") {
-		return denyDecision("❌ [NOMOS INTERCEPT] Harness Self-Protection Violation (Law 7): Shell access to hook settings is prohibited.")
+		return shellguard.DenyDecision("❌ [NOMOS INTERCEPT] Substrate Self-Protection Violation (Law 7): Shell access to hook settings is prohibited.")
 	}
-	if hasDisallowedHiddenDotScript(p.CommandLine, pol.UntrustedProject) {
-		return denyDecision("❌ [NOMOS INTERCEPT] Autonomous Supply-Chain Guard (Law 7): Executing unverified script inside hidden dot-directory requires operator approval.")
+	if shellguard.HasDisallowedHiddenDotScript(p.CommandLine, pol.UntrustedProject) {
+		return shellguard.DenyDecision("❌ [NOMOS INTERCEPT] Autonomous Supply-Chain Guard (Law 7): Executing unverified script inside hidden dot-directory requires operator approval.")
 	}
 	tainted := hasActiveUntrustedIngressTaint(baseCwd)
-	safeCmd := stripSafeFileWriteHeredocBodies(p.CommandLine)
-	for _, inv := range extractAllContainerCommandInvocations(safeCmd) {
+	safeCmd := shellguard.StripSafeFileWriteHeredocBodies(p.CommandLine)
+	for _, inv := range shellguard.ExtractAllContainerCommandInvocations(safeCmd) {
 		if reason := checkAutonomousInvocationHazards(inv, tainted); reason != "" {
-			return denyDecision(reason)
+			return shellguard.DenyDecision(reason)
 		}
 	}
-	return HookDecision{Decision: hookDecisionAllow}
+	return shellguard.AllowDecision()
 }
 
 func hasActiveUntrustedIngressTaint(baseCwd string) bool {
@@ -222,7 +218,7 @@ func hasActiveUntrustedIngressTaint(baseCwd string) bool {
 	return ok
 }
 
-func checkAutonomousInvocationHazards(inv shellCommandInvocation, untrustedTainted bool) string {
+func checkAutonomousInvocationHazards(inv shellguard.ShellCommandInvocation, untrustedTainted bool) string {
 	rawLower := strings.ToLower(inv.Raw)
 	if containsArgExact(inv.Args, "--all") && autonomousBulkPurgeRe.MatchString(rawLower) {
 		return fmt.Sprintf("❌ [NOMOS INTERCEPT] Autonomous Safety Airlock (Law 7): Destructive bulk '--all' operation via '%s' requires human approval.", inv.Exe)
@@ -242,8 +238,8 @@ func checkAutonomousInvocationHazards(inv shellCommandInvocation, untrustedTaint
 	return ""
 }
 
-func isAdminCLIMutationUnderTaint(inv shellCommandInvocation) bool {
-	if ifcSafeRuntimeTools[inv.Exe] || isPythonExe(inv.Exe) || safeShellBuiltins[inv.Exe] {
+func isAdminCLIMutationUnderTaint(inv shellguard.ShellCommandInvocation) bool {
+	if ifcSafeRuntimeTools[inv.Exe] || shellguard.IsPythonExe(inv.Exe) || safeShellBuiltins[inv.Exe] {
 		return false
 	}
 	if len(inv.Args) > 0 && ifcReadOnlySubcmds[strings.ToLower(inv.Args[0])] {
@@ -257,12 +253,13 @@ func isAdminCLIMutationUnderTaint(inv shellCommandInvocation) bool {
 	return strings.HasSuffix(inv.Exe, "ctl")
 }
 
-func evaluateContainerUntrustedCarrierAdvisory(p *HookPayload) string {
+// EvaluateUntrustedCarrierAdvisory inspects read-only tool outputs for embedded operational prompt-injection cues.
+func EvaluateUntrustedCarrierAdvisory(p *shellguard.HookPayload) string {
 	if p == nil || strings.TrimSpace(p.ToolResponseText) == "" {
 		return ""
 	}
 	toolLower := strings.ToLower(strings.TrimSpace(p.ToolName))
-	if !readOnlyTools[toolLower] && !capbac.IsMCPToolName(toolLower) {
+	if !shellguard.ReadOnlyTools[toolLower] && !capbac.IsMCPToolName(toolLower) {
 		return ""
 	}
 	sample := p.ToolResponseText

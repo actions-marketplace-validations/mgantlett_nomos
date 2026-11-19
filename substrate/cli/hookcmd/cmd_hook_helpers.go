@@ -4,6 +4,8 @@ package hookcmd
 
 import (
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/containerguard"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"path/filepath"
 	"strings"
 
@@ -15,15 +17,15 @@ import (
 
 // EvaluatePreToolHook enforces Law 3 boundary isolation, Law 7 command safety,
 // and Law 1 identical-failure loop circuit-breaking on PreToolUse events.
-func EvaluatePreToolHook(p *HookPayload, hermeticDir string) HookDecision {
+func EvaluatePreToolHook(p *shellguard.HookPayload, hermeticDir string) shellguard.HookDecision {
 	return EvaluatePreToolHookWithProfile(p, hermeticDir, resolveHookAdvisoryProfile(0, 0, 0, ""))
 }
 
 // EvaluatePreToolHookWithProfile evaluates hard PreToolUse safety invariants alongside
 // the bounded loop circuit-breaker threshold from profile.
-func EvaluatePreToolHookWithProfile(p *HookPayload, hermeticDir string, profile HookAdvisoryProfile) HookDecision {
+func EvaluatePreToolHookWithProfile(p *shellguard.HookPayload, hermeticDir string, profile HookAdvisoryProfile) shellguard.HookDecision {
 	if p == nil {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
 	}
 	if p.CommandLine != "" {
 		cmdCwd := firstNonEmpty(p.Cwd, resolveHookWorkspaceDir(p, hermeticDir))
@@ -32,10 +34,10 @@ func EvaluatePreToolHookWithProfile(p *HookPayload, hermeticDir string, profile 
 		}
 	}
 	wsRoot := resolveCanonicalHookWorkspace(p, hermeticDir)
-	if dec := evaluateOutboundEgressGuard(p, wsRoot); dec.Decision == hookDecisionDeny {
+	if dec := containerguard.EvaluateOutboundEgressGuard(p, wsRoot); dec.Decision == hookDecisionDeny {
 		return dec
 	}
-	if dec := evaluateCredentialReadGuard(p, wsRoot); dec.Decision == hookDecisionDeny {
+	if dec := containerguard.EvaluateCredentialReadGuard(p, wsRoot); dec.Decision == hookDecisionDeny {
 		return dec
 	}
 	if dec := evaluateMCPPreToolGuard(p, hermeticDir); dec.Decision == hookDecisionDeny {
@@ -50,25 +52,25 @@ func EvaluatePreToolHookWithProfile(p *HookPayload, hermeticDir string, profile 
 	return EvaluateLoopCircuitBreakerWithStrikes(p, hermeticDir, profile.LoopStrikes)
 }
 
-func evaluateTargetFilePreToolGuard(p *HookPayload, hermeticDir string) HookDecision {
+func evaluateTargetFilePreToolGuard(p *shellguard.HookPayload, hermeticDir string) shellguard.HookDecision {
 	targets := p.TargetFiles
 	if len(targets) == 0 && p.TargetFile != "" {
 		targets = []string{p.TargetFile}
 	}
 	if len(targets) == 0 {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
 	}
 	for _, target := range targets {
 		cp := *p
 		cp.TargetFile = target
 		if cp.CommandLine == "" && hasUnexpandedShellPathToken(target) {
-			return HookDecision{
+			return shellguard.HookDecision{
 				Decision: hookDecisionDeny,
 				Reason:   fmt.Sprintf("Hermetic Path Violation (Law 3): Unexpanded shell variable or tilde in target path '%s'. Native file tools do not expand shell syntax; pass a concrete relative or resolved path.", target),
 			}
 		}
-		var dec HookDecision
-		if !isReadOnlyTool(cp.ToolName) {
+		var dec shellguard.HookDecision
+		if !shellguard.IsReadOnlyTool(cp.ToolName) {
 			dec = evaluateFileMutationGuard(&cp, hermeticDir)
 		} else {
 			dec = evaluateReadToolBoundaryAndBinary(&cp, hermeticDir)
@@ -77,24 +79,24 @@ func evaluateTargetFilePreToolGuard(p *HookPayload, hermeticDir string) HookDeci
 			return dec
 		}
 	}
-	return HookDecision{Decision: hookDecisionAllow}
+	return shellguard.HookDecision{Decision: hookDecisionAllow}
 }
 
-func evaluateMCPPreToolGuard(p *HookPayload, hermeticDir string) HookDecision {
+func evaluateMCPPreToolGuard(p *shellguard.HookPayload, hermeticDir string) shellguard.HookDecision {
 	mcpInv, ok := capbac.ParseMCPInvocation(p.ToolName, p.TargetFile, p.ArgsDigest)
 	if !ok {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
 	}
 	wsRoot := resolveCanonicalHookWorkspace(p, hermeticDir)
 	policy := loadWorkspaceMCPBoundaryPolicy(wsRoot)
 	dec := capbac.EvaluateMCPBoundary(wsRoot, mcpInv, policy)
 	if !dec.Allowed {
-		return HookDecision{
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason:   dec.Reason,
 		}
 	}
-	return HookDecision{Decision: hookDecisionAllow}
+	return shellguard.HookDecision{Decision: hookDecisionAllow}
 }
 
 func loadWorkspaceMCPBoundaryPolicy(wsRoot string) capbac.MCPBoundaryPolicy {
@@ -108,7 +110,7 @@ func loadWorkspaceMCPBoundaryPolicy(wsRoot string) capbac.MCPBoundaryPolicy {
 	}
 }
 
-func evaluateCapabilityFlowGuard(p *HookPayload, hermeticDir string) HookDecision {
+func evaluateCapabilityFlowGuard(p *shellguard.HookPayload, hermeticDir string) shellguard.HookDecision {
 	wsRoot := resolveCanonicalHookWorkspace(p, hermeticDir)
 	flowDec := capbac.EvaluateWorkspaceToolFlow(wsRoot, capbac.ToolFlowInvocation{
 		ToolName:    p.ToolName,
@@ -117,15 +119,15 @@ func evaluateCapabilityFlowGuard(p *HookPayload, hermeticDir string) HookDecisio
 		ArgsDigest:  p.ArgsDigest,
 	})
 	if !flowDec.Allowed {
-		return HookDecision{
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason:   flowDec.Reason,
 		}
 	}
-	return HookDecision{Decision: hookDecisionAllow}
+	return shellguard.HookDecision{Decision: hookDecisionAllow}
 }
 
-func resolveCanonicalHookWorkspace(p *HookPayload, hermeticDir string) string {
+func resolveCanonicalHookWorkspace(p *shellguard.HookPayload, hermeticDir string) string {
 	if hermeticDir != "" {
 		return filepath.Clean(hermeticDir)
 	}
@@ -136,14 +138,6 @@ func resolveCanonicalHookWorkspace(p *HookPayload, hermeticDir string) string {
 	return filepath.Clean(base)
 }
 
-func isReadOnlyTool(name string) bool {
-	lower := strings.ToLower(strings.TrimSpace(name))
-	if mcpInv, ok := capbac.ParseMCPInvocation(lower, "", ""); ok {
-		return mcpInv.Mode == capbac.MCPModeRead
-	}
-	return readOnlyTools[lower]
-}
-
 func hasUnexpandedShellPathToken(raw string) bool {
 	trimmed := strings.TrimSpace(raw)
 	if strings.HasPrefix(trimmed, "~") {
@@ -152,17 +146,17 @@ func hasUnexpandedShellPathToken(raw string) bool {
 	return strings.Contains(trimmed, "$")
 }
 
-func evaluateFileMutationGuard(p *HookPayload, hermeticDir string) HookDecision {
+func evaluateFileMutationGuard(p *shellguard.HookPayload, hermeticDir string) shellguard.HookDecision {
 	if hasUnexpandedShellPathToken(p.TargetFile) {
-		return HookDecision{
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason:   fmt.Sprintf("Hermetic Path Violation (Law 3): Unexpanded shell variable or tilde in target path '%s'. Pass a canonical resolved path.", p.TargetFile),
 		}
 	}
 	baseCwd := resolveHookWorkspaceDir(p, hermeticDir)
-	resolved := normalizeCanonicalPath(p.TargetFile, baseCwd)
+	resolved := shellguard.NormalizeCanonicalPath(p.TargetFile, baseCwd)
 	if isSystemRootPath(resolved) {
-		return HookDecision{
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason:   fmt.Sprintf("Hermetic Boundary Violation (Law 3): System path mutation '%s' is strictly prohibited.", resolved),
 		}
@@ -173,20 +167,20 @@ func evaluateFileMutationGuard(p *HookPayload, hermeticDir string) HookDecision 
 	return evaluateWorktreeBoundary(p.TargetFile, resolved, baseCwd, p.ToolName)
 }
 
-func evaluateHermeticDirBoundary(rawTarget, resolved, hermeticDir string) HookDecision {
-	canonRoot := normalizeCanonicalPath(hermeticDir, "/")
+func evaluateHermeticDirBoundary(rawTarget, resolved, hermeticDir string) shellguard.HookDecision {
+	canonRoot := shellguard.NormalizeCanonicalPath(hermeticDir, "/")
 	if resolved == canonRoot || strings.HasPrefix(resolved, canonRoot+"/") {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
 	}
-	return HookDecision{
+	return shellguard.HookDecision{
 		Decision: hookDecisionDeny,
 		Reason:   fmt.Sprintf("Hermetic Container Violation (Law 3): Target '%s' (resolved: '%s') escapes hermetic root '%s'.", rawTarget, resolved, canonRoot),
 	}
 }
 
-func evaluateWorktreeBoundary(rawTarget, resolved, baseCwd, toolName string) HookDecision {
+func evaluateWorktreeBoundary(rawTarget, resolved, baseCwd, toolName string) shellguard.HookDecision {
 	if isPermittedWorktreePath(resolved, baseCwd) {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
 	}
 	if repoRoot, cfg, branch, isBranch := ResolveBranchGuardContext(resolved); isBranch {
 		return evaluateBranchGuardMutation(rawTarget, resolved, repoRoot, branch, cfg)
@@ -201,7 +195,7 @@ func evaluateWorktreeBoundary(rawTarget, resolved, baseCwd, toolName string) Hoo
 	if strings.Contains(resolved, "/intent/") || strings.HasSuffix(resolved, "/nomos.yaml") {
 		choreHint = `nomos task chore "<title>" --plane intent`
 	}
-	return HookDecision{
+	return shellguard.HookDecision{
 		Decision: hookDecisionDeny,
 		Reason: fmt.Sprintf(
 			"Hermetic Worktree Violation (Law 3): Direct trunk mutation of '%s' (resolved: '%s') via '%s' is prohibited. Provision an isolated EDIT worktree in 1 turn via '%s' (or 'nomos task start <KEY> --edit'), then edit strictly inside '/worktrees/'.",
@@ -231,7 +225,7 @@ func isInsideWorkspaceRoot(resolved, baseCwd string) bool {
 	if baseCwd == "" {
 		return false
 	}
-	canonBase := normalizeCanonicalPath(baseCwd, "/")
+	canonBase := shellguard.NormalizeCanonicalPath(baseCwd, "/")
 	if pr, err := workspace.FindRepoRoot(canonBase); err == nil && pr != "" {
 		canonBase = filepath.ToSlash(filepath.Clean(pr))
 	}
@@ -262,25 +256,6 @@ func isSystemRootPath(resolved string) bool {
 		}
 	}
 	return resolved == "/"
-}
-
-func normalizeCanonicalPath(raw, base string) string {
-	target := raw
-	if !filepath.IsAbs(target) {
-		if base == "" {
-			base = "/"
-		}
-		target = filepath.Join(base, target)
-	}
-	cleaned := filepath.Clean(target)
-	if eval, err := filepath.EvalSymlinks(cleaned); err == nil {
-		return filepath.ToSlash(eval)
-	}
-	parent := filepath.Dir(cleaned)
-	if evalParent, err := filepath.EvalSymlinks(parent); err == nil {
-		return filepath.ToSlash(filepath.Join(evalParent, filepath.Base(cleaned)))
-	}
-	return filepath.ToSlash(cleaned)
 }
 
 // ExtractTaskKeyFromDirName extracts a canonical INT-N or SUB-N task key suffix from a directory basename.

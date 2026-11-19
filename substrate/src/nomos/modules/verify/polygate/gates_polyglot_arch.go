@@ -1,17 +1,19 @@
-// Package verify implements polyglot boundary-import and orphan-module reachability checks.
-package verify
+// Package polygate implements polyglot boundary-import and orphan-module reachability checks.
+package polygate
 
 import (
 	"fmt"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/ratchet"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
 
 var (
@@ -37,7 +39,8 @@ var (
 	}
 )
 
-func scanPolyglotBoundaryLeaks(root string, prohibited []string) []string {
+// ScanPolyglotBoundaryLeaks scans non-Go source files for prohibited package/module imports.
+func ScanPolyglotBoundaryLeaks(root string, prohibited []string) []string {
 	if len(prohibited) == 0 {
 		return nil
 	}
@@ -52,7 +55,7 @@ func scanPolyglotBoundaryLeaks(root string, prohibited []string) []string {
 			}
 			return nil
 		}
-		if strings.HasSuffix(path, astdebt.ExtGo) || !isPolyglotTargetFile(path) {
+		if strings.HasSuffix(path, astdebt.ExtGo) || !ratchet.IsPolyglotTargetFile(path) {
 			return nil
 		}
 		raw, rErr := os.ReadFile(path)
@@ -153,7 +156,8 @@ func matchesProhibitedBoundarySpec(spec string, prohibited []string) bool {
 	return false
 }
 
-func findUnimportedPolyglotModules(ctx *vscope.VerifyContext, root string) []string {
+// FindUnimportedPolyglotModules returns unreferenced internal polyglot module paths under root.
+func FindUnimportedPolyglotModules(ctx *vscope.VerifyContext, root string) []string {
 	scanRoot := resolvePolyglotDeadCodeRoot(ctx, root)
 	if scanRoot == "" || !hasPolyglotEntrypointRoot(scanRoot) {
 		return nil
@@ -200,7 +204,7 @@ func hasPolyglotEntrypointRoot(scanRoot string) bool {
 			return nil
 		}
 		ext := strings.ToLower(filepath.Ext(path))
-		if ext == astdebt.ExtGo || !isPolyglotTargetFile(path) {
+		if ext == astdebt.ExtGo || !ratchet.IsPolyglotTargetFile(path) {
 			return nil
 		}
 		stem := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
@@ -215,9 +219,13 @@ func hasPolyglotEntrypointRoot(scanRoot string) bool {
 	return found
 }
 
+var orphanEligibleExts = map[string]bool{
+	astdebt.ExtPy: true, astdebt.ExtTS: true, astdebt.ExtJS: true,
+	astdebt.ExtMJS: true, astdebt.ExtRB: true, astdebt.ExtRS: true,
+}
+
 func collectOrphanPolyglotCandidates(ctx *vscope.VerifyContext, root, scanRoot string) map[string]string {
 	candidates := make(map[string]string)
-	eligibleExts := map[string]bool{astdebt.ExtPy: true, astdebt.ExtTS: true, astdebt.ExtJS: true, astdebt.ExtMJS: true, astdebt.ExtRB: true, astdebt.ExtRS: true}
 	if err := filepath.WalkDir(scanRoot, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil || d == nil {
 			return nil
@@ -228,27 +236,31 @@ func collectOrphanPolyglotCandidates(ctx *vscope.VerifyContext, root, scanRoot s
 			}
 			return nil
 		}
-		ext := strings.ToLower(filepath.Ext(path))
-		if !eligibleExts[ext] || !isPolyglotTargetFile(path) || isPolyglotEntrypointOrFrameworkFile(path, ext) {
-			return nil
-		}
-		if vscope.IsBrownfieldRatchetActive(ctx) {
-			if _, existed := loadBaselineFileBytes(ctx, root, path); existed {
-				return nil
-			}
-		}
-		stem := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-		if len(stem) < 3 || orphanEntrypointSet[stem] {
-			return nil
-		}
-		if rel, rErr := filepath.Rel(root, path); rErr == nil {
-			candidates[filepath.ToSlash(rel)] = stem
-		}
+		recordOrphanPolyglotCandidate(ctx, root, path, candidates)
 		return nil
 	}); err != nil {
 		return candidates
 	}
 	return candidates
+}
+
+func recordOrphanPolyglotCandidate(ctx *vscope.VerifyContext, root, path string, candidates map[string]string) {
+	ext := strings.ToLower(filepath.Ext(path))
+	if !orphanEligibleExts[ext] || !ratchet.IsPolyglotTargetFile(path) || isPolyglotEntrypointOrFrameworkFile(path, ext) {
+		return
+	}
+	if vscope.IsBrownfieldRatchetActive(ctx) {
+		if _, existed := ratchet.LoadBaselineFileBytes(ctx, root, path); existed {
+			return
+		}
+	}
+	stem := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	if len(stem) < 3 || orphanEntrypointSet[stem] {
+		return
+	}
+	if rel, err := filepath.Rel(root, path); err == nil {
+		candidates[filepath.ToSlash(rel)] = stem
+	}
 }
 
 func isPolyglotEntrypointOrFrameworkFile(path, ext string) bool {

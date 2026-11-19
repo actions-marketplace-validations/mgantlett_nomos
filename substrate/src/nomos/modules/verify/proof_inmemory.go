@@ -8,7 +8,6 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/types"
@@ -240,18 +239,6 @@ func readWorktreeDiskBytes(absPath string) []byte {
 		return nil
 	}
 	return raw
-}
-
-func sortedSetKeys(m map[string]bool) []string {
-	if len(m) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // ArchitecturalEngineDescriptor captures an engine requirement declared in Intent.

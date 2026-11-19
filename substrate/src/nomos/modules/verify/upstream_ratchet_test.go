@@ -10,6 +10,7 @@ import (
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/polyrun"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/ratchet"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
 
@@ -119,7 +120,7 @@ func TestCheckGoSwitchDefaultOrderRejectsNonTerminalDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse bad.go: %v", err)
 	}
-	hits := CheckGoSwitchDefaultOrder(node, fset, "bad.go")
+	hits := ratchet.CheckGoSwitchDefaultOrder(node, fset, "bad.go")
 	if len(hits) != 1 || !strings.Contains(hits[0], "bad.go:4: non-terminal default clause") {
 		t.Fatalf("expected non-terminal default violation at bad.go:4, got %v", hits)
 	}
@@ -130,7 +131,7 @@ func TestCheckGoSwitchDefaultOrderRejectsNonTerminalDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse good.go: %v", err)
 	}
-	if hits2 := CheckGoSwitchDefaultOrder(node2, fset2, "good.go"); len(hits2) != 0 {
+	if hits2 := ratchet.CheckGoSwitchDefaultOrder(node2, fset2, "good.go"); len(hits2) != 0 {
 		t.Fatalf("expected terminal default to pass cleanly, got %v", hits2)
 	}
 }

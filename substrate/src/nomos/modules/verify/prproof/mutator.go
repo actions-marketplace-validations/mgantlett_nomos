@@ -215,6 +215,10 @@ func extractFileMutantSites(modRoot, pkgRel, relFile, fullPath string, spans []l
 	}
 	var out []rawMutantSite
 	seq := startIdx
+	baseCtx := mutantScanCtx{
+		fset: fset, src: src, relFile: relFile,
+		modRoot: modRoot, pkgRel: pkgRel, fileRelToMod: filepath.ToSlash(fileRelToMod), seq: &seq,
+	}
 	for _, decl := range node.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
 		if !ok || fn.Body == nil || fn.Name == nil || fn.Name.Name == "init" {
@@ -223,7 +227,7 @@ func extractFileMutantSites(modRoot, pkgRel, relFile, fullPath string, spans []l
 		if !overlapsAnySpan(fset.Position(fn.Pos()).Line, fset.Position(fn.End()).Line, spans) {
 			continue
 		}
-		out = append(out, collectFuncMutants(fset, src, fn, relFile, modRoot, pkgRel, filepath.ToSlash(fileRelToMod), &seq)...)
+		out = append(out, collectFuncMutants(baseCtx, fn)...)
 	}
 	return out
 }
@@ -237,17 +241,15 @@ func overlapsAnySpan(fnStart, fnEnd int, spans []lineSpan) bool {
 	return false
 }
 
-func collectFuncMutants(fset *token.FileSet, src []byte, fn *ast.FuncDecl, relFile, modRoot, pkgRel, fileRelToMod string, seq *int) []rawMutantSite {
-	mctx := &mutantScanCtx{
-		fset: fset, src: src, fnName: fn.Name.Name, relFile: relFile,
-		modRoot: modRoot, pkgRel: pkgRel, fileRelToMod: fileRelToMod, seq: seq,
-	}
+func collectFuncMutants(baseCtx mutantScanCtx, fn *ast.FuncDecl) []rawMutantSite {
+	mctx := baseCtx
+	mctx.fnName = fn.Name.Name
 	var out []rawMutantSite
 	ast.Inspect(fn.Body, func(n ast.Node) bool {
 		if len(out) >= maxMutantsPerFunc || n == nil {
 			return false
 		}
-		if site, ok := buildNodeMutant(mctx, n); ok {
+		if site, ok := buildNodeMutant(&mctx, n); ok {
 			out = append(out, site)
 		}
 		return true

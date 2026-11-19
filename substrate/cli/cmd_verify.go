@@ -48,7 +48,10 @@ Zero trust in conversational claims; non-verbal proof via AST and compilation ex
 				return types.NewNomosError(types.ErrCodeValidationFailed, "cannot combine --sarif with --json or --pr on nomos verify").
 					WithRemedy("specify at most one machine output format (--json, --pr, or --sarif)")
 			}
-			return runVerificationWithPR(cmd.OutOrStdout(), targetDir, commitRange, baseline, allFiles, strict, jsonOutput, prFlags)
+			return runVerificationWithPR(cmd.OutOrStdout(), verifyRunSpec{
+				targetDir: targetDir, commitRange: commitRange,
+				baseline: baseline, allFiles: allFiles, strict: strict, jsonOutput: jsonOutput,
+			}, prFlags)
 		},
 	}
 
@@ -95,28 +98,40 @@ func runVerification(targetDir, commitRange string, baseline, allFiles, strict b
 	return runVerificationOutput(os.Stdout, targetDir, commitRange, baseline, allFiles, strict, false)
 }
 
-func runVerificationOutput(out io.Writer, targetDir, commitRange string, baseline, allFiles, strict, jsonOutput bool) error {
-	return runVerificationWithPR(out, targetDir, commitRange, baseline, allFiles, strict, jsonOutput, verifyPRFlags{})
+type verifyRunSpec struct {
+	targetDir   string
+	commitRange string
+	baseline    bool
+	allFiles    bool
+	strict      bool
+	jsonOutput  bool
 }
 
-func runVerificationWithPR(out io.Writer, targetDir, commitRange string, baseline, allFiles, strict, jsonOutput bool, prFlags verifyPRFlags) error {
-	repoRoot, targetDir, activeTask, baseline := normalizeVerifyTargetScope(targetDir, baseline)
+func runVerificationOutput(out io.Writer, targetDir, commitRange string, baseline, allFiles, strict, jsonOutput bool) error {
+	return runVerificationWithPR(out, verifyRunSpec{
+		targetDir: targetDir, commitRange: commitRange,
+		baseline: baseline, allFiles: allFiles, strict: strict, jsonOutput: jsonOutput,
+	}, verifyPRFlags{})
+}
+
+func runVerificationWithPR(out io.Writer, spec verifyRunSpec, prFlags verifyPRFlags) error {
+	repoRoot, targetDir, activeTask, baseline := normalizeVerifyTargetScope(spec.targetDir, spec.baseline)
 	ctx := &vscope.VerifyContext{
 		RepoRoot: repoRoot, WorktreePath: targetDir, TaskID: activeTask,
-		CommitRange: strings.TrimSpace(commitRange), IsBaseline: baseline,
-		AllFiles: allFiles, Strict: strict, Phase: "REVIEW",
+		CommitRange: strings.TrimSpace(spec.commitRange), IsBaseline: baseline,
+		AllFiles: spec.allFiles, Strict: spec.strict, Phase: "REVIEW",
 	}
-	if !prFlags.hasCustomProbe() && tryRenderCachedVerifyReceipt(out, ctx, jsonOutput) {
+	if !prFlags.hasCustomProbe() && tryRenderCachedVerifyReceipt(out, ctx, spec.jsonOutput) {
 		return nil
 	}
 	pipeline := verify.NewPipeline(verify.DefaultBaselineGates())
 	report, err := pipeline.Execute(ctx)
 	diag.RecordVerificationAnomalies(repoRoot, activeTask, "verify", report, err)
-	syncVerifyCommandReceipt(repoRoot, targetDir, activeTask, commitRange, baseline, strict, report)
+	syncVerifyCommandReceipt(repoRoot, targetDir, activeTask, spec.commitRange, baseline, spec.strict, report)
 	if err != nil {
 		return err
 	}
-	return finalizeVerificationReport(out, ctx, jsonOutput, report, prFlags)
+	return finalizeVerificationReport(out, ctx, spec.jsonOutput, report, prFlags)
 }
 
 func normalizeVerifyTargetScope(targetDir string, baseline bool) (string, string, string, bool) {

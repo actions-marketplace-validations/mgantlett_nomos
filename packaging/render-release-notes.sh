@@ -64,9 +64,9 @@ group_commit_ledger() {
         }
         if (scope ~ /^(intent|spec|specs)$/) {
           bucket = 1
-        } else if (scope ~ /^(cli|install|update|handshake|hook|hooks|ui)$/) {
+        } else if (scope ~ /^(cli|install|update|handshake|hook|hooks|hookcmd|inspectcmd|init|mcp|ui)$/) {
           bucket = 2
-        } else if (scope ~ /^(verify|ncte|treesitter|capbac|physics|ast)$/) {
+        } else if (scope ~ /^(verify|ncte|treesitter|capbac|physics|ast|astdebt|xray|sarif|vscope)$/) {
           bucket = 3
         } else if (scope ~ /^(config|workspace|storage|constants|types)$/) {
           bucket = 4

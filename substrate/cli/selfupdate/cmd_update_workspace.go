@@ -46,7 +46,9 @@ func DetectWorkspaceContractDrift(repoRoot string) []string {
 	if hasClaudeFileDrift(filepath.Join(cleanRoot, "CLAUDE.md")) {
 		drifted = append(drifted, "CLAUDE.md")
 	}
-	if hasAmbientHookScriptsDrift(cleanRoot) {
+	if tui.DetectAdapterDriftFn != nil {
+		drifted = append(drifted, tui.DetectAdapterDriftFn(cleanRoot)...)
+	} else if hasAmbientHookScriptsDrift(cleanRoot) {
 		drifted = append(drifted, filepath.ToSlash(filepath.Join(tui.AgentsDirToken, "scripts")))
 	}
 	return drifted
@@ -129,6 +131,11 @@ func SyncWorkspaceContracts(repoRoot string) ([]string, error) {
 	if rErr != nil {
 		return nil, rErr
 	}
+	if tui.RefreshLocalStealthFn != nil {
+		if sErr := tui.RefreshLocalStealthFn(absDir); sErr != nil {
+			return nil, sErr
+		}
+	}
 	if gErr := refreshWorkspaceGitHooks(absDir); gErr != nil {
 		return nil, gErr
 	}
@@ -175,7 +182,9 @@ func refreshManagedWorkspaceArtifacts(absDir string) ([]string, error) {
 	if err := tui.ScaffoldAmbientHooksFn(absDir); err != nil {
 		return nil, types.NewNomosError(types.ErrCodeSubstrate, "failed refreshing ambient lifecycle hooks: %v", err)
 	}
-	refreshed = append(refreshed, filepath.ToSlash(filepath.Join(tui.AgentsDirToken, tui.HooksFileName)))
+	if _, hErr := os.Stat(filepath.Join(absDir, tui.AgentsDirToken, tui.HooksFileName)); hErr == nil {
+		refreshed = append(refreshed, filepath.ToSlash(filepath.Join(tui.AgentsDirToken, tui.HooksFileName)))
+	}
 	return refreshed, nil
 }
 

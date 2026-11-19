@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"github.com/mgantlett/nomos/substrate/cli/tui"
 	"os"
 	"path/filepath"
@@ -18,19 +19,19 @@ import (
 
 // HookSessionTrace summarizes verified tool and shell activity inside an active task worktree.
 type HookSessionTrace struct {
-	WorktreeRoot         string   `json:"worktree_root"`
-	ToolCallsCount       int      `json:"tool_calls_count"`
-	ShellCommandsCount   int      `json:"shell_commands_count"`
-	TestCommandsCount    int      `json:"test_commands_count"`
-	DeniedInterceptions  int      `json:"denied_interceptions"`
+	WorktreeRoot         string            `json:"worktree_root"`
+	ToolCallsCount       int               `json:"tool_calls_count"`
+	ShellCommandsCount   int               `json:"shell_commands_count"`
+	TestCommandsCount    int               `json:"test_commands_count"`
+	DeniedInterceptions  int               `json:"denied_interceptions"`
 	UnverifiedCalls      int               `json:"unverified_calls,omitempty"`
 	ConsecutiveReadCalls int               `json:"consecutive_read_calls,omitempty"`
 	DirtyUnverifiedEdits bool              `json:"dirty_unverified_edits,omitempty"`
 	DirtyBehavioralEdits bool              `json:"dirty_behavioral_edits,omitempty"`
 	WarnedChurn75        bool              `json:"warned_churn_75,omitempty"`
-	WarnedChurn150       bool     `json:"warned_churn_150,omitempty"`
-	WarnedReadSpiral12   bool     `json:"warned_read_spiral_12,omitempty"`
-	WarnedReadSpiral20   bool     `json:"warned_read_spiral_20,omitempty"`
+	WarnedChurn150       bool              `json:"warned_churn_150,omitempty"`
+	WarnedReadSpiral12   bool              `json:"warned_read_spiral_12,omitempty"`
+	WarnedReadSpiral20   bool              `json:"warned_read_spiral_20,omitempty"`
 	MutatedFiles         []string          `json:"mutated_files,omitempty"`
 	RecalledPitfallDirs  []string          `json:"recalled_pitfall_dirs,omitempty"`
 	ImpactedFiles        []string          `json:"impacted_files,omitempty"`
@@ -42,7 +43,7 @@ type HookSessionTrace struct {
 var standaloneVerifyCmdRe = regexp.MustCompile(`(?i)^\s*(?:cd\s+\S+\s*&&\s*)?(?:\S+/)?nomos\s+(?:verify|task\s+review|task\s+sync)(?:\s|$)`)
 
 // recordPreToolSessionTrace records allowed or denied PreToolUse activity scoped to an active worktree or branch.
-func recordPreToolSessionTrace(p *HookPayload, hermeticDir string, denied bool) {
+func recordPreToolSessionTrace(p *shellguard.HookPayload, hermeticDir string, denied bool) {
 	if p == nil || p.IsPostInvoke {
 		return
 	}
@@ -70,7 +71,7 @@ func recordPreToolSessionTrace(p *HookPayload, hermeticDir string, denied bool) 
 
 // evaluateWorktreeChurnAdvisory tracks unverified PostToolUse calls inside an active task worktree or feature branch
 // and emits non-blocking advisories at 75 and 150 calls since the last 'nomos verify' run.
-func evaluateWorktreeChurnAdvisory(p *HookPayload, hermeticDir, style string) string {
+func evaluateWorktreeChurnAdvisory(p *shellguard.HookPayload, hermeticDir, style string) string {
 	if p == nil || p.IsPostInvoke {
 		return ""
 	}
@@ -109,7 +110,7 @@ func evaluateWorktreeChurnAdvisory(p *HookPayload, hermeticDir, style string) st
 }
 
 func resolveWorktreeOrBranchTraceTarget(worktreeDir string) (traceKey, wsRoot, path string) {
-	traceKey = extractEnclosingWorktreeRoot(normalizeCanonicalPath(worktreeDir, "/"))
+	traceKey = extractEnclosingWorktreeRoot(shellguard.NormalizeCanonicalPath(worktreeDir, "/"))
 	wsRoot = traceKey
 	if traceKey == "" {
 		repoRoot, cfg, branch, isBranch := ResolveBranchGuardContext(worktreeDir)
@@ -196,7 +197,7 @@ func hasFailedVerificationResponse(resp string) bool {
 	)
 }
 
-func updatePostToolShellTrace(tr *HookSessionTrace, p *HookPayload, wsRoot string) {
+func updatePostToolShellTrace(tr *HookSessionTrace, p *shellguard.HookPayload, wsRoot string) {
 	if p.CommandLine == "" {
 		return
 	}
@@ -217,7 +218,7 @@ func updatePostToolShellTrace(tr *HookSessionTrace, p *HookPayload, wsRoot strin
 }
 
 // recordPostToolSessionTrace records PostToolUse file mutations or shell runs when PreToolUse was not invoked.
-func recordPostToolSessionTrace(p *HookPayload, hermeticDir string) {
+func recordPostToolSessionTrace(p *shellguard.HookPayload, hermeticDir string) {
 	if p == nil || p.IsPostInvoke {
 		return
 	}
@@ -238,7 +239,7 @@ func recordPostToolSessionTrace(p *HookPayload, hermeticDir string) {
 	saveHookSessionTrace(path, tr)
 }
 
-func resolveTraceScopeAndWorkspace(p *HookPayload, hermeticDir string) (string, string, string) {
+func resolveTraceScopeAndWorkspace(p *shellguard.HookPayload, hermeticDir string) (string, string, string) {
 	if wtRoot := resolveWorktreeTraceRoot(p, hermeticDir); wtRoot != "" {
 		return wtRoot, wtRoot, ""
 	}
@@ -259,14 +260,14 @@ func recordTargetFileMutation(tr *HookSessionTrace, resolved, rel, wtRoot string
 	}
 }
 
-func recordTracePayloadDetails(tr *HookSessionTrace, p *HookPayload, wtRoot string) {
+func recordTracePayloadDetails(tr *HookSessionTrace, p *shellguard.HookPayload, wtRoot string) {
 	if cmd := strings.TrimSpace(p.CommandLine); cmd != "" {
 		tr.ShellCommandsCount++
 		if isRecognizedTestCommand(cmd) {
 			tr.TestCommandsCount++
 		}
 	}
-	if p.TargetFile == "" || p.CommandLine != "" || isReadOnlyTool(p.ToolName) {
+	if p.TargetFile == "" || p.CommandLine != "" || shellguard.IsReadOnlyTool(p.ToolName) {
 		return
 	}
 	targets := p.TargetFiles
@@ -274,7 +275,7 @@ func recordTracePayloadDetails(tr *HookSessionTrace, p *HookPayload, wtRoot stri
 		targets = []string{p.TargetFile}
 	}
 	for _, rawTarget := range targets {
-		resolved := normalizeCanonicalPath(rawTarget, wtRoot)
+		resolved := shellguard.NormalizeCanonicalPath(rawTarget, wtRoot)
 		if !strings.HasPrefix(resolved, wtRoot+"/") {
 			continue
 		}
@@ -286,7 +287,7 @@ func recordTracePayloadDetails(tr *HookSessionTrace, p *HookPayload, wtRoot stri
 }
 
 func resolveTraceStateFilePath(wtRoot string) string {
-	canon := normalizeCanonicalPath(wtRoot, "/")
+	canon := shellguard.NormalizeCanonicalPath(wtRoot, "/")
 	if canon == "" {
 		return ""
 	}
@@ -319,18 +320,8 @@ func loadHookSessionTrace(wtPath string) *HookSessionTrace {
 }
 
 func loadHookSessionTraceByFile(path string) *HookSessionTrace {
-	if path == "" {
-		return nil
-	}
-	if fi, err := os.Lstat(path); err != nil || !fi.Mode().IsRegular() {
-		return nil
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
 	var tr HookSessionTrace
-	if uErr := json.Unmarshal(data, &tr); uErr != nil {
+	if !readRegularHookJSON(path, &tr) {
 		return nil
 	}
 	return &tr

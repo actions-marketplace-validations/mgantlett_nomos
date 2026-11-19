@@ -420,6 +420,9 @@ func FormatPRProofMarkdown(receipt *PRProofReceipt) string
    - In greenfield or strict polyglot runs with `>= 100` production LOC, `CoverageGate` requires at least eight verification cases and assertions covering boundaries and errors.
    - When zero-baseline polyglot suites finish in under `500ms` across `80..2500` production LOC, `CoverageGate` probes up to four relational flips inside ephemeral temp copies.
    - If two or more boundary mutants survive inside ephemeral copies without mutating workspace files, `CoverageGate` rejects execution naming surviving `file:line` relational checks.
+12. **Worktree Numeric-Threshold Ratchet Integrity (`TC-COV-007`):**
+   - `ThresholdIntegrityGate` compares worktree `ThresholdsConfig` values against pinned trunk `nomos.yaml` bounds.
+   - If a worktree raises upper caps or lowers minimum floors in `ThresholdsConfig` relative to trunk, verification fails closed.
 
 ---
 
@@ -464,6 +467,7 @@ func FormatPRProofMarkdown(receipt *PRProofReceipt) string
 | `TC-COV-004` | `ThresholdIntegrityGate` | Worktree downgrades `strict_mode` or `boundary.enforce` from trunk | Rejects governance downgrade against trunk baseline | Law 1 & Law 7 |
 | `TC-COV-005` | `TDDGate`, `CoverageGate` | Python repo with `requirements.txt` and `.tmp/tests/test_app.py` | Enforces strict TDD and >= 80% trace coverage via `.tmp/tests` | Law 2 & Law 7 |
 | `TC-COV-006` | `CoverageGate` | Greenfield repo >= 100 LOC with < 8 cases or surviving `<=` mutant | Rejects shallow suite breadth or surviving boundary mutants | Law 2 & Law 7 |
+| `TC-COV-007` | `ThresholdIntegrityGate` | Worktree `nomos.yaml` relaxes trunk numeric ratchet (`max_package_files` or `min_comment_density_pct`) | Rejects numeric threshold downgrade against trunk baseline | Law 2 & Law 7 |
 | `TC-PRF-01` | `ProofReport` (Vector 1) | Synthetic AST defect injection across active gates | Asserts `MutationScore == 100%` (all defects killed) | Law 2 |
 | `TC-PRF-02` | `ProofReport` (Vector 2) | Clean reference fixture evaluation | Asserts `FalsePositiveRate == 0%` across all gates | Law 2 |
 | `TC-PRF-03` | `ProofReport` (Vector 3) | Non-vacuity probe audit across 42 gates | Asserts `NonVacuousGates == TotalGatesEvaluated` | Law 2 |

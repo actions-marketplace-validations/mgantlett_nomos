@@ -9,6 +9,7 @@ import (
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/polyrun"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/ratchet"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
 
@@ -39,7 +40,7 @@ def entry_more(a, b):
 	mustWriteVerifyFile(t, filepath.Join(dir, "legacy.py"), editedPy)
 	ctx := &vscope.VerifyContext{RepoRoot: dir, WorktreePath: dir}
 
-	cleanHits := evaluateNetNewBrownfieldClonesAndSlop(
+	cleanHits := ratchet.EvaluateNetNewBrownfieldClonesAndSlop(
 		ctx,
 		dir,
 		map[string][]byte{"legacy.py": []byte(editedPy)},
@@ -59,7 +60,7 @@ export function run(a: number, b: number): number {
   return first + m3(a) + m3(b) + m4(a) + m4(b);
 }
 `
-	newHits := evaluateNetNewBrownfieldClonesAndSlop(
+	newHits := ratchet.EvaluateNetNewBrownfieldClonesAndSlop(
 		ctx,
 		dir,
 		map[string][]byte{"new_mod.ts": []byte(newTS)},

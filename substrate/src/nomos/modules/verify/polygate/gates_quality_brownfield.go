@@ -1,31 +1,33 @@
-// Package verify implements brownfield scoping for TDD, coverage, security, and broken-wire gates.
-package verify
+// Package polygate implements brownfield scoping for Go and polyglot TDD package discovery.
+package polygate
 
 import (
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/polyrun"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/config"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/polyrun"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/ratchet"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
 
-func resolveSubstrateDirs(ctx *vscope.VerifyContext, root string) []string {
-	dirs, explicit := resolveSubstrateTargetDirs(ctx, root)
+// ResolveSubstrateDirs returns configured or auto-discovered substrate source directories for root.
+func ResolveSubstrateDirs(ctx *vscope.VerifyContext, root string) []string {
+	dirs, explicit := ResolveSubstrateTargetDirs(ctx, root)
 	if explicit {
 		return dirs
 	}
 	return dirs
 }
 
-func resolveSubstrateTargetDirs(ctx *vscope.VerifyContext, root string) ([]string, bool) {
+// ResolveSubstrateTargetDirs resolves substrate source directories and reports whether explicit roots were configured.
+func ResolveSubstrateTargetDirs(ctx *vscope.VerifyContext, root string) ([]string, bool) {
 	cfg := vscope.ResolveVerifyConfig(ctx)
 	if cfg != nil && len(cfg.Governance.QualityGates.SubstrateSourceRoots) > 0 {
 		var dirs []string
@@ -43,7 +45,7 @@ func resolveSubstrateTargetDirs(ctx *vscope.VerifyContext, root string) ([]strin
 			return dirs, true
 		}
 	}
-	fallback := findSubstrateSrc(root)
+	fallback := ratchet.FindSubstrateSrc(root)
 	if fallback == "" {
 		return nil, false
 	}
@@ -64,7 +66,7 @@ func isSkippedTDDDirName(name string, skipCmdDir bool) bool {
 }
 
 func shouldScopeTDDToModifiedPackages(ctx *vscope.VerifyContext, root string) bool {
-	mode := resolveEffectiveTDDMode(ctx)
+	mode := ResolveEffectiveTDDMode(ctx)
 	if mode == config.TDDModeOff {
 		return false
 	}
@@ -80,7 +82,8 @@ func shouldScopeTDDToModifiedPackages(ctx *vscope.VerifyContext, root string) bo
 	return vscope.HasGitMetadata(root)
 }
 
-func findUntestedPackagesScoped(ctx *vscope.VerifyContext, root string, targetDirs []string, explicitRoots bool) ([]string, error) {
+// FindUntestedPackagesScoped discovers implementation packages missing paired unit tests under active verify scope.
+func FindUntestedPackagesScoped(ctx *vscope.VerifyContext, root string, targetDirs []string, explicitRoots bool) ([]string, error) {
 	excludes := vscope.ResolveScopeExcludes(ctx, root, root)
 	if shouldScopeTDDToModifiedPackages(ctx, root) {
 		if modUntested, handled := evaluateModifiedPackageTDD(ctx, root, excludes, !explicitRoots); handled {
@@ -122,7 +125,7 @@ func partitionModifiedTDDTargets(ctx *vscope.VerifyContext, root string, modifie
 	goDirs := make(map[string]struct{})
 	var polyFiles []string
 	for _, rel := range modified {
-		if !isPolyglotTargetFile(rel) || (!isPolyglotTestFilePath(rel) && vscope.IsTDDExcludedRel(ctx, root, rel)) {
+		if !ratchet.IsPolyglotTargetFile(rel) || (!isPolyglotTestFilePath(rel) && vscope.IsTDDExcludedRel(ctx, root, rel)) {
 			continue
 		}
 		absDir := filepath.Dir(filepath.Join(root, rel))
@@ -140,12 +143,12 @@ func partitionModifiedTDDTargets(ctx *vscope.VerifyContext, root string, modifie
 
 func evaluateModifiedGoDirsTDD(ctx *vscope.VerifyContext, root string, goDirs map[string]struct{}, modified []string) []string {
 	var untested []string
-	diffMode := resolveEffectiveTDDMode(ctx) == "diff"
+	diffMode := ResolveEffectiveTDDMode(ctx) == "diff"
 	hasModTest := hasModifiedTestFile(modified)
 	for dir := range goDirs {
-		hasGo, hasTest := inspectPackageFiles(dir)
+		hasGo, hasTest := InspectPackageFiles(dir)
 		if hasGo && (!hasTest || (diffMode && !hasModTest && !hasGoPairedTestsForModified(root, dir, modified))) {
-			untested = append(untested, relativeOrFullPath(root, dir))
+			untested = append(untested, ratchet.RelativeOrFullPath(root, dir))
 		}
 	}
 	return untested
@@ -213,7 +216,7 @@ func hasRepositoryPolyglotTests(root string) bool {
 		}
 	}
 	found := false
-	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	if walkErr := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d == nil || found {
 			return nil
 		}
@@ -227,7 +230,9 @@ func hasRepositoryPolyglotTests(root string) bool {
 			found = true
 		}
 		return nil
-	})
+	}); walkErr != nil {
+		return found
+	}
 	return found
 }
 
@@ -239,7 +244,7 @@ func shouldInspectModifiedPkgDir(root, absDir string, excludes []string, skipCmd
 	if workspace.IsExcluded(absDir, true, fi.Name(), excludes) {
 		return false
 	}
-	rel := relativeOrFullPath(root, absDir)
+	rel := ratchet.RelativeOrFullPath(root, absDir)
 	for _, part := range strings.Split(filepath.ToSlash(rel), "/") {
 		if part != "." && part != "" && isSkippedTDDDirName(part, skipCmd) {
 			return false
@@ -264,11 +269,11 @@ func walkUntestedPackages(ctx *vscope.VerifyContext, root, srcDir string, exclud
 		if root != "" && srcDir != root {
 			base = root
 		}
-		relDir := relativeOrFullPath(base, path)
+		relDir := ratchet.RelativeOrFullPath(base, path)
 		if vscope.IsTDDExcludedRel(ctx, base, relDir) {
 			return nil
 		}
-		hasGo, hasTest := inspectPackageFiles(path)
+		hasGo, hasTest := InspectPackageFiles(path)
 		if hasGo && !hasTest {
 			untested = append(untested, relDir)
 			return nil
@@ -282,54 +287,25 @@ func walkUntestedPackages(ctx *vscope.VerifyContext, root, srcDir string, exclud
 	return untested, err
 }
 
-func relativeOrFullPath(base, target string) string {
-	rel, err := filepath.Rel(base, target)
+// InspectPackageFiles reports whether dir contains non-test Go files and coupled Go unit tests.
+func InspectPackageFiles(dir string) (bool, bool) {
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return target
+		return false, false
 	}
-	return filepath.ToSlash(rel)
-}
-
-func scanSecretsScoped(ctx *vscope.VerifyContext, root string) ([]string, error) {
-	if !vscope.IsBrownfieldRatchetActive(ctx) || (ctx != nil && ctx.AllFiles) || !vscope.HasGitMetadata(root) {
-		return scanSecrets(ctx, root)
+	var hasGo, hasTest bool
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if strings.HasSuffix(e.Name(), "_test.go") {
+			hasTest = true
+		} else if strings.HasSuffix(e.Name(), ".go") {
+			hasGo = true
+		}
 	}
-	leaks := impact.ScanUnignoredEnvFiles(root)
-	err := vscope.WalkTargetFiles(ctx, root, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil || info == nil || info.IsDir() {
-			return nil
-		}
-		if isIgnoredSecretFile(path) || (impact.IsProhibitedEnvFileName(info.Name()) && impact.IsGitIgnoredPath(root, path)) {
-			return nil
-		}
-		if data, rErr := vscope.MemoizedReadFile(ctx, path); rErr == nil {
-			relPath := relativeOrFullPath(root, path)
-			if label := impact.MatchSecretTokenLabel(string(data)); label != "" {
-				leaks = append(leaks, relPath+" ("+label+")")
-			}
-			for _, cwe := range scanRatchetedCWELeaks(ctx, root, path, relPath, data) {
-				leaks = append(leaks, relPath+" ("+cwe+")")
-			}
-		}
-		return nil
-	})
-	return leaks, err
-}
-
-func scanBrokenLinksScoped(ctx *vscope.VerifyContext, root string) ([]string, error) {
-	if !vscope.IsBrownfieldRatchetActive(ctx) || (ctx != nil && ctx.AllFiles) || !vscope.HasGitMetadata(root) {
-		return scanBrokenLinks(ctx, root)
+	if hasGo && hasTest {
+		hasTest = HasCoupledGoPackageTests(dir)
 	}
-	var broken []string
-	linkRegex := regexp.MustCompile(`\[[^\]]+\]\(([^)]+)\)`)
-	err := vscope.WalkTargetFiles(ctx, root, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil || info == nil || info.IsDir() || !strings.HasSuffix(path, ".md") {
-			return nil
-		}
-		if data, rErr := vscope.MemoizedReadFile(ctx, path); rErr == nil {
-			broken = append(broken, checkLinksInContent(root, path, string(data), linkRegex)...)
-		}
-		return nil
-	})
-	return broken, err
+	return hasGo, hasTest
 }

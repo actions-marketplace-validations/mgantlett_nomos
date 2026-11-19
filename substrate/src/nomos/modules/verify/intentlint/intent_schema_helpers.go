@@ -144,23 +144,29 @@ func collectIntentSpecBasenames(ctx *vscope.VerifyContext, root string) map[stri
 	}
 	specs := make(map[string]bool)
 	for _, r := range roots {
-		intentDir := filepath.Join(root, filepath.FromSlash(r))
-		if _, err := os.Stat(intentDir); os.IsNotExist(err) && ctx != nil && ctx.RepoRoot != "" {
-			intentDir = filepath.Join(ctx.RepoRoot, filepath.FromSlash(r))
-		}
-		if fi, err := os.Stat(intentDir); err == nil && fi.IsDir() {
-			if walkErr := filepath.Walk(intentDir, func(path string, info os.FileInfo, wErr error) error {
-				if wErr == nil && info != nil && !info.IsDir() && strings.HasSuffix(path, ".md") {
-					specs[filepath.Base(path)] = true
-				}
-				return nil
-			}); walkErr != nil {
-				continue
-			}
-		}
+		collectSpecsUnderIntentRoot(ctx, root, r, specs)
 	}
 	if len(specs) == 0 {
 		return nil
 	}
 	return specs
+}
+
+func collectSpecsUnderIntentRoot(ctx *vscope.VerifyContext, root, relRoot string, specs map[string]bool) {
+	intentDir := filepath.Join(root, filepath.FromSlash(relRoot))
+	if _, err := os.Stat(intentDir); os.IsNotExist(err) && ctx != nil && ctx.RepoRoot != "" {
+		intentDir = filepath.Join(ctx.RepoRoot, filepath.FromSlash(relRoot))
+	}
+	fi, err := os.Stat(intentDir)
+	if err != nil || !fi.IsDir() {
+		return
+	}
+	if walkErr := filepath.Walk(intentDir, func(path string, info os.FileInfo, wErr error) error {
+		if wErr == nil && info != nil && !info.IsDir() && strings.HasSuffix(path, ".md") {
+			specs[filepath.Base(path)] = true
+		}
+		return nil
+	}); walkErr != nil {
+		return
+	}
 }

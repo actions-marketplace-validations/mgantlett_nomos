@@ -6,6 +6,60 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v4.27.0] - 2026-11-19
+
+> Numeric ratchet guard and refactor AST ceiling hotspots; Eliminate self-referential harness terminology in favor of deterministic substrate; Ratchet `max_package_files` to 20 and lock subpackage DAG boundaries in `nomos.yaml`; Extract polygate and ratchet subpackages, co-locate astdebt tests, and cap xray CDS <= 45 (Apache 2.0)
+
+### Intent & Specifications (`nomos.yaml`)
+- **Ratchet `max_package_files` to 20 and lock subpackage DAG boundaries in `nomos.yaml` (`INT-2157`)**: Ratchet `max_package_files` from 30 to 20 and append 4 leaf subpackage `architecture_boundaries` rules (hookcmd-shellguard-leaf, hookcmd-containerguard-leaf, verify-ratchet-leaf, verify-polygate-leaf) in `nomos.yaml`.
+- **Ratchet self-dogfooding thresholds and lock 4-tier DAG in `nomos.yaml` (`INT-2154`)**: Ratchet self-dogfooding quality thresholds (complexity<=14, func_loc<=55, params<=7, clone_lines>=14, magic_strings<=8, package_files<=30, coverage>=65%, docstrings>=90%), enable boundary.lock_dependencies, and lock 4-tier `architecture_boundaries` DAG in root `nomos.yaml`.
+
+### CLI, Distribution & Hooks (`nomos cli`)
+- **Extract containerguard and shellguard subpackages and trim cli package fan-out (`INT-2155`, `SUB-3299`)**: Extract hookcmd/shellguard and hookcmd/containerguard leaf subpackages with unit suites (trimming hookcmd from 26 to 19 prod files), consolidate 3 small cli helpers (trimming cli from 22 to 19 prod files), and split `inspectcmd/cmd_session_name.go` below xray CDS 45.
+- **Eliminate self-referential harness terminology in favor of deterministic substrate (`INT-2152`, `SUB-3296`)**: Replace self-referential Nomos harness phrasing with Nomos Substrate across templates, root help, and contract tests.
+- **Preserve present agent adapters and local stealth mode during nomos update --sync-workspace (`INT-2149`, `SUB-3293`)**: Detect per-adapter hook drift and preserve present adapters and local stealth excludes on nomos update --sync-workspace.
+
+### Verification & Quality Gates (`nomos verify`, `nomos handshake`, `nomos cli`)
+- **Extract polygate and ratchet subpackages, co-locate astdebt tests, and cap xray CDS <= 45 (`INT-2156`, `SUB-3300`)**: Extract verify/ratchet (4 files) and verify/polygate (7 files) leaf subpackages with unit suites (trimming modules/verify from 29 to 19 production files), fold astdebt micro-files with co-located blueprint tests (21 to 19 production files), and decompose handshake and task lifecycle hotspots so xray `observed_max_cds` <= 45 and `observed_max_package_files` <= 19 across all packages.
+- **Complete exported gate method docstrings for diff-scope parity (`SUB-3298`)**: Complete Go doc comments across all remaining exported gate methods in `gates_standard.go`, `gates_capbac_release.go`, and `gates_toolchain.go` for 100% per-file docstring parity under `verify_scope=diff`.
+- **Harden numeric ratchet guard and refactor AST ceiling hotspots (`INT-2151`, `SUB-3295`)**: Enforce worktree numeric-threshold downgrade guard in ThresholdIntegrityGate (`TC-COV-007`), refactor all complexity/LOC/arity/clone/magic-string ceiling hotspots below ratcheted bounds, and split oversized CLI test suites under 400 LOC.
+
+---
+
+## [v4.26.0] - 2026-11-18
+
+> Fast static binary install and baseline-only zero-config PR bootstrap in `action.yml`; Fix SQLite strftime CWE-89 false positive in DetectPolyglotCWESinks and add sophialabs.ca/xray link to README; Add Thin Binary Bootstrapper Agent Skill and Claude Plugin manifests for native agent discovery; Pin SemVer tag on README GitHub Action snippet and document sophialabs.ca URL swap (Apache 2.0)
+
+### Verification & Quality Gates (`nomos verify`, `README.md`)
+- **Fix SQLite strftime CWE-89 false positive in DetectPolyglotCWESinks and add sophialabs.ca/xray link to README (`SUB-3281`)**: Eliminate SQLite strftime CWE-89 false positive for 0/100 self-xray and surface sophialabs.ca/xray in README.
+
+### Release & Packaging (`README.md`)
+- **Pin SemVer tag on README GitHub Action snippet and document sophialabs.ca URL swap (`SUB-3283`)**: Pin SemVer tag on GitHub Action snippet and document sophialabs.ca URL swap.
+- **Fast static binary install and baseline-only zero-config PR bootstrap in `action.yml` (`INT-2144`, `SUB-3280`)**: Fast static binary install, zero-yaml baseline bootstrap, and sarif-path in `action.yml`.
+- **Add Thin Binary Bootstrapper Agent Skill and Claude Plugin manifests for native agent discovery (`INT-2139`, `SUB-3274`)**: `Skills/nomos/SKILL.md` and .claude-plugin manifests ship as strict Thin Binary Bootstrappers with zero Sovereign leaks.
+
+---
+
+## [v4.25.0] - 2026-11-18
+
+> Clarify Init-and-Forget stack model, Agent-first setup, and Branch Guard stewardship; Log debug parse error in OpenCode `nomos.ts` template; Pre-push release-note sync, diff-scoped corpus clone index, and micro-file guard; Tighten `README.md` front-door tagline and subhead around 0-token physics powered by your coding agent (Apache 2.0)
+
+### CLI, Distribution & Hooks (`nomos cli`, `README.md`)
+- **Clarify Init-and-Forget stack model, Agent-first setup, and Branch Guard stewardship (`INT-2136`, `SUB-3265`)**: Clarify Init-and-Forget stack layer, Agent-first setup, and Branch Guard stewardship.
+
+### Verification & Quality Gates (`nomos verify`, `capbac`)
+- **Enforce pre-push release-note sync, diff-scoped corpus clone index, and micro-file guard (`INT-2133`, `SUB-3255`)**: PrePushHookScript syncs refs/notes/nomos/releases, CognitiveDebtGate indexes live corpus AST skeletons for net-new clones, MaxFileLOCGate+FastFileRadar block net-new micro-files in high-fanout packages.
+- **Consolidate modules/verify gate fragments and reclaim package file headroom (`SUB-3251`)**: Consolidate gate fragments, reclaim package headroom, and prune surviving `gov_rule` moves.
+- **Share capbac shell quote lexer and consolidate hookcmd handlers (`INT-2130`, `SUB-3250`)**: Extract SplitUnquotedShellSegments, TokenizeQuotedShellWords, and HasUnquotedShellChainingOrSub into `core/capbac/shell_lex.go` and consolidate fragmented cli/hookcmd files.
+
+### Release & Packaging (`nomos init`, `README.md`)
+- **Log debug parse error in OpenCode `nomos.ts` template (`INT-2137`, `SUB-3267`)**: Log debug parse error in OpenCode `nomos.ts` template catch block.
+- **Tighten `README.md` front-door tagline and subhead around 0-token physics powered by your coding agent (`SUB-3269`)**: Tighten front-door tagline around zero-token physics powered by your coding agent.
+- **Route hookcmd and astdebt scopes in `render-release-notes.sh` (`SUB-3260`)**: Route hookcmd, inspectcmd, init, mcp, astdebt, xray, sarif, and vscope commit scopes in `render-release-notes.sh`.
+- **Unify polyglot wrapper, idiom, exception, and blueprint scanners in verify/astdebt (`INT-2129`, `SUB-3249`)**: Unify polyglot wrapper, idiom, exception, and blueprint scanners.
+
+---
+
 ## [v4.24.0] - 2026-11-17
 
 > Add polyglot design-slop, coverage-exclusion, manifest ImportError fallback, and wrapper-fragmentation AST sensors; Track Bash file mutations natively across PostToolUse and Stop hooks, surface manifest/module hull in SessionStart, harden NormativeSurfaceDelta Go AST extraction, and codify v4.24.0 specs (Apache 2.0)

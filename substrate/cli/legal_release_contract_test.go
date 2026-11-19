@@ -1,3 +1,4 @@
+// @intent task_lifecycle_cli_spec.md
 package cli
 
 import (
@@ -116,8 +117,8 @@ func operationalSurfaceContractCases() []repoContractCase {
 			forbid: []string{"set -euo pipefail"},
 		},
 		{
-			name:    "TC-REL-011 bug report template excludes sovereign plugins and includes Windsurf",
-			relPath: filepath.Join(".github", "ISSUE_TEMPLATE", "01_bug_report.yml"),
+			name:     "TC-REL-011 bug report template excludes sovereign plugins and includes Windsurf",
+			relPath:  filepath.Join(".github", "ISSUE_TEMPLATE", "01_bug_report.yml"),
 			mustHave: []string{"Windsurf", "nomos hook / nomos capabilities"},
 			forbid:   []string{"nomos parity", "Nomos v4.0.0"},
 		},
@@ -167,6 +168,37 @@ func operationalSurfaceContractCases() []repoContractCase {
 				"sha256sums_x86_64=",
 				"sha256sums_aarch64=",
 			},
+		},
+		{
+			name:    "Agent Skill SKILL.md stays a strict Thin Binary Bootstrapper",
+			relPath: filepath.Join("skills", "nomos", "SKILL.md"),
+			mustHave: []string{
+				"name: nomos",
+				"Thin Binary Bootstrapper",
+				"https://sophialabs.ca/install",
+				"nomos xray .",
+				"nomos init",
+			},
+			forbid: []string{"cockpit", "Autonomous Tier 2"},
+		},
+		{
+			name:    "Claude Plugin manifest wires skills directory under Apache-2.0",
+			relPath: filepath.Join(".claude-plugin", "plugin.json"),
+			mustHave: []string{
+				`"name": "nomos"`,
+				`"license": "Apache-2.0"`,
+				`"skills": "./skills/"`,
+			},
+			forbid: []string{"cockpit"},
+		},
+		{
+			name:    "Claude Marketplace manifest exposes nomos root plugin",
+			relPath: filepath.Join(".claude-plugin", "marketplace.json"),
+			mustHave: []string{
+				`"name": "nomos"`,
+				`"source": "./"`,
+			},
+			forbid: []string{"cockpit"},
 		},
 	}
 }

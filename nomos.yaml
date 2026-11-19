@@ -4,6 +4,7 @@ default_branch: main
 governance:
     boundary:
         enforce: true
+        lock_dependencies: true
         prohibited_packages:
             - "pkg/sovereign"
             - "substrate/membrane"
@@ -47,10 +48,80 @@ governance:
               forbid_imports:
                   - "substrate/src/nomos/modules/**"
                   - "substrate/cli/**"
+            - name: "core-no-cmd"
+              from: "substrate/src/nomos/core/**"
+              forbid_imports:
+                  - "substrate/cmd/**"
             - name: "modules-independence"
               from: "substrate/src/nomos/modules/**"
               forbid_imports:
                   - "substrate/cli/**"
+            - name: "modules-no-cmd"
+              from: "substrate/src/nomos/modules/**"
+              forbid_imports:
+                  - "substrate/cmd/**"
+            - name: "pure-leaf-treesitter"
+              from: "substrate/src/nomos/modules/verify/treesitter/**"
+              forbid_imports:
+                  - "substrate/**"
+            - name: "pure-leaf-ncte"
+              from: "substrate/src/nomos/modules/ncte/**"
+              forbid_imports:
+                  - "substrate/**"
+            - name: "domain-task-isolation"
+              from: "substrate/src/nomos/modules/task/**"
+              forbid_imports:
+                  - "substrate/src/nomos/modules/verify/**"
+                  - "substrate/src/nomos/modules/session/**"
+                  - "substrate/src/nomos/modules/handshake/**"
+            - name: "domain-mem-isolation"
+              from: "substrate/src/nomos/modules/mem/**"
+              forbid_imports:
+                  - "substrate/src/nomos/modules/verify/**"
+                  - "substrate/src/nomos/modules/session/**"
+                  - "substrate/src/nomos/modules/handshake/**"
+            - name: "domain-mtpo-isolation"
+              from: "substrate/src/nomos/modules/mtpo/**"
+              forbid_imports:
+                  - "substrate/src/nomos/modules/verify/**"
+                  - "substrate/src/nomos/modules/session/**"
+                  - "substrate/src/nomos/modules/handshake/**"
+            - name: "domain-telemetry-isolation"
+              from: "substrate/src/nomos/modules/telemetry/**"
+              forbid_imports:
+                  - "substrate/src/nomos/modules/verify/**"
+                  - "substrate/src/nomos/modules/session/**"
+                  - "substrate/src/nomos/modules/handshake/**"
+            - name: "hookcmd-shellguard-leaf"
+              from: "substrate/cli/hookcmd/shellguard/**"
+              forbid_imports:
+                  - "substrate/cli/hookcmd/containerguard/**"
+                  - "substrate/src/nomos/modules/verify/**"
+                  - "substrate/src/nomos/modules/session/**"
+                  - "substrate/src/nomos/modules/handshake/**"
+            - name: "hookcmd-containerguard-leaf"
+              from: "substrate/cli/hookcmd/containerguard/**"
+              forbid_imports:
+                  - "substrate/src/nomos/modules/**"
+            - name: "verify-ratchet-leaf"
+              from: "substrate/src/nomos/modules/verify/ratchet/**"
+              forbid_imports:
+                  - "substrate/src/nomos/modules/verify/polygate/**"
+                  - "substrate/src/nomos/modules/verify/intentlint/**"
+                  - "substrate/src/nomos/modules/verify/xray/**"
+                  - "substrate/src/nomos/modules/session/**"
+                  - "substrate/src/nomos/modules/handshake/**"
+                  - "substrate/src/nomos/modules/task/**"
+                  - "substrate/src/nomos/modules/mem/**"
+            - name: "verify-polygate-leaf"
+              from: "substrate/src/nomos/modules/verify/polygate/**"
+              forbid_imports:
+                  - "substrate/src/nomos/modules/verify/intentlint/**"
+                  - "substrate/src/nomos/modules/verify/xray/**"
+                  - "substrate/src/nomos/modules/session/**"
+                  - "substrate/src/nomos/modules/handshake/**"
+                  - "substrate/src/nomos/modules/task/**"
+                  - "substrate/src/nomos/modules/mem/**"
         contracts:
             contracts:
                 enabled: true
@@ -66,12 +137,12 @@ governance:
                 fail_on_stale_obligations: true
         thresholds:
             max_cognitive_debt_score: 45
-            max_cyclomatic_complexity: 15
+            max_cyclomatic_complexity: 14
             max_file_loc: 400
-            max_func_loc: 60
-            min_comment_density_pct: 10
-            min_test_coverage_pct: 55
-            min_clone_lines: 18
-            max_func_params: 8
-            max_magic_string_duplication: 10
-            max_package_files: 40
+            max_func_loc: 55
+            min_comment_density_pct: 90
+            min_test_coverage_pct: 65
+            min_clone_lines: 14
+            max_func_params: 7
+            max_magic_string_duplication: 8
+            max_package_files: 20

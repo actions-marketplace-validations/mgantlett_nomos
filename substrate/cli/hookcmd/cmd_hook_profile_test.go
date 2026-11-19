@@ -3,6 +3,7 @@
 package hookcmd
 
 import (
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"strings"
 	"testing"
 	"time"
@@ -41,7 +42,7 @@ func TestHookAdvisoryProfile_TV_LRN_12_EndToEndAndHardGateInvariance(t *testing.
 	sandboxDir := t.TempDir()
 
 	// 1. Custom 65% warn / 85% crit budget checkpoints + terse advisory style
-	p := &HookPayload{SessionID: "sess-prof-budget"}
+	p := &shellguard.HookPayload{SessionID: "sess-prof-budget"}
 	statePath := resolveBudgetStateFilePath(p, sandboxDir)
 	saveBudgetState(statePath, sessionBudgetState{
 		StartedUnix: time.Now().Unix() - 68,

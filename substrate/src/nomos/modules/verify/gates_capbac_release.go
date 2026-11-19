@@ -4,7 +4,6 @@ package verify
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -17,6 +16,9 @@ import (
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/storage"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/types"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/polygate"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/ratchet"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
 
 func init() {
@@ -252,12 +254,32 @@ func collectPolyglotStringLiteralsFromBytes(path string, data []byte, counts map
 	}
 }
 
+func isIgnoredLiteral(val string) bool {
+	if len(val) <= 3 {
+		return true
+	}
+	if strings.Contains(val, "%") || strings.HasPrefix(val, "http") || strings.HasPrefix(val, "SELECT") {
+		return true
+	}
+	if strings.Contains(val, "/") || strings.Contains(val, "\n") || strings.Contains(val, `\n`) || strings.Contains(val, "- ") || strings.HasSuffix(val, ".go") || strings.Contains(val, `:"`) {
+		return true
+	}
+	common := map[string]bool{
+		"intent": true, "substrate": true, "main": true, "REVIEW": true,
+		"EDIT": true, "PLAN": true, "IDLE": true, "SYNC": true, "DONE": true,
+		"strings": true, "status": true, "error": true, "nomos": true,
+		"message": true, "id": true, "data": true,
+		"type": true, "name": true, "json": true, "ok": true, "text": true,
+	}
+	return common[val]
+}
+
 func countPolyglotFiles(root string, dirs []string) (int, error) {
 	total := 0
 	for _, relDir := range dirs {
 		fullDir := filepath.Join(root, relDir)
 		err := filepath.Walk(fullDir, func(p string, info os.FileInfo, err error) error {
-			if err == nil && info != nil && !info.IsDir() && isPolyglotTargetFile(p) {
+			if err == nil && info != nil && !info.IsDir() && ratchet.IsPolyglotTargetFile(p) {
 				total++
 			}
 			return nil
@@ -272,8 +294,10 @@ func countPolyglotFiles(root string, dirs []string) (int, error) {
 // ZeroFilesystemAliasGate strictly enforces Law 6 by rejecting filesystem symlinks.
 type ZeroFilesystemAliasGate struct{}
 
+// Name returns the canonical display name.
 func (g *ZeroFilesystemAliasGate) Name() string { return "Zero Filesystem Alias Invariant" }
 
+// Evaluate rejects filesystem symlinks across target workspace paths.
 func (g *ZeroFilesystemAliasGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
 	root := ctx.WorktreePath
 	if root == "" {
@@ -297,7 +321,7 @@ func (g *ZeroFilesystemAliasGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.G
 		return nil, types.NewNomosError(types.ErrCodeCore, "zero filesystem alias walk failed: %v", err)
 	}
 
-	violations := EvaluateZeroFilesystemAliasViolations(symlinks)
+	violations := polygate.EvaluateZeroFilesystemAliasViolations(symlinks)
 	if len(violations) > 0 {
 		return &vscope.GateResult{
 			GateName: g.Name(),
@@ -312,8 +336,10 @@ func (g *ZeroFilesystemAliasGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.G
 // PlaneSeparationGate enforces Law 7 by rejecting cross-plane mutations (SUB mutating intent, INT mutating substrate).
 type PlaneSeparationGate struct{}
 
+// Name returns the canonical display name.
 func (g *PlaneSeparationGate) Name() string { return "Plane Separation Invariant" }
 
+// Evaluate rejects cross-plane mutations between Intent and Substrate roots.
 func (g *PlaneSeparationGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
 	if ctx.TaskID == "" || ctx.IsBaseline {
 		return &vscope.GateResult{GateName: g.Name(), Passed: true, Message: "plane separation verified (baseline or unassigned task)"}, nil

@@ -72,7 +72,10 @@ function runNomosHook(subcmd: string, payload: Record<string, unknown>): Record<
   }
   try {
     return JSON.parse(res.stdout.trim()) as Record<string, unknown>;
-  } catch {
+  } catch (err) {
+    if (process.env.NOMOS_DEBUG_HOOKS === "1") {
+      process.stderr.write(`[nomos-hook] malformed JSON from ${subcmd}: ${String(err)}\n`);
+    }
     return null;
   }
 }

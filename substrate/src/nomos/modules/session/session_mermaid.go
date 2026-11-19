@@ -156,21 +156,25 @@ func GenerateSessionThreadsMermaid(detail *SessionDetail) string {
 	for i := startIndex; i < eventCount; i++ {
 		ev := detail.Events[i]
 		nodeID := fmt.Sprintf("E%d", i)
-		nodeClass := "turn"
-		if ev.IsError {
-			nodeClass = "error"
-		} else if ev.Type == "RECEIPT" {
-			nodeClass = "release"
-		} else if ev.Type == "USER_REQUEST" {
-			nodeClass = "active"
-		}
-
-		label := formatEventLabel(ev)
-		sb.WriteString(fmt.Sprintf("    %s --> %s[\"%s\"]:::%s\n", prevNode, nodeID, label, nodeClass))
+		sb.WriteString(fmt.Sprintf("    %s --> %s[\"%s\"]:::%s\n", prevNode, nodeID, formatEventLabel(ev), classifyEventMermaidStyle(ev)))
 		prevNode = nodeID
 	}
 
 	return sb.String()
+}
+
+func classifyEventMermaidStyle(ev SessionEvent) string {
+	if ev.IsError {
+		return "error"
+	}
+	switch ev.Type {
+	case "RECEIPT":
+		return "release"
+	case "USER_REQUEST":
+		return "active"
+	default:
+		return "turn"
+	}
 }
 
 func formatEventLabel(ev SessionEvent) string {

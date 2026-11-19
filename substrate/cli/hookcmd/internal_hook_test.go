@@ -3,6 +3,7 @@ package hookcmd
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"os"
 	"path/filepath"
 	"strings"
@@ -104,7 +105,7 @@ func TestHookPostTool_SlowStepTimeoutGuardAndWorktreeChurn(t *testing.T) {
 	sandboxDir := t.TempDir()
 	now := time.Now().Unix()
 
-	p := &HookPayload{SessionID: "sess-slow-1", CommandLine: "pytest -q"}
+	p := &shellguard.HookPayload{SessionID: "sess-slow-1", CommandLine: "pytest -q"}
 	statePath := resolveBudgetStateFilePath(p, sandboxDir)
 	saveBudgetState(statePath, sessionBudgetState{
 		StartedUnix:     now - 60,

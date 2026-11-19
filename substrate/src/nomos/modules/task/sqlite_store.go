@@ -224,73 +224,76 @@ type rowScanner interface {
 
 func scanTaskRow(scanner rowScanner) (*TaskRecord, error) {
 	var (
-		rec         TaskRecord
-		nullID      sql.NullInt64
-		project     sql.NullString
-		schemaType  sql.NullString
-		desc        sql.NullString
-		status      sql.NullString
-		tier        sql.NullString
-		priority    sql.NullInt64
-		completedAt sql.NullString
-		depJSON     sql.NullString
-		twinKey     sql.NullString
-		arcID       sql.NullString
-		intentDelta sql.NullString
-		burden      sql.NullInt64
-		ctxBurden   sql.NullInt64
-		archLayer   sql.NullInt64
+		rec TaskRecord
+		row scannedTaskRow
 	)
 	err := scanner.Scan(
-		&nullID, &rec.Key, &rec.Plane, &project, &schemaType, &rec.Title, &desc,
-		&status, &tier, &priority, &rec.CreatedAt, &rec.UpdatedAt,
-		&completedAt, &depJSON, &twinKey, &arcID,
-		&intentDelta, &burden, &ctxBurden, &archLayer,
+		&row.nullID, &rec.Key, &rec.Plane, &row.project, &row.schemaType, &rec.Title, &row.desc,
+		&row.status, &row.tier, &row.priority, &rec.CreatedAt, &rec.UpdatedAt,
+		&row.completedAt, &row.depJSON, &row.twinKey, &row.arcID,
+		&row.intentDelta, &row.burden, &row.ctxBurden, &row.archLayer,
 	)
 	if err != nil {
 		return nil, err
 	}
-	rec.Project = project.String
-
-	mapScannedFields(&rec, nullID, schemaType, desc, status, tier, twinKey, priority)
-	mapScannedMetadata(&rec, completedAt, depJSON, arcID, intentDelta, burden, ctxBurden, archLayer)
+	rec.Project = row.project.String
+	mapScannedFields(&rec, &row)
+	mapScannedMetadata(&rec, &row)
 	return &rec, nil
 }
 
-func mapScannedFields(rec *TaskRecord, nullID sql.NullInt64, schemaType, desc, status, tier, twinKey sql.NullString, priority sql.NullInt64) {
-	if nullID.Valid {
-		rec.ID = int(nullID.Int64)
+type scannedTaskRow struct {
+	nullID      sql.NullInt64
+	project     sql.NullString
+	schemaType  sql.NullString
+	desc        sql.NullString
+	status      sql.NullString
+	tier        sql.NullString
+	priority    sql.NullInt64
+	completedAt sql.NullString
+	depJSON     sql.NullString
+	twinKey     sql.NullString
+	arcID       sql.NullString
+	intentDelta sql.NullString
+	burden      sql.NullInt64
+	ctxBurden   sql.NullInt64
+	archLayer   sql.NullInt64
+}
+
+func mapScannedFields(rec *TaskRecord, row *scannedTaskRow) {
+	if row.nullID.Valid {
+		rec.ID = int(row.nullID.Int64)
 	}
-	rec.Description = desc.String
-	rec.TwinKey = twinKey.String
-	rec.SchemaType = SchemaType(schemaType.String)
+	rec.Description = row.desc.String
+	rec.TwinKey = row.twinKey.String
+	rec.SchemaType = SchemaType(row.schemaType.String)
 	if rec.SchemaType == "" {
 		rec.SchemaType = SchemaType(rec.Plane)
 	}
-	rec.Status = Status(status.String)
-	rec.Tier = Tier(tier.String)
+	rec.Status = Status(row.status.String)
+	rec.Tier = Tier(row.tier.String)
 	if rec.Tier == "" {
 		rec.Tier = Tier1
 	}
 	rec.Priority = 50
-	if priority.Valid {
-		rec.Priority = int(priority.Int64)
+	if row.priority.Valid {
+		rec.Priority = int(row.priority.Int64)
 	}
 }
 
-func mapScannedMetadata(rec *TaskRecord, completedAt, depJSON, arcID, intentDelta sql.NullString, burden, ctxBurden, archLayer sql.NullInt64) {
-	if completedAt.Valid {
-		s := completedAt.String
+func mapScannedMetadata(rec *TaskRecord, row *scannedTaskRow) {
+	if row.completedAt.Valid {
+		s := row.completedAt.String
 		rec.CompletedAt = &s
 	}
-	rec.ArcID = arcID.String
-	rec.IntentDelta = intentDelta.String
-	rec.Burden = int(burden.Int64)
-	rec.ContextBurden = int(ctxBurden.Int64)
-	rec.ArchLayer = int(archLayer.Int64)
+	rec.ArcID = row.arcID.String
+	rec.IntentDelta = row.intentDelta.String
+	rec.Burden = int(row.burden.Int64)
+	rec.ContextBurden = int(row.ctxBurden.Int64)
+	rec.ArchLayer = int(row.archLayer.Int64)
 	rec.Dependencies = []string{}
-	if depJSON.Valid && depJSON.String != "" {
-		if err := json.Unmarshal([]byte(depJSON.String), &rec.Dependencies); err != nil {
+	if row.depJSON.Valid && row.depJSON.String != "" {
+		if err := json.Unmarshal([]byte(row.depJSON.String), &rec.Dependencies); err != nil {
 			rec.Dependencies = []string{}
 		}
 	}

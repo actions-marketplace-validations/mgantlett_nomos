@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"os"
 	"path/filepath"
 	"strings"
@@ -61,7 +62,7 @@ func runRootCLIForTest(t *testing.T, stdin string, args ...string) (string, erro
 
 func assertHookJSONDecision(t *testing.T, raw, wantDecision string) {
 	t.Helper()
-	var dec hookcmd.HookDecision
+	var dec shellguard.HookDecision
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &dec); err != nil {
 		t.Fatalf("unmarshal hook decision (%q): %v", raw, err)
 	}
@@ -116,8 +117,12 @@ func assertStealthLocalScaffoldFiles(t *testing.T, repoDir string) {
 		t.Fatalf("TC-INIT-05: expected no worktrees/ dir or .gitignore in --local mode")
 	}
 	agentsRaw, aErr := os.ReadFile(filepath.Join(repoDir, "AGENTS.md"))
-	if aErr != nil || !strings.Contains(string(agentsRaw), "Branch Guard") || strings.Contains(string(agentsRaw), "THE ONE-PAGE INVARIANT CARD") {
-		t.Fatalf("TC-INIT-06: expected compact AGENTS_BRANCH protocol in AGENTS.md, got:\n%s", string(agentsRaw))
+	agentsStr := string(agentsRaw)
+	if aErr != nil || !strings.Contains(agentsStr, "Branch Guard") || strings.Contains(agentsStr, "THE ONE-PAGE INVARIANT CARD") {
+		t.Fatalf("TC-INIT-06: expected compact AGENTS_BRANCH protocol in AGENTS.md, got:\n%s", agentsStr)
+	}
+	if !strings.Contains(agentsStr, "never ask the human operator to run") || !strings.Contains(agentsStr, "Never run `nomos init --worktrees` unprompted") {
+		t.Fatalf("TC-INIT-06: expected invisible-stewardship and no-unprompted-worktrees rules in AGENTS_BRANCH.md, got:\n%s", agentsStr)
 	}
 	if !fileExists(filepath.Join(repoDir, claudeDirToken, settingsFileName)) || !fileExists(filepath.Join(repoDir, "CLAUDE.md")) {
 		t.Fatalf("TC-INIT-06: expected claude hooks + CLAUDE.md")

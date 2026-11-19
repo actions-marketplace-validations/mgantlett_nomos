@@ -178,3 +178,34 @@ func assertContractSubstrings(t *testing.T, relPath, body string, mustHave, forb
 		}
 	}
 }
+
+func TestPublicDocsAndTemplatesRejectNomosHarnessDrift(t *testing.T) {
+	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("resolve repo root: %v", err)
+	}
+	bannedSelfLabels := []string{
+		"Nomos Harness",
+		"Invisible Harness",
+		"Worktree Harness",
+		"indirect control harness",
+		"invisible harness underneath",
+	}
+	cases := []repoContractCase{
+		{name: "README stack diagram", relPath: "README.md", mustHave: []string{"Nomos Substrate"}, forbid: bannedSelfLabels},
+		{name: "llms.txt stack diagram", relPath: "llms.txt", mustHave: []string{"Nomos Substrate"}, forbid: bannedSelfLabels},
+		{name: "CITATION.cff title", relPath: "CITATION.cff", mustHave: []string{"Transactional Git Worktree Layer"}, forbid: bannedSelfLabels},
+		{name: "root AGENTS.md", relPath: "AGENTS.md", mustHave: []string{"Invisible Substrate", "indirect control substrate"}, forbid: bannedSelfLabels},
+		{name: "worktree AGENTS template", relPath: filepath.Join("substrate", "cli", "templates", "AGENTS.md"), mustHave: []string{"Invisible Substrate"}, forbid: bannedSelfLabels},
+		{name: "branch guard AGENTS template", relPath: filepath.Join("substrate", "cli", "templates", "AGENTS_BRANCH.md"), mustHave: []string{"invisible substrate underneath"}, forbid: bannedSelfLabels},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			raw, readErr := os.ReadFile(filepath.Join(repoRoot, tc.relPath))
+			if readErr != nil {
+				t.Fatalf("read %s: %v", tc.relPath, readErr)
+			}
+			assertContractSubstrings(t, tc.relPath, string(raw), tc.mustHave, tc.forbid)
+		})
+	}
+}

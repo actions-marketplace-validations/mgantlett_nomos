@@ -293,3 +293,47 @@ func serializeBoundaryRule(r config.ArchitectureBoundaryRule) string {
 	sort.Strings(allow)
 	return fmt.Sprintf("%s|%s|%s", strings.TrimSpace(r.From), strings.Join(forbid, ","), strings.Join(allow, ","))
 }
+
+type numericThresholdBound struct {
+	name    string
+	trunk   int
+	wt      int
+	isFloor bool
+}
+
+// CheckThresholdsDowngrade rejects worktree numeric-threshold relaxations against trunk nomos.yaml (@intent nomos_intent_traceability_spec.md).
+func CheckThresholdsDowngrade(trunkCfg, wtCfg *config.EcosystemConfig) string {
+	if trunkCfg == nil || wtCfg == nil {
+		return ""
+	}
+	tt := trunkCfg.Governance.QualityGates.Thresholds
+	wt := wtCfg.Governance.QualityGates.Thresholds
+	bounds := []numericThresholdBound{
+		{"max_cognitive_debt_score", tt.MaxCognitiveDebtScore, wt.MaxCognitiveDebtScore, false},
+		{"max_cyclomatic_complexity", tt.MaxCyclomaticComplexity, wt.MaxCyclomaticComplexity, false},
+		{"max_file_loc", tt.MaxFileLOC, wt.MaxFileLOC, false},
+		{"max_func_loc", tt.MaxFuncLOC, wt.MaxFuncLOC, false},
+		{"max_func_params", tt.MaxFuncParams, wt.MaxFuncParams, false},
+		{"min_clone_lines", tt.MinCloneLines, wt.MinCloneLines, false},
+		{"max_magic_string_duplication", tt.MaxMagicStringDuplication, wt.MaxMagicStringDuplication, false},
+		{"max_package_files", tt.MaxPackageFiles, wt.MaxPackageFiles, false},
+		{"min_comment_density_pct", tt.MinCommentDensityPct, wt.MinCommentDensityPct, true},
+		{"min_test_coverage_pct", tt.MinTestCoveragePct, wt.MinTestCoveragePct, true},
+	}
+	for _, b := range bounds {
+		if msg := evaluateThresholdBoundDowngrade(b); msg != "" {
+			return msg
+		}
+	}
+	return ""
+}
+
+func evaluateThresholdBoundDowngrade(b numericThresholdBound) string {
+	if b.isFloor && b.wt < b.trunk {
+		return fmt.Sprintf("worktree nomos.yaml illegally lowers governance.quality_gates.thresholds.%s below trunk baseline (%d -> %d)", b.name, b.trunk, b.wt)
+	}
+	if !b.isFloor && b.trunk > 0 && (b.wt <= 0 || b.wt > b.trunk) {
+		return fmt.Sprintf("worktree nomos.yaml illegally relaxes governance.quality_gates.thresholds.%s above trunk baseline (%d -> %d)", b.name, b.trunk, b.wt)
+	}
+	return ""
+}

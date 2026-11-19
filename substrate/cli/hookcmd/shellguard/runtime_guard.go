@@ -1,6 +1,4 @@
-// Package hookcmd implements Tier 1 agent adapters, software physics telemetry,
-// release readiness, upgrades, and CLI command dispatch contracts.
-package hookcmd
+package shellguard
 
 import (
 	"fmt"
@@ -38,53 +36,46 @@ func isNativeTextReadTool(toolName string) bool {
 	return lower == "read" || lower == "read_file"
 }
 
-func evaluateBinaryReadGuard(p *HookPayload, sandboxMode bool) HookDecision {
+// EvaluateBinaryReadGuard blocks native text read tools from ingesting opaque binary or Gemini media files.
+func EvaluateBinaryReadGuard(p *HookPayload, sandboxMode bool) HookDecision {
 	if p == nil || p.TargetFile == "" || !isNativeTextReadTool(p.ToolName) {
-		return HookDecision{Decision: hookDecisionAllow}
+		return AllowDecision()
 	}
 	ext := strings.ToLower(filepath.Ext(strings.TrimSpace(p.TargetFile)))
 	if ext == "" {
-		return HookDecision{Decision: hookDecisionAllow}
+		return AllowDecision()
 	}
 	if opaqueBinaryReadExts[ext] {
-		return HookDecision{
-			Decision: hookDecisionDeny,
-			Reason: fmt.Sprintf(
-				"❌ [NOMOS INTERCEPT] Binary Context Guard (Law 7): Native text read tool '%s' cannot safely ingest binary/archive artifact '%s' (%s). Inspect metadata or parse structured records via shell utilities (e.g. file, python3, sqlite3, ffprobe, tar -tf, unzip -l) instead.",
-				p.ToolName, filepath.Base(p.TargetFile), ext,
-			),
-		}
+		return DenyDecision(fmt.Sprintf(
+			"❌ [NOMOS INTERCEPT] Binary Context Guard (Law 7): Native text read tool '%s' cannot safely ingest binary/archive artifact '%s' (%s). Inspect metadata or parse structured records via shell utilities (e.g. file, python3, sqlite3, ffprobe, tar -tf, unzip -l) instead.",
+			p.ToolName, filepath.Base(p.TargetFile), ext,
+		))
 	}
 	guardGeminiMedia := sandboxMode || strings.TrimSpace(os.Getenv("NOMOS_GUARD_GEMINI_INLINE_MEDIA")) == "1"
 	if p.IsGeminiEvent && guardGeminiMedia && geminiInlineMediaExts[ext] {
-		return HookDecision{
-			Decision: hookDecisionDeny,
-			Reason: fmt.Sprintf(
-				"❌ [NOMOS INTERCEPT] Gemini Inline-Media Guard (Law 7): Direct read_file on '%s' (%s) triggers a headless Gemini CLI Vertex HTTP 400 turn-serialization error. Inspect, OCR, or parse this file via run_shell_command using python3 (PIL, cv2, numpy, pypdf) or CLI tools instead.",
-				filepath.Base(p.TargetFile), ext,
-			),
-		}
+		return DenyDecision(fmt.Sprintf(
+			"❌ [NOMOS INTERCEPT] Gemini Inline-Media Guard (Law 7): Direct read_file on '%s' (%s) triggers a headless Gemini CLI Vertex HTTP 400 turn-serialization error. Inspect, OCR, or parse this file via run_shell_command using python3 (PIL, cv2, numpy, pypdf) or CLI tools instead.",
+			filepath.Base(p.TargetFile), ext,
+		))
 	}
-	return HookDecision{Decision: hookDecisionAllow}
+	return AllowDecision()
 }
 
-func evaluateInteractiveCommandGuard(cmdLine string) HookDecision {
+// EvaluateInteractiveCommandGuard blocks foreground interactive editors, pagers, and unbounded follow commands.
+func EvaluateInteractiveCommandGuard(cmdLine string) HookDecision {
 	for _, seg := range splitUnquotedChainSegments(cmdLine) {
 		trimmed := strings.TrimSpace(seg)
 		if trimmed == "" || isBackgroundSegment(trimmed) {
 			continue
 		}
 		if offender := detectHangingForegroundSegment(trimmed); offender != "" {
-			return HookDecision{
-				Decision: hookDecisionDeny,
-				Reason: fmt.Sprintf(
-					"❌ [NOMOS INTERCEPT] Headless Hang Guard (Law 7): Foreground interactive or unbounded follow command ('%s') hangs non-TTY sandbox execution until timeout. Use bounded flags (e.g. tail -n 100, top -b -n 1, timeout 10s ...) or non-interactive file tools instead.",
-					offender,
-				),
-			}
+			return DenyDecision(fmt.Sprintf(
+				"❌ [NOMOS INTERCEPT] Headless Hang Guard (Law 7): Foreground interactive or unbounded follow command ('%s') hangs non-TTY sandbox execution until timeout. Use bounded flags (e.g. tail -n 100, top -b -n 1, timeout 10s ...) or non-interactive file tools instead.",
+				offender,
+			))
 		}
 	}
-	return HookDecision{Decision: hookDecisionAllow}
+	return AllowDecision()
 }
 
 func isBackgroundSegment(seg string) bool {
@@ -97,7 +88,7 @@ func detectHangingForegroundSegment(seg string) string {
 		return ""
 	}
 	words := strings.Fields(pipes[0])
-	cmdIdx := skipCommandPrefixes(words)
+	cmdIdx := SkipCommandPrefixes(words)
 	if cmdIdx >= len(words) {
 		return ""
 	}
@@ -128,7 +119,8 @@ func classifyInteractiveExe(exe string, args, downstreamPipes []string) string {
 	return ""
 }
 
-func skipCommandPrefixes(words []string) int {
+// SkipCommandPrefixes advances past leading sudo/env/nohup/command wrappers and KEY=VAL assignments.
+func SkipCommandPrefixes(words []string) int {
 	i := 0
 	for i < len(words) {
 		w := words[i]
@@ -191,7 +183,7 @@ func hasFollowFlag(args []string) bool {
 func pipesIntoHead(downstream []string) bool {
 	for _, stage := range downstream {
 		fields := strings.Fields(stage)
-		idx := skipCommandPrefixes(fields)
+		idx := SkipCommandPrefixes(fields)
 		if idx < len(fields) && filepath.Base(fields[idx]) == "head" {
 			return true
 		}

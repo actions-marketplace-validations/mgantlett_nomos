@@ -6,28 +6,36 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/mgantlett/nomos/substrate/cli/diag"
 	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
 	"github.com/mgantlett/nomos/substrate/cli/inspectcmd"
 	"github.com/mgantlett/nomos/substrate/cli/mcpcmd"
 	"github.com/mgantlett/nomos/substrate/cli/selfupdate"
+	"github.com/mgantlett/nomos/substrate/cli/taskui"
 	"github.com/mgantlett/nomos/substrate/cli/tui"
 
+	"github.com/mgantlett/nomos/substrate/src/nomos/core/config"
+	"github.com/mgantlett/nomos/substrate/src/nomos/core/storage"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/types"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/mem"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/telemetry"
 	"github.com/spf13/cobra"
 )
 
 // RootCmdVersion defines the statutory release version of Nomos v4.
-var RootCmdVersion = "4.24.0"
+var RootCmdVersion = "4.27.0"
 
 func init() {
 	tui.ResolveAppVersion = func() string { return RootCmdVersion }
 	tui.TemplatesFS = initTemplates
 	tui.ScaffoldAmbientHooksFn = scaffoldAmbientHooks
+	tui.DetectAdapterDriftFn = detectAdapterAndStealthDrift
+	tui.RefreshLocalStealthFn = refreshLocalStealthIfPresent
 }
 
 // NewRootCmd constructs the authoritative root Cobra command for Nomos.
@@ -49,7 +57,7 @@ Progressive guardrails between coding agents and Git: zero-write codebase X-Ray,
 		},
 	}
 	rootCmd.SetVersionTemplate(selfupdate.FormatVersionOutput())
-	rootCmd.Flags().BoolVar(&helpAgent, "help-agent", false, "Show internal agent harness and RPC commands")
+	rootCmd.Flags().BoolVar(&helpAgent, "help-agent", false, "Show internal agent lifecycle and RPC commands")
 
 	hiddenAgentCmds := registerSubcommands(rootCmd)
 	configureRootHelp(rootCmd, &helpAgent, hiddenAgentCmds)
@@ -74,7 +82,7 @@ func configureRootHelp(rootCmd *cobra.Command, helpAgent *bool, hiddenAgentCmds 
 			return
 		}
 		defaultHelp(cmd, args)
-		if _, err := fmt.Fprintln(cmd.OutOrStdout(), "\nAgent Harness & Internal RPCs: run \"nomos --help-agent\" for handshake, hook, directive, capabilities, physics, session, and mcp commands."); err != nil {
+		if _, err := fmt.Fprintln(cmd.OutOrStdout(), "\nAgent Lifecycle & Internal RPCs: run \"nomos --help-agent\" for handshake, hook, directive, capabilities, physics, session, and mcp commands."); err != nil {
 			return
 		}
 	})
@@ -196,4 +204,60 @@ func addHiddenCommandWithGroup(root *cobra.Command, cmd *cobra.Command, groupID 
 	cmd.Hidden = true
 	cmd.GroupID = groupID
 	root.AddCommand(cmd)
+}
+
+const staleTrapSweepWindow = 7 * 24 * time.Hour
+
+func runAutomaticSubstrateMaintenance(repoRoot string, force bool) {
+	if iErr := tui.EnsureIDEBoundarySettings(repoRoot); iErr != nil {
+		// best-effort IDE watcher boundary protection
+	}
+	if repoRoot != "" {
+		if _, pErr := taskui.PruneWorkspaceOrphans(repoRoot, false); pErr != nil {
+			// best-effort orphan worktree sweep
+		}
+	}
+	if !storage.ShouldRunPeriodicMaintenance(force) {
+		return
+	}
+	if _, err := storage.MaintainRuntimeStorage(true); err != nil {
+		// best-effort background hygiene
+	}
+	store, err := mem.NewStore(config.ResolveMnemeDBPath())
+	if err == nil {
+		if repoRoot != "" {
+			cleanRoot := filepath.Clean(repoRoot)
+			mem.SweepRepoPitfallHygiene(store, cleanRoot, filepath.Base(cleanRoot), time.Now().UTC())
+		}
+		if _, mErr := store.Maintain(mem.MaintainOptions{}); mErr != nil {
+			// best-effort Mneme compaction
+		}
+		if cErr := store.Close(); cErr != nil {
+			// closed
+		}
+	}
+	mem.SweepStaleTrapBuffers(repoRoot, staleTrapSweepWindow)
+}
+
+func distillAndMaintainOnSync(repoRoot, wtPath, key, walkthroughPath string, touchedFiles []string) {
+	distillAndMaintainOnSyncContent(repoRoot, wtPath, key, readWalkthroughContent(walkthroughPath), touchedFiles)
+}
+
+func distillAndMaintainOnSyncContent(repoRoot, wtPath, key, wtContent string, touchedFiles []string) {
+	if distilled, dErr := mem.DistillTaskLearnings(repoRoot, key, wtContent, touchedFiles); dErr == nil && distilled > 0 {
+		printlnDistilledCount(distilled)
+	}
+	if tr := hookcmd.LoadHookSessionTrace(wtPath); tr != nil && len(tr.MutatedFiles) > 0 {
+		if deadEnds, deErr := mem.RecordRolledBackDeadEnds(repoRoot, key, tr.MutatedFiles, touchedFiles, wtContent); deErr == nil && deadEnds > 0 {
+			fmt.Printf("🧠 Nomos Learn: recorded %d rolled-back dead-end(s) into local Mneme\n", deadEnds)
+		}
+	}
+	if patterns, pErr := mem.DistillVerifiedPattern(repoRoot, key, wtContent, touchedFiles); pErr == nil && patterns > 0 {
+		fmt.Printf("🧠 Nomos Learn: distilled %d verified structural pattern(s) into local Mneme\n", patterns)
+	}
+	runAutomaticSubstrateMaintenance(repoRoot, true)
+}
+
+func printlnDistilledCount(distilled int) {
+	fmt.Printf("🧠 Nomos Learn: distilled %d verified trap->fix pitfall(s) into local Mneme\n", distilled)
 }

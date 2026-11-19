@@ -10,6 +10,7 @@ import (
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/config"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/ratchet"
 )
 
 const (
@@ -154,22 +155,12 @@ func resolveClosestTrunkDivergenceSHAs(worktreePath string) []string {
 		if err != nil {
 			continue
 		}
-		shas := nonEmptyLines(string(revOut))
+		shas := ratchet.NonEmptyLines(string(revOut))
 		if len(shas) > 0 && (best == nil || len(shas) < len(best)) {
 			best = shas
 		}
 	}
 	return best
-}
-
-func nonEmptyLines(raw string) []string {
-	var out []string
-	for _, line := range strings.Split(strings.TrimSpace(raw), "\n") {
-		if s := strings.TrimSpace(line); s != "" {
-			out = append(out, s)
-		}
-	}
-	return out
 }
 
 func isPreCommitExempt(worktreePath string) bool {

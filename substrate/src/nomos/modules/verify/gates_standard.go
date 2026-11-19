@@ -3,10 +3,6 @@ package verify
 
 import (
 	"fmt"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
-	"go/ast"
-	"go/token"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -15,6 +11,10 @@ import (
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/config"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/types"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/polygate"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/ratchet"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
 
 var regexTaskKey = regexp.MustCompile(`^(INT|SUB)-[0-9]+(-[a-z0-9-]+)?$`)
@@ -34,44 +34,24 @@ func init() {
 	RegisterGate("commit_schema", func() vscope.Gate { return &CommitSchemaGate{} })
 }
 
-func isPolyglotTargetFile(path string) bool {
-	if vscope.IsExcludedPolyglotDir(filepath.ToSlash(path)) {
-		return false
-	}
-	switch strings.ToLower(filepath.Ext(path)) {
-	case astdebt.ExtGo:
-		return !strings.HasSuffix(path, astdebt.SuffixGoTest)
-	case astdebt.ExtTS, astdebt.ExtTSX, astdebt.ExtJS, astdebt.ExtJSX, astdebt.ExtMJS, astdebt.ExtCJS:
-		return !vscope.IsJSTestOrDeclFile(path)
-	case astdebt.ExtSvelte:
-		return true
-	case astdebt.ExtPy:
-		return !strings.HasPrefix(filepath.Base(path), astdebt.PrefixPyTest) && !strings.HasSuffix(path, astdebt.SuffixPyTest)
-	case astdebt.ExtRB, astdebt.ExtRake:
-		return !vscope.IsRubyTestFile(path)
-	case astdebt.ExtRS, astdebt.ExtC, astdebt.ExtH, astdebt.ExtCPP, astdebt.ExtCC, astdebt.ExtCXX, astdebt.ExtHPP, astdebt.ExtJava, astdebt.ExtKT, astdebt.ExtKTS, astdebt.ExtCS:
-		return !vscope.IsNativeTestFile(path)
-	default:
-		return false
-	}
-}
-
 // CognitiveDebtGate verifies workspace cognitive debt scores.
 type CognitiveDebtGate struct{}
 
+// Name returns the canonical display name.
 func (g *CognitiveDebtGate) Name() string { return "Cognitive Debt Score Invariant" }
 
+// Evaluate scans modified or repository files for cognitive debt and clone bounds.
 func (g *CognitiveDebtGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
 	root := ctx.WorktreePath
 	if root == "" {
 		root = ctx.RepoRoot
 	}
-	thresh := resolveThresholds(ctx)
+	thresh := ratchet.ResolveThresholds(ctx)
 	var metrics []astdebt.FileMetric
 	sources := make(map[string][]byte)
 
 	err := vscope.WalkTargetFiles(ctx, root, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil || !isPolyglotTargetFile(path) {
+		if walkErr != nil || !ratchet.IsPolyglotTargetFile(path) {
 			return nil
 		}
 		content, rErr := os.ReadFile(path)
@@ -93,7 +73,7 @@ func (g *CognitiveDebtGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateRes
 		return nil, types.NewNomosError(types.ErrCodeCore, "cognitive debt walk failed: %v", err)
 	}
 
-	violations := evaluateRatchetedCDSViolations(ctx, root, metrics, sources, thresh)
+	violations := ratchet.EvaluateRatchetedCDSViolations(ctx, root, metrics, sources, thresh)
 	violations = append(violations, evaluateCrossCorpusCloneViolations(ctx, root, sources, thresh)...)
 	if len(violations) > 0 {
 		return &vscope.GateResult{
@@ -105,9 +85,8 @@ func (g *CognitiveDebtGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateRes
 	return &vscope.GateResult{GateName: g.Name(), Passed: true, Message: "all files within cognitive debt bounds"}, nil
 }
 
-// evaluateCrossCorpusCloneViolations indexes sibling corpus files when diff-scoped edits add new structural clones.
 func evaluateCrossCorpusCloneViolations(ctx *vscope.VerifyContext, root string, sources map[string][]byte, thresh astdebt.Thresholds) []string {
-	if len(sources) == 0 || (ctx != nil && ctx.AllFiles) || vscope.ResolveEffectiveVerifyScope(ctx) == config.VerifyScopeRepo || isUpstreamSurgicalRatchet(ctx) {
+	if len(sources) == 0 || (ctx != nil && ctx.AllFiles) || vscope.ResolveEffectiveVerifyScope(ctx) == config.VerifyScopeRepo || ratchet.IsUpstreamSurgicalRatchet(ctx) {
 		return nil
 	}
 	absRoot, err := filepath.Abs(root)
@@ -123,56 +102,65 @@ func evaluateCrossCorpusCloneViolations(ctx *vscope.VerifyContext, root string, 
 	for rel := range sources {
 		norm := filepath.ToSlash(filepath.Clean(rel))
 		focusNorm[norm] = true
-		if b, ok := loadBaselineFileBytes(ctx, root, filepath.Join(root, rel)); ok {
+		if b, ok := ratchet.LoadBaselineFileBytes(ctx, root, filepath.Join(root, rel)); ok {
 			baseSources[norm] = b
 		}
 	}
 	groups := astdebt.DetectFocusedCorpusClones(sources, baseSources, minLines, func(langs map[string]bool, visit func(relPath string, src []byte)) {
 		excludes := vscope.ResolveScopeExcludes(ctx, absRoot, absRoot)
-		if wErr := workspace.WalkWithExcludes(absRoot, excludes, func(path string, info os.FileInfo, walkErr error) error {
-			return visitCorpusCloneCandidate(absRoot, path, info, walkErr, focusNorm, langs, minLines, visit)
-		}); wErr != nil {
+		spec := corpusCloneWalkSpec{absRoot: absRoot, focusNorm: focusNorm, langs: langs, minLines: minLines, visit: visit}
+		if wErr := workspace.WalkWithExcludes(absRoot, excludes, spec.visitPath); wErr != nil {
 			return
 		}
 	})
 	return astdebt.FormatCloneViolations(groups)
 }
 
-func visitCorpusCloneCandidate(absRoot, path string, info os.FileInfo, walkErr error, focusNorm, langs map[string]bool, minLines int, visit func(string, []byte)) error {
-	if walkErr != nil || info == nil || info.IsDir() || !isPolyglotTargetFile(path) {
+type corpusCloneWalkSpec struct {
+	absRoot   string
+	focusNorm map[string]bool
+	langs     map[string]bool
+	minLines  int
+	visit     func(string, []byte)
+}
+
+func (s corpusCloneWalkSpec) visitPath(path string, info os.FileInfo, walkErr error) error {
+	if walkErr != nil || info == nil || info.IsDir() || !ratchet.IsPolyglotTargetFile(path) {
 		return nil
 	}
-	rel, rErr := filepath.Rel(absRoot, path)
+	rel, rErr := filepath.Rel(s.absRoot, path)
 	if rErr != nil {
 		return nil
 	}
 	normRel := filepath.ToSlash(filepath.Clean(rel))
-	if focusNorm[normRel] || !langs[astdebt.CloneLangFamily(normRel)] {
+	if s.focusNorm[normRel] || !s.langs[astdebt.CloneLangFamily(normRel)] {
 		return nil
 	}
 	raw, err := os.ReadFile(path)
-	if err != nil || countBytesLines(raw) < minLines {
+	if err != nil || ratchet.CountBytesLines(raw) < s.minLines {
 		return nil
 	}
-	visit(normRel, raw)
+	s.visit(normRel, raw)
 	return nil
 }
 
 // MaxFileLOCGate verifies that no file exceeds the line length limit.
 type MaxFileLOCGate struct{}
 
+// Name returns the canonical display name.
 func (g *MaxFileLOCGate) Name() string { return "Max File LOC Invariant" }
 
+// Evaluate verifies target file LOC and package fan-out bounds.
 func (g *MaxFileLOCGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
 	root := ctx.WorktreePath
 	if root == "" {
 		root = ctx.RepoRoot
 	}
-	thresh := resolveThresholds(ctx)
+	thresh := ratchet.ResolveThresholds(ctx)
 	var metrics []astdebt.FileMetric
 
 	err := vscope.WalkTargetFiles(ctx, root, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil || !isPolyglotTargetFile(path) {
+		if walkErr != nil || !ratchet.IsPolyglotTargetFile(path) {
 			return nil
 		}
 		lines := countFileLines(path)
@@ -187,9 +175,9 @@ func (g *MaxFileLOCGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult
 		return nil, types.NewNomosError(types.ErrCodeCore, "file loc walk failed: %v", err)
 	}
 
-	violations := astdebt.EnrichFileLOCViolations(root, filterRatchetedFileLOC(ctx, root, metrics, thresh), thresh)
-	violations = append(violations, EvaluatePackageFanOutViolations(ctx, root, metrics, thresh)...)
-	violations = append(violations, EvaluateUpstreamSurgicalViolations(ctx, root, metrics)...)
+	violations := astdebt.EnrichFileLOCViolations(root, ratchet.FilterRatchetedFileLOC(ctx, root, metrics, thresh), thresh)
+	violations = append(violations, ratchet.EvaluatePackageFanOutViolations(ctx, root, metrics, thresh)...)
+	violations = append(violations, ratchet.EvaluateUpstreamSurgicalViolations(ctx, root, metrics)...)
 	if len(violations) > 0 {
 		return &vscope.GateResult{
 			GateName: g.Name(), Passed: false,
@@ -205,24 +193,26 @@ func countFileLines(path string) int {
 	if err != nil {
 		return 0
 	}
-	return countBytesLines(raw)
+	return ratchet.CountBytesLines(raw)
 }
 
 // ComplexityGate verifies cyclomatic complexity and function LOC bounds.
 type ComplexityGate struct{}
 
+// Name returns the canonical display name.
 func (g *ComplexityGate) Name() string { return "Cognitive Complexity Invariant" }
 
+// Evaluate verifies function cyclomatic complexity, LOC, and arity bounds.
 func (g *ComplexityGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
 	root := ctx.WorktreePath
 	if root == "" {
 		root = ctx.RepoRoot
 	}
-	thresh := resolveThresholds(ctx)
+	thresh := ratchet.ResolveThresholds(ctx)
 	var funcMetrics []astdebt.FunctionMetric
 
 	err := vscope.WalkTargetFiles(ctx, root, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil || !isPolyglotTargetFile(path) {
+		if walkErr != nil || !ratchet.IsPolyglotTargetFile(path) {
 			return nil
 		}
 		rel, rErr := filepath.Rel(root, path)
@@ -230,25 +220,25 @@ func (g *ComplexityGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult
 			rel = path
 		}
 		if !strings.HasSuffix(path, ".go") {
-			collectPolyglotComplexity(path, rel, &funcMetrics)
+			ratchet.CollectPolyglotComplexity(path, rel, &funcMetrics)
 			return nil
 		}
 		fset, node, pErr := vscope.MemoizedParseGoFile(ctx, path, 0)
 		if pErr != nil || node == nil {
 			return nil
 		}
-		collectFunctionMetrics(node, fset, rel, &funcMetrics)
+		ratchet.CollectFunctionMetrics(node, fset, rel, &funcMetrics)
 		return nil
 	})
 	if err != nil {
 		return nil, types.NewNomosError(types.ErrCodeCore, "complexity walk failed: %v", err)
 	}
 
-	ratchetedFuncs, checkArity := filterRatchetedComplexity(ctx, root, funcMetrics, thresh)
+	ratchetedFuncs, checkArity := ratchet.FilterRatchetedComplexity(ctx, root, funcMetrics, thresh)
 	violations := astdebt.EnrichComplexityViolations(root, ratchetedFuncs, thresh, checkArity)
-	violations = append(violations, evaluateBrownfieldArityRatchet(ctx, root, funcMetrics, thresh)...)
-	violations = append(violations, evaluateGoSwitchIdiomViolations(ctx, root)...)
-	violations = append(violations, evaluateTestComplexityViolations(ctx, root)...)
+	violations = append(violations, ratchet.EvaluateBrownfieldArityRatchet(ctx, root, funcMetrics, thresh)...)
+	violations = append(violations, ratchet.EvaluateGoSwitchIdiomViolations(ctx, root)...)
+	violations = append(violations, polygate.EvaluateTestComplexityViolations(ctx, root)...)
 	if len(violations) > 0 {
 		return &vscope.GateResult{
 			GateName: g.Name(), Passed: false,
@@ -259,36 +249,13 @@ func (g *ComplexityGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult
 	return &vscope.GateResult{GateName: g.Name(), Passed: true, Message: "all functions within complexity bounds"}, nil
 }
 
-func collectPolyglotComplexity(path, rel string, out *[]astdebt.FunctionMetric) {
-	if content, err := os.ReadFile(path); err == nil {
-		collectPolyglotComplexityFromBytes(path, rel, content, out)
-	}
-}
-
-func collectFunctionMetrics(node *ast.File, fset *token.FileSet, relPath string, out *[]astdebt.FunctionMetric) {
-	for _, decl := range node.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Body == nil {
-			continue
-		}
-		start := fset.Position(fn.Pos()).Line
-		end := fset.Position(fn.End()).Line
-		comp := astdebt.CalculateCyclomaticComplexity(fn)
-		*out = append(*out, astdebt.FunctionMetric{
-			File:       relPath,
-			Line:       start,
-			Name:       fn.Name.Name,
-			Complexity: comp,
-			LOC:        end - start + 1,
-		})
-	}
-}
-
 // HermeticWorktreeGate verifies worktree boundaries.
 type HermeticWorktreeGate struct{}
 
+// Name returns the canonical display name.
 func (g *HermeticWorktreeGate) Name() string { return "Hermetic Worktree Invariant" }
 
+// Evaluate verifies isolated worktree task boundary invariants.
 func (g *HermeticWorktreeGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
 	if ctx.WorktreePath == "" {
 		return &vscope.GateResult{GateName: g.Name(), Passed: true, Message: "no worktree path specified"}, nil
@@ -314,8 +281,10 @@ func (g *HermeticWorktreeGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.Gate
 // PhaseDisciplineGate verifies lifecycle phase state.
 type PhaseDisciplineGate struct{}
 
+// Name returns the canonical display name.
 func (g *PhaseDisciplineGate) Name() string { return "Phase Discipline Invariant" }
 
+// Evaluate verifies active lifecycle phase state validity.
 func (g *PhaseDisciplineGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
 	if ctx == nil || ctx.Phase == "" {
 		return &vscope.GateResult{GateName: g.Name(), Passed: true, Message: "no active phase enforced"}, nil
@@ -333,8 +302,10 @@ func (g *PhaseDisciplineGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateR
 // CanonicalSingularityGate verifies task key formatting.
 type CanonicalSingularityGate struct{}
 
+// Name returns the canonical display name.
 func (g *CanonicalSingularityGate) Name() string { return "Canonical Singularity Invariant" }
 
+// Evaluate verifies task key prefixes match canonical INT-<N> or SUB-<N> format.
 func (g *CanonicalSingularityGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
 	if ctx.TaskID == "" {
 		return &vscope.GateResult{GateName: g.Name(), Passed: true, Message: "no task id specified"}, nil

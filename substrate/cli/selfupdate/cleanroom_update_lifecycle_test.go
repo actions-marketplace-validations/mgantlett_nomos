@@ -15,9 +15,10 @@ import (
 	"github.com/mgantlett/nomos/substrate/cli/selfupdate"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/constants"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/types"
+	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
 )
 
-// TestCleanroomDownstreamVectors_VerifiedUpdateNoticeAndWorkspaceSync executes the 4-probe
+// TestCleanroomDownstreamVectors_VerifiedUpdateNoticeAndWorkspaceSync executes the 5-probe
 // CDV-UPDATE adversarial cleanroom verification suite.
 func TestCleanroomDownstreamVectors_VerifiedUpdateNoticeAndWorkspaceSync(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -27,6 +28,7 @@ func TestCleanroomDownstreamVectors_VerifiedUpdateNoticeAndWorkspaceSync(t *test
 	t.Run("CDV_UP_02_TamperedSHA256ArchiveRejectedBeforeSwap", verifyCDVUpdateTamperedChecksumRejected)
 	t.Run("CDV_UP_03_VerifiedAtomicSwapAnd24hHandshakeCache", verifyCDVUpdateAtomicSwapAndCache)
 	t.Run("CDV_UP_04_DownstreamContractDriftAndIdempotentSync", verifyCDVUpdateWorkspaceContractSync)
+	t.Run("CDV_UP_05_SelectiveAdapterAndStealthSyncFidelity", verifyCDVUpdateSelectiveStealthSync)
 }
 
 func verifyCDVUpdateProvenanceQuarantine(t *testing.T) {
@@ -160,4 +162,61 @@ func verifyCDVUpdateWorkspaceContractSync(t *testing.T) {
 	if rErr != nil || !strings.Contains(string(finalAgents), "Downstream Rule") || strings.Contains(string(finalAgents), "legacy v4.0 block") {
 		t.Fatalf("CDV-UP-04: expected protocol refreshed while preserving downstream rule")
 	}
+}
+
+func verifyCDVUpdateSelectiveStealthSync(t *testing.T) {
+	t.Setenv(constants.EnvNomosHome, t.TempDir())
+	repoDir := initCleanroomGitRepo(t)
+
+	initCmd := cli.NewRootCmd()
+	initCmd.SetOut(new(bytes.Buffer))
+	initCmd.SetArgs([]string{"init", "--local", "--agents", "claude", "--dir", repoDir})
+	if err := initCmd.Execute(); err != nil {
+		t.Fatalf("CDV-UP-05: stealth claude init failed: %v", err)
+	}
+
+	claudeSettings := filepath.Join(repoDir, ".claude", "settings.json")
+	if wErr := os.WriteFile(claudeSettings, []byte(`{"env":{"CUSTOM":"1"}}`+"\n"), 0644); wErr != nil {
+		t.Fatalf("WriteFile claude settings: %v", wErr)
+	}
+	if len(selfupdate.DetectWorkspaceContractDrift(repoDir)) == 0 {
+		t.Fatalf("CDV-UP-05: expected .claude/settings.json drift detected")
+	}
+
+	srv := startMockReleaseServer(t, "v"+cli.RootCmdVersion, "nomos_Linux_x86_64.tar.gz", []byte("x"), "00")
+	t.Setenv(constants.EnvNomosUpdateAPIURL, srv.URL+"/api/latest")
+	t.Setenv(constants.EnvNomosBinaryPath, filepath.Join(t.TempDir(), "nomos"))
+
+	syncCmd := cli.NewRootCmd()
+	syncCmd.SetOut(new(bytes.Buffer))
+	syncCmd.SetArgs([]string{"update", "--sync-workspace", "--dir", repoDir})
+	if err := syncCmd.Execute(); err != nil {
+		t.Fatalf("CDV-UP-05: --sync-workspace failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repoDir, ".cursor", "hooks.json")); err == nil {
+		t.Fatalf("CDV-UP-05: unselected .cursor/hooks.json leaked during --sync-workspace")
+	}
+	statusOut, sErr := workspace.SafeGitCommand(repoDir, "status", "--porcelain").CombinedOutput()
+	if sErr != nil || strings.TrimSpace(string(statusOut)) != "" {
+		t.Fatalf("CDV-UP-05: --local stealth status dirtied: err=%v out=%q", sErr, string(statusOut))
+	}
+}
+
+func initCleanroomGitRepo(t *testing.T) string {
+	t.Helper()
+	repoDir := t.TempDir()
+	for _, args := range [][]string{{"init"}, {"config", "user.name", "CDV"}, {"config", "user.email", "cdv@nomos.local"}} {
+		if out, err := workspace.SafeGitCommand(repoDir, args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v (%s)", args, err, string(out))
+		}
+	}
+	if err := os.WriteFile(filepath.Join(repoDir, "README.md"), []byte("# Stealth\n"), 0644); err != nil {
+		t.Fatalf("WriteFile README: %v", err)
+	}
+	for _, args := range [][]string{{"add", "README.md"}, {"commit", "-m", "initial"}} {
+		if out, err := workspace.SafeGitCommand(repoDir, args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v (%s)", args, err, string(out))
+		}
+	}
+	return repoDir
 }

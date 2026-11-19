@@ -3,13 +3,13 @@ package cli_test
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/mgantlett/nomos/substrate/cli"
-	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
 	"github.com/mgantlett/nomos/substrate/cli/tui"
 )
 
@@ -32,9 +32,9 @@ func executeHookCmd(t *testing.T, args []string, payload map[string]any) string 
 	return strings.TrimSpace(outBuf.String())
 }
 
-func parseDecision(t *testing.T, raw string) hookcmd.HookDecision {
+func parseDecision(t *testing.T, raw string) shellguard.HookDecision {
 	t.Helper()
-	var dec hookcmd.HookDecision
+	var dec shellguard.HookDecision
 	if err := json.Unmarshal([]byte(raw), &dec); err != nil {
 		t.Fatalf("invalid HookDecision JSON %q: %v", raw, err)
 	}

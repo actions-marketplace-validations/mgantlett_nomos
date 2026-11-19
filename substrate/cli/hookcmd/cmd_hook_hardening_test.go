@@ -1,6 +1,7 @@
 package hookcmd
 
 import (
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +14,7 @@ func TestHookBrainPathScopeAndBypassCommandGuards(t *testing.T) {
 
 	// Source path containing '/brain/' inside a repository must still be blocked on trunk.
 	repoBrainFile := filepath.Join(wsRoot, "pkg", "brain", "service.go")
-	denyDec := EvaluatePreToolHook(&HookPayload{
+	denyDec := EvaluatePreToolHook(&shellguard.HookPayload{
 		ToolName:   "Write",
 		TargetFile: repoBrainFile,
 		Cwd:        wsRoot,
@@ -24,7 +25,7 @@ func TestHookBrainPathScopeAndBypassCommandGuards(t *testing.T) {
 
 	// Genuine Antigravity brain artifact directory remains permitted.
 	agyBrainFile := filepath.Join(t.TempDir(), "antigravity", "brain", "conv-1", "plan.md")
-	allowDec := EvaluatePreToolHook(&HookPayload{
+	allowDec := EvaluatePreToolHook(&shellguard.HookPayload{
 		ToolName:   "write_file",
 		TargetFile: agyBrainFile,
 		Cwd:        wsRoot,
@@ -39,7 +40,7 @@ func TestHookBrainPathScopeAndBypassCommandGuards(t *testing.T) {
 		`NOMOS_COMMIT_IN_PROGRESS=1 git commit -m "spoof"`,
 		`NOMOS_INIT_IN_PROGRESS=1 git commit -m "spoof"`,
 	} {
-		dec := EvaluatePreToolHook(&HookPayload{
+		dec := EvaluatePreToolHook(&shellguard.HookPayload{
 			ToolName:    "Bash",
 			CommandLine: forbiddenCmd,
 			Cwd:         wsRoot,
@@ -61,7 +62,7 @@ func TestHookVerifyState_RejectsEchoSpoofAndFailedVerifyKeepsStopBlocked(t *test
 		t.Fatal(err)
 	}
 
-	recordPreToolSessionTrace(&HookPayload{
+	recordPreToolSessionTrace(&shellguard.HookPayload{
 		ToolName:   "Write",
 		TargetFile: wtFile,
 		Cwd:        wtDir,
@@ -69,24 +70,24 @@ func TestHookVerifyState_RejectsEchoSpoofAndFailedVerifyKeepsStopBlocked(t *test
 
 	// Read-only --impact or echo must NOT clear DirtyUnverifiedEdits.
 	for _, nonVerify := range []string{"echo nomos verify", "nomos verify --impact"} {
-		recordPreToolSessionTrace(&HookPayload{
+		recordPreToolSessionTrace(&shellguard.HookPayload{
 			ToolName:    "Bash",
 			CommandLine: nonVerify,
 			Cwd:         wtDir,
 		}, "", false)
-		stopDec := EvaluateStopHook(&HookPayload{Cwd: wtDir}, "", false)
+		stopDec := EvaluateStopHook(&shellguard.HookPayload{Cwd: wtDir}, "", false)
 		if stopDec.Decision != hookDecisionBlock {
 			t.Fatalf("expected %q not to clear Stop block, got %+v", nonVerify, stopDec)
 		}
 	}
 
 	// Executing 'nomos verify' that FAILS in PostToolUse must re-mark DirtyUnverifiedEdits=true.
-	recordPreToolSessionTrace(&HookPayload{
+	recordPreToolSessionTrace(&shellguard.HookPayload{
 		ToolName:    "Bash",
 		CommandLine: "nomos verify",
 		Cwd:         wtDir,
 	}, "", false)
-	adv := evaluateWorktreeChurnAdvisory(&HookPayload{
+	adv := evaluateWorktreeChurnAdvisory(&shellguard.HookPayload{
 		ToolName:         "Bash",
 		CommandLine:      "nomos verify",
 		Cwd:              wtDir,
@@ -95,13 +96,13 @@ func TestHookVerifyState_RejectsEchoSpoofAndFailedVerifyKeepsStopBlocked(t *test
 	if adv != "" {
 		t.Fatalf("expected silent churn advisory on nomos verify, got %q", adv)
 	}
-	failedStop := EvaluateStopHook(&HookPayload{Cwd: wtDir}, "", false)
+	failedStop := EvaluateStopHook(&shellguard.HookPayload{Cwd: wtDir}, "", false)
 	if failedStop.Decision != hookDecisionBlock {
 		t.Fatalf("expected failed nomos verify to keep Stop blocked, got %+v", failedStop)
 	}
 
 	// Subsequent clean 'nomos verify' clears unverified state and allows Stop.
-	cleanAdv := evaluateWorktreeChurnAdvisory(&HookPayload{
+	cleanAdv := evaluateWorktreeChurnAdvisory(&shellguard.HookPayload{
 		ToolName:         "Bash",
 		CommandLine:      "nomos verify",
 		Cwd:              wtDir,
@@ -110,7 +111,7 @@ func TestHookVerifyState_RejectsEchoSpoofAndFailedVerifyKeepsStopBlocked(t *test
 	if cleanAdv != "" {
 		t.Fatalf("expected silent churn advisory on clean nomos verify, got %q", cleanAdv)
 	}
-	passedStop := EvaluateStopHook(&HookPayload{Cwd: wtDir}, "", false)
+	passedStop := EvaluateStopHook(&shellguard.HookPayload{Cwd: wtDir}, "", false)
 	if passedStop.Decision != hookDecisionAllow {
 		t.Fatalf("expected clean nomos verify to allow Stop, got %+v", passedStop)
 	}
@@ -121,7 +122,7 @@ func TestPreToolHook_CredentialReadModeAndBlockedReadPaths(t *testing.T) {
 	wsRoot := t.TempDir()
 
 	// Default host_deny blocks ~/.aws and cat ~/.aws/credentials while permitting & tainting workspace .env.
-	for _, p := range []*HookPayload{
+	for _, p := range []*shellguard.HookPayload{
 		{ToolName: "Read", TargetFile: "~/.aws/credentials", Cwd: wsRoot},
 		{ToolName: "Read", TargetFile: "/root/.ssh/id_ed25519", Cwd: wsRoot},
 		{ToolName: "Bash", CommandLine: "cat ~/.aws/credentials", Cwd: wsRoot},
@@ -136,7 +137,7 @@ func TestPreToolHook_CredentialReadModeAndBlockedReadPaths(t *testing.T) {
 	if err := os.WriteFile(envPath, []byte("PORT=8080\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if dec := EvaluatePreToolHook(&HookPayload{ToolName: "Read", TargetFile: envPath, Cwd: wsRoot}, ""); dec.Decision != hookDecisionAllow {
+	if dec := EvaluatePreToolHook(&shellguard.HookPayload{ToolName: "Read", TargetFile: envPath, Cwd: wsRoot}, ""); dec.Decision != hookDecisionAllow {
 		t.Fatalf("expected workspace .env read to be allowed under default host_deny, got %+v", dec)
 	}
 
@@ -145,11 +146,11 @@ func TestPreToolHook_CredentialReadModeAndBlockedReadPaths(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(wsRoot, "nomos.yaml"), []byte(strictYAML), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if dec := EvaluatePreToolHook(&HookPayload{ToolName: "Read", TargetFile: envPath, Cwd: wsRoot}, ""); dec.Decision != hookDecisionDeny {
+	if dec := EvaluatePreToolHook(&shellguard.HookPayload{ToolName: "Read", TargetFile: envPath, Cwd: wsRoot}, ""); dec.Decision != hookDecisionDeny {
 		t.Fatalf("expected strict mode to deny workspace .env read, got %+v", dec)
 	}
 	secretFile := filepath.Join(wsRoot, "secrets", "prod.json")
-	if dec := EvaluatePreToolHook(&HookPayload{ToolName: "Read", TargetFile: secretFile, Cwd: wsRoot}, ""); dec.Decision != hookDecisionDeny {
+	if dec := EvaluatePreToolHook(&shellguard.HookPayload{ToolName: "Read", TargetFile: secretFile, Cwd: wsRoot}, ""); dec.Decision != hookDecisionDeny {
 		t.Fatalf("expected blocked_read_paths 'secrets/**' to deny read, got %+v", dec)
 	}
 }

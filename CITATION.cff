@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-title: "Nomos: Deterministic Execution Substrate and Transactional Git Worktree Harness for AI Coding Agents"
+title: "Nomos: Deterministic Execution Substrate and Transactional Git Worktree Layer for AI Coding Agents"
 message: "If you use Nomos or its empirical verification benchmarks in your research or engineering systems, please cite it using the metadata below."
 type: software
 authors:

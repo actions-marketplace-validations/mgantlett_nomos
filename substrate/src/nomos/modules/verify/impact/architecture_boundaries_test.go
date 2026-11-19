@@ -35,3 +35,31 @@ func TestEvaluateArchitectureBoundaries_DottedModulePrefixCandidate(t *testing.T
 		t.Fatalf("expected 1 violation for dotted module prefix import, got: %v", violations)
 	}
 }
+
+// @verifies TC-COV-007
+func TestCheckThresholdsDowngrade_RejectsCapIncreaseAndFloorDecrease(t *testing.T) {
+	trunk := config.DefaultNomosConfig()
+	trunk.Governance.QualityGates.Thresholds.MaxPackageFiles = 30
+	trunk.Governance.QualityGates.Thresholds.MinCommentDensityPct = 90
+
+	tighter := config.DefaultNomosConfig()
+	tighter.Governance.QualityGates.Thresholds.MaxPackageFiles = 28
+	tighter.Governance.QualityGates.Thresholds.MinCommentDensityPct = 92
+	if msg := CheckThresholdsDowngrade(trunk, tighter); msg != "" {
+		t.Fatalf("expected stricter worktree thresholds to pass, got: %s", msg)
+	}
+
+	relaxedCap := config.DefaultNomosConfig()
+	relaxedCap.Governance.QualityGates.Thresholds.MaxPackageFiles = 40
+	relaxedCap.Governance.QualityGates.Thresholds.MinCommentDensityPct = 90
+	if msg := CheckThresholdsDowngrade(trunk, relaxedCap); msg == "" {
+		t.Fatalf("expected relaxation of max_package_files (30 -> 40) to fail closed")
+	}
+
+	loweredFloor := config.DefaultNomosConfig()
+	loweredFloor.Governance.QualityGates.Thresholds.MaxPackageFiles = 30
+	loweredFloor.Governance.QualityGates.Thresholds.MinCommentDensityPct = 10
+	if msg := CheckThresholdsDowngrade(trunk, loweredFloor); msg == "" {
+		t.Fatalf("expected lowering of min_comment_density_pct (90 -> 10) to fail closed")
+	}
+}

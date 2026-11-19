@@ -55,55 +55,32 @@ func InferTrajectory(detail *SessionDetail, rawLines []string) *SessionTrajector
 	}
 }
 
+const (
+	stageStatusCompleted = "COMPLETED"
+	stageStatusPending   = "PENDING"
+	stageStatusActive    = "ACTIVE"
+)
+
+func buildTrajectoryStage(id, label string, done bool, okEvidence, pendingEvidence string) TrajectoryStage {
+	if done {
+		return TrajectoryStage{ID: id, Label: label, Status: stageStatusCompleted, Evidence: okEvidence}
+	}
+	return TrajectoryStage{ID: id, Label: label, Status: stageStatusPending, Evidence: pendingEvidence}
+}
+
 func inferBootStage(content string) TrajectoryStage {
-	if strings.Contains(content, "nomos handshake") || strings.Contains(content, "nomos sys handshake") || strings.Contains(content, "/Nomos Handshake") || strings.Contains(content, "/nomos-handshake") {
-		return TrajectoryStage{
-			ID:       "BOOT",
-			Label:    "1. Handshake & Boot",
-			Status:   "COMPLETED",
-			Evidence: "nomos handshake executed cleanly",
-		}
-	}
-	return TrajectoryStage{
-		ID:       "BOOT",
-		Label:    "1. Handshake & Boot",
-		Status:   "PENDING",
-		Evidence: "Awaiting JIT protocol initialization",
-	}
+	done := strings.Contains(content, "nomos handshake") || strings.Contains(content, "nomos sys handshake") ||
+		strings.Contains(content, "/Nomos Handshake") || strings.Contains(content, "/nomos-handshake")
+	return buildTrajectoryStage("BOOT", "1. Handshake & Boot", done, "nomos handshake executed cleanly", "Awaiting JIT protocol initialization")
 }
 
 func inferAllocationStage(detail *SessionDetail, content string) TrajectoryStage {
-	if detail.TaskKey != "" || strings.Contains(content, "nomos task start") || strings.Contains(content, "nomos task chore") {
-		return TrajectoryStage{
-			ID:       "ALLOCATION",
-			Label:    "2. Task Allocation",
-			Status:   "COMPLETED",
-			Evidence: "CapBAC task lease and hermetic worktree provisioned",
-		}
-	}
-	return TrajectoryStage{
-		ID:       "ALLOCATION",
-		Label:    "2. Task Allocation",
-		Status:   "PENDING",
-		Evidence: "No active task worktree allocated",
-	}
+	done := detail.TaskKey != "" || strings.Contains(content, "nomos task start") || strings.Contains(content, "nomos task chore")
+	return buildTrajectoryStage("ALLOCATION", "2. Task Allocation", done, "CapBAC task lease and hermetic worktree provisioned", "No active task worktree allocated")
 }
 
 func inferBaselineStage(content string) TrajectoryStage {
-	if strings.Contains(content, "nomos verify") {
-		return TrajectoryStage{
-			ID:       "BASELINE",
-			Label:    "3. Baseline Verification",
-			Status:   "COMPLETED",
-			Evidence: "Pre-flight sensor probes verified cleanly",
-		}
-	}
-	return TrajectoryStage{
-		ID:       "BASELINE",
-		Label:    "3. Baseline Verification",
-		Status:   "PENDING",
-		Evidence: "Baseline verification not yet invoked",
-	}
+	return buildTrajectoryStage("BASELINE", "3. Baseline Verification", strings.Contains(content, "nomos verify"), "Pre-flight sensor probes verified cleanly", "Baseline verification not yet invoked")
 }
 
 var (
@@ -133,84 +110,33 @@ func hasAnyTrajectoryMarker(content string, markers []string) bool {
 }
 
 func inferExplorationStage(content string) TrajectoryStage {
-	if hasAnyTrajectoryMarker(content, explorationMarkers) {
-		return TrajectoryStage{
-			ID:       "EXPLORATION",
-			Label:    "4. Code Exploration",
-			Status:   "COMPLETED",
-			Evidence: "Target AST and source symbols explored",
-		}
-	}
-	return TrajectoryStage{
-		ID:       "EXPLORATION",
-		Label:    "4. Code Exploration",
-		Status:   "PENDING",
-		Evidence: "Awaiting initial source investigation",
-	}
+	return buildTrajectoryStage("EXPLORATION", "4. Code Exploration", hasAnyTrajectoryMarker(content, explorationMarkers), "Target AST and source symbols explored", "Awaiting initial source investigation")
 }
 
 func inferOracleStage(content string) TrajectoryStage {
-	if hasAnyTrajectoryMarker(content, oracleMarkers) {
-		return TrajectoryStage{
-			ID:       "ORACLE",
-			Label:    "5. Test & Oracle",
-			Status:   "COMPLETED",
-			Evidence: "Automated test suite or deterministic oracle verified",
-		}
-	}
-	return TrajectoryStage{
-		ID:       "ORACLE",
-		Label:    "5. Test & Oracle",
-		Status:   "PENDING",
-		Evidence: "Awaiting test execution",
-	}
+	return buildTrajectoryStage("ORACLE", "5. Test & Oracle", hasAnyTrajectoryMarker(content, oracleMarkers), "Automated test suite or deterministic oracle verified", "Awaiting test execution")
 }
 
 func inferImplementationStage(content string) TrajectoryStage {
-	if hasAnyTrajectoryMarker(content, implementationMarkers) {
-		return TrajectoryStage{
-			ID:       "IMPLEMENTATION",
-			Label:    "6. Implementation",
-			Status:   "COMPLETED",
-			Evidence: "Targeted AST modifications applied",
-		}
-	}
-	return TrajectoryStage{
-		ID:       "IMPLEMENTATION",
-		Label:    "6. Implementation",
-		Status:   "PENDING",
-		Evidence: "No file edits committed yet",
-	}
+	return buildTrajectoryStage("IMPLEMENTATION", "6. Implementation", hasAnyTrajectoryMarker(content, implementationMarkers), "Targeted AST modifications applied", "No file edits committed yet")
 }
 
 func inferReleaseStage(content string) TrajectoryStage {
-	if strings.Contains(content, "nomos task sync") || strings.Contains(content, "walkthrough.md") {
-		return TrajectoryStage{
-			ID:       "RELEASE",
-			Label:    "7. 2PC Release Sync",
-			Status:   "COMPLETED",
-			Evidence: "Merged to protected trunk via 2PC release certificate",
-		}
-	}
-	return TrajectoryStage{
-		ID:       "RELEASE",
-		Label:    "7. 2PC Release Sync",
-		Status:   "PENDING",
-		Evidence: "Release sync not yet executed",
-	}
+	done := strings.Contains(content, "nomos task sync") || strings.Contains(content, "walkthrough.md")
+	return buildTrajectoryStage("RELEASE", "7. 2PC Release Sync", done, "Merged to protected trunk via 2PC release certificate", "Release sync not yet executed")
 }
 
 func markActiveStage(stages []TrajectoryStage, sessionStatus string) {
-	if sessionStatus != "ACTIVE" {
+	if sessionStatus != stageStatusActive {
 		return
 	}
 	for i := len(stages) - 1; i >= 0; i-- {
-		if stages[i].Status == "COMPLETED" && i < len(stages)-1 {
-			stages[i+1].Status = "ACTIVE"
+		if stages[i].Status == stageStatusCompleted && i < len(stages)-1 {
+			stages[i+1].Status = stageStatusActive
 			return
 		}
 	}
-	if len(stages) > 0 && stages[0].Status == "PENDING" {
-		stages[0].Status = "ACTIVE"
+	if len(stages) > 0 && stages[0].Status == stageStatusPending {
+		stages[0].Status = stageStatusActive
 	}
 }

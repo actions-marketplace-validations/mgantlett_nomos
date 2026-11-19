@@ -1,6 +1,6 @@
-// Package hookcmd implements Tier 1 agent adapters, software physics telemetry,
-// release readiness, upgrades, and CLI command dispatch contracts.
-package hookcmd
+// Package containerguard enforces container sandbox policy, protected path confinement,
+// outbound egress/SSRF airlocks, MCP taint tracking, and autonomous side-effect guards.
+package containerguard
 
 import (
 	"bytes"
@@ -11,6 +11,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 )
 
 const maxInspectedBinaryBytes = 2 * 1024 * 1024
@@ -35,41 +37,41 @@ var standardContainerTools = map[string]bool{
 	"mkdir": true, "rm": true, "mv": true, "cp": true, "diff": true,
 }
 
-func evaluateContainerProtectedPathsGuard(p *HookPayload, baseCwd string, pol containerSandboxPolicy) HookDecision {
+func evaluateContainerProtectedPathsGuard(p *shellguard.HookPayload, baseCwd string, pol SandboxPolicy) shellguard.HookDecision {
 	if len(pol.ProtectedPaths) == 0 || p == nil {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.AllowDecision()
 	}
 	roots := normalizeProtectedRoots(pol.ProtectedPaths, baseCwd)
 	symlinks := collectWorkspaceEscapingSymlinks(baseCwd, roots)
-	if dec := checkTargetsAgainstProtectedRoots(p, baseCwd, roots, symlinks); dec.Decision == hookDecisionDeny {
+	if dec := checkTargetsAgainstProtectedRoots(p, baseCwd, roots, symlinks); dec.Decision == shellguard.DecisionDeny {
 		return dec
 	}
-	if !isReadOnlyTool(p.ToolName) && p.WrittenContent != "" {
+	if !shellguard.IsReadOnlyTool(p.ToolName) && p.WrittenContent != "" {
 		if hit := matchProtectedReference(p.WrittenContent, roots, symlinks); hit != "" {
-			return denyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Path Boundary Violation (Law 3): Script payload references restricted path or alias '%s'.", hit))
+			return shellguard.DenyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Path Boundary Violation (Law 3): Script payload references restricted path or alias '%s'.", hit))
 		}
 	}
 	if p.CommandLine != "" {
 		return checkShellCommandAgainstProtectedRoots(p.CommandLine, baseCwd, roots, symlinks)
 	}
-	return HookDecision{Decision: hookDecisionAllow}
+	return shellguard.AllowDecision()
 }
 
-func checkTargetsAgainstProtectedRoots(p *HookPayload, baseCwd string, roots []string, symlinks []workspaceEscapeLink) HookDecision {
+func checkTargetsAgainstProtectedRoots(p *shellguard.HookPayload, baseCwd string, roots []string, symlinks []workspaceEscapeLink) shellguard.HookDecision {
 	targets := p.TargetFiles
 	if len(targets) == 0 && p.TargetFile != "" {
 		targets = []string{p.TargetFile}
 	}
 	for _, raw := range targets {
-		realPath := resolveRealPathDeep(raw, baseCwd)
+		realPath := ResolveRealPathDeep(raw, baseCwd)
 		if isUnderAnyRoot(realPath, roots) {
-			return denyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Path Boundary Violation (Law 3): Access to protected path '%s' (resolved '%s') is prohibited.", raw, realPath))
+			return shellguard.DenyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Path Boundary Violation (Law 3): Access to protected path '%s' (resolved '%s') is prohibited.", raw, realPath))
 		}
-		if link, ok := matchWorkspaceEscapeLink(normalizeCanonicalPath(raw, baseCwd), symlinks); ok {
-			return denyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Path Boundary Violation (Law 3): Workspace symlink '%s' resolves into protected path '%s'.", raw, link.RealTarget))
+		if link, ok := matchWorkspaceEscapeLink(shellguard.NormalizeCanonicalPath(raw, baseCwd), symlinks); ok {
+			return shellguard.DenyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Path Boundary Violation (Law 3): Workspace symlink '%s' resolves into protected path '%s'.", raw, link.RealTarget))
 		}
 	}
-	return HookDecision{Decision: hookDecisionAllow}
+	return shellguard.AllowDecision()
 }
 
 func matchWorkspaceEscapeLink(normPath string, symlinks []workspaceEscapeLink) (workspaceEscapeLink, bool) {
@@ -81,28 +83,28 @@ func matchWorkspaceEscapeLink(normPath string, symlinks []workspaceEscapeLink) (
 	return workspaceEscapeLink{}, false
 }
 
-func checkShellCommandAgainstProtectedRoots(cmdLine, baseCwd string, roots []string, symlinks []workspaceEscapeLink) HookDecision {
+func checkShellCommandAgainstProtectedRoots(cmdLine, baseCwd string, roots []string, symlinks []workspaceEscapeLink) shellguard.HookDecision {
 	if hit := matchProtectedReference(cmdLine, roots, symlinks); hit != "" {
-		return denyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Path Boundary Violation (Law 3): Shell command references protected path or escaping alias '%s'.", hit))
+		return shellguard.DenyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Path Boundary Violation (Law 3): Shell command references protected path or escaping alias '%s'.", hit))
 	}
-	for _, inv := range extractAllContainerCommandInvocations(cmdLine) {
+	for _, inv := range shellguard.ExtractAllContainerCommandInvocations(cmdLine) {
 		if hit := checkInvocationArgsProtected(inv, baseCwd, roots); hit != "" {
-			return denyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Path Boundary Violation (Law 3): Command argument resolves to protected path '%s'.", hit))
+			return shellguard.DenyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Path Boundary Violation (Law 3): Command argument resolves to protected path '%s'.", hit))
 		}
 		if hit := checkNonStandardExeStaticEscape(inv.RawExe, baseCwd, roots, symlinks); hit != "" {
-			return denyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Capability Alias Violation (Law 3): Executable '%s' statically accesses protected target or alias '%s'.", inv.Exe, hit))
+			return shellguard.DenyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Capability Alias Violation (Law 3): Executable '%s' statically accesses protected target or alias '%s'.", inv.Exe, hit))
 		}
 	}
-	return HookDecision{Decision: hookDecisionAllow}
+	return shellguard.AllowDecision()
 }
 
-func checkInvocationArgsProtected(inv shellCommandInvocation, baseCwd string, roots []string) string {
+func checkInvocationArgsProtected(inv shellguard.ShellCommandInvocation, baseCwd string, roots []string) string {
 	candidates := append([]string{inv.RawExe}, inv.Args...)
 	for _, arg := range candidates {
 		if arg == "" || strings.HasPrefix(arg, "-") {
 			continue
 		}
-		realArg := resolveRealPathDeep(arg, baseCwd)
+		realArg := ResolveRealPathDeep(arg, baseCwd)
 		if isUnderAnyRoot(realArg, roots) {
 			return realArg
 		}
@@ -130,7 +132,7 @@ func collectWorkspaceEscapingSymlinks(baseCwd string, roots []string) []workspac
 		if d.Type()&os.ModeSymlink == 0 {
 			return nil
 		}
-		target := resolveRealPathDeep(path, baseCwd)
+		target := ResolveRealPathDeep(path, baseCwd)
 		if isUnderAnyRoot(target, roots) {
 			out = append(out, workspaceEscapeLink{
 				LinkPath:   filepath.ToSlash(filepath.Clean(path)),
@@ -147,7 +149,7 @@ func collectWorkspaceEscapingSymlinks(baseCwd string, roots []string) []workspac
 
 func checkNonStandardExeStaticEscape(exe, baseCwd string, roots []string, symlinks []workspaceEscapeLink) string {
 	base := strings.ToLower(filepath.Base(exe))
-	if standardContainerTools[base] || isPythonExe(base) {
+	if standardContainerTools[base] || shellguard.IsPythonExe(base) {
 		return ""
 	}
 	binPath, err := lookPathInWorkspace(exe, baseCwd)
@@ -176,14 +178,18 @@ func readBoundedFileBytes(path string) ([]byte, bool) {
 	if err != nil {
 		return nil, false
 	}
-	defer func() { _ = f.Close() }()
+	defer func() {
+		if cErr := f.Close(); cErr != nil {
+			return
+		}
+	}()
 	buf, rErr := io.ReadAll(io.LimitReader(f, maxInspectedBinaryBytes))
 	return buf, rErr == nil && len(buf) > 0
 }
 
 func lookPathInWorkspace(exe, baseCwd string) (string, error) {
 	if strings.Contains(exe, "/") {
-		cand := normalizeCanonicalPath(exe, baseCwd)
+		cand := shellguard.NormalizeCanonicalPath(exe, baseCwd)
 		if _, err := os.Stat(cand); err == nil {
 			return cand, nil
 		}
@@ -212,14 +218,15 @@ func normalizeProtectedRoots(raw []string, baseCwd string) []string {
 	out := make([]string, 0, len(raw))
 	for _, item := range raw {
 		if trimmed := strings.TrimSpace(item); trimmed != "" {
-			out = append(out, strings.TrimRight(resolveRealPathDeep(trimmed, baseCwd), "/"))
+			out = append(out, strings.TrimRight(ResolveRealPathDeep(trimmed, baseCwd), "/"))
 		}
 	}
 	return out
 }
 
-func resolveRealPathDeep(raw, baseCwd string) string {
-	norm := normalizeCanonicalPath(raw, baseCwd)
+// ResolveRealPathDeep resolves ancestor symlinks even when trailing path components do not exist yet.
+func ResolveRealPathDeep(raw, baseCwd string) string {
+	norm := shellguard.NormalizeCanonicalPath(raw, baseCwd)
 	cur := filepath.FromSlash(norm)
 	suffix := make([]string, 0, 4)
 	for {
@@ -247,7 +254,8 @@ func isUnderAnyRoot(realPath string, roots []string) bool {
 	return false
 }
 
-func isProtectedContainerHookConfigPath(resolved string) bool {
+// IsProtectedContainerHookConfigPath reports whether resolved targets tamper-protected hook config or binary paths.
+func IsProtectedContainerHookConfigPath(resolved string) bool {
 	lower := strings.ToLower(filepath.ToSlash(resolved))
 	return strings.HasSuffix(lower, "/.claude/settings.json") ||
 		strings.HasSuffix(lower, "/.claude/settings.local.json") ||

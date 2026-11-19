@@ -1,6 +1,4 @@
-// Package hookcmd implements Tier 1 agent adapters, software physics telemetry,
-// release readiness, upgrades, and CLI command dispatch contracts.
-package hookcmd
+package containerguard
 
 import (
 	"encoding/json"
@@ -9,17 +7,19 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 )
 
 const (
-	envContainerPolicyFile     = "NOMOS_CONTAINER_POLICY_FILE"
+	// EnvContainerPolicyFile overrides the path to the tamper-protected container policy JSON file.
+	EnvContainerPolicyFile     = "NOMOS_CONTAINER_POLICY_FILE"
 	defaultHomePolicyPath      = "/root/.nomos-bin/policy.json"
 	defaultContainerPolicyPath = "/etc/nomos/policy.json"
 )
 
-// containerSandboxPolicy declares external, tamper-protected capability limits
-// enforced in --container-sandbox mode when no repo nomos.yaml is appropriate.
-type containerSandboxPolicy struct {
+// SandboxPolicy declares external, tamper-protected capability limits enforced in --container-sandbox mode.
+type SandboxPolicy struct {
 	ReadOnly                         bool     `json:"read_only"`
 	ProtectedPaths                   []string `json:"protected_paths"`
 	AllowedCommandPrefixes           []string `json:"allowed_command_prefixes"`
@@ -52,9 +52,10 @@ var (
 	}
 )
 
-func loadContainerSandboxPolicy() containerSandboxPolicy {
+// LoadSandboxPolicy loads the active container SandboxPolicy from environment or default container paths.
+func LoadSandboxPolicy() SandboxPolicy {
 	candidates := []string{
-		strings.TrimSpace(os.Getenv(envContainerPolicyFile)),
+		strings.TrimSpace(os.Getenv(EnvContainerPolicyFile)),
 		defaultHomePolicyPath,
 		defaultContainerPolicyPath,
 	}
@@ -66,45 +67,46 @@ func loadContainerSandboxPolicy() containerSandboxPolicy {
 		if err != nil {
 			continue
 		}
-		var pol containerSandboxPolicy
+		var pol SandboxPolicy
 		if uErr := json.Unmarshal(data, &pol); uErr == nil {
 			return pol
 		}
 	}
-	return containerSandboxPolicy{}
+	return SandboxPolicy{}
 }
 
-func evaluateContainerPolicyGuards(p *HookPayload, baseCwd string, pol containerSandboxPolicy) HookDecision {
-	if dec := evaluateContainerReadOnlyGuard(p, pol); dec.Decision == hookDecisionDeny {
+// EvaluatePolicyGuards enforces read-only, protected-path, and command allow/deny policies.
+func EvaluatePolicyGuards(p *shellguard.HookPayload, baseCwd string, pol SandboxPolicy) shellguard.HookDecision {
+	if dec := evaluateContainerReadOnlyGuard(p, pol); dec.Decision == shellguard.DecisionDeny {
 		return dec
 	}
-	if dec := evaluateContainerProtectedPathsGuard(p, baseCwd, pol); dec.Decision == hookDecisionDeny {
+	if dec := evaluateContainerProtectedPathsGuard(p, baseCwd, pol); dec.Decision == shellguard.DecisionDeny {
 		return dec
 	}
 	return evaluateContainerCommandListGuard(p, baseCwd, pol)
 }
 
-func evaluateContainerReadOnlyGuard(p *HookPayload, pol containerSandboxPolicy) HookDecision {
+func evaluateContainerReadOnlyGuard(p *shellguard.HookPayload, pol SandboxPolicy) shellguard.HookDecision {
 	if !pol.ReadOnly || p == nil {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.AllowDecision()
 	}
 	if p.CommandLine == "" {
-		if !isReadOnlyTool(p.ToolName) {
-			return denyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Read-Only Policy Violation (Law 7): File mutation tool '%s' is prohibited in read-only mode.", p.ToolName))
+		if !shellguard.IsReadOnlyTool(p.ToolName) {
+			return shellguard.DenyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Read-Only Policy Violation (Law 7): File mutation tool '%s' is prohibited in read-only mode.", p.ToolName))
 		}
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.AllowDecision()
 	}
 	if isReadOnlyViolatingCommand(p.CommandLine) {
-		return denyDecision("❌ [NOMOS INTERCEPT] Read-Only Policy Violation (Law 7): Mutating command or filesystem write is prohibited in read-only mode.")
+		return shellguard.DenyDecision("❌ [NOMOS INTERCEPT] Read-Only Policy Violation (Law 7): Mutating command or filesystem write is prohibited in read-only mode.")
 	}
-	return HookDecision{Decision: hookDecisionAllow}
+	return shellguard.AllowDecision()
 }
 
 func isReadOnlyViolatingCommand(cmdLine string) bool {
 	if hasWriteRedirectOutsideDevNull(cmdLine) || readOnlyScriptWriteRe.MatchString(cmdLine) || readOnlySQLMutateRe.MatchString(cmdLine) {
 		return true
 	}
-	for _, inv := range extractAllContainerCommandInvocations(cmdLine) {
+	for _, inv := range shellguard.ExtractAllContainerCommandInvocations(cmdLine) {
 		if isMutatingContainerInvocation(inv) {
 			return true
 		}
@@ -112,7 +114,7 @@ func isReadOnlyViolatingCommand(cmdLine string) bool {
 	return false
 }
 
-func isMutatingContainerInvocation(inv shellCommandInvocation) bool {
+func isMutatingContainerInvocation(inv shellguard.ShellCommandInvocation) bool {
 	if readOnlyShellWriteVerbRe.MatchString(inv.Exe) {
 		return true
 	}
@@ -145,37 +147,37 @@ func hasWriteRedirectOutsideDevNull(cmdLine string) bool {
 	return shellRedirectWriteRe.MatchString(scrubbed)
 }
 
-func evaluateContainerCommandListGuard(p *HookPayload, baseCwd string, pol containerSandboxPolicy) HookDecision {
+func evaluateContainerCommandListGuard(p *shellguard.HookPayload, baseCwd string, pol SandboxPolicy) shellguard.HookDecision {
 	if p == nil || p.CommandLine == "" {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.AllowDecision()
 	}
 	if len(pol.AllowedCommandPrefixes) == 0 && len(pol.DeniedCommandPrefixes) == 0 {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.AllowDecision()
 	}
-	invs := extractAllContainerCommandInvocations(p.CommandLine)
+	invs := shellguard.ExtractAllContainerCommandInvocations(p.CommandLine)
 	if len(pol.AllowedCommandPrefixes) > 0 {
 		if reason := checkAllowlistedInvocations(invs, baseCwd, pol.AllowedCommandPrefixes); reason != "" {
-			return denyDecision(reason)
+			return shellguard.DenyDecision(reason)
 		}
 	}
 	if len(pol.DeniedCommandPrefixes) > 0 {
 		if reason := checkDenylistedInvocations(p.CommandLine, invs, pol.DeniedCommandPrefixes); reason != "" {
-			return denyDecision(reason)
+			return shellguard.DenyDecision(reason)
 		}
 	}
-	return HookDecision{Decision: hookDecisionAllow}
+	return shellguard.AllowDecision()
 }
 
-func checkAllowlistedInvocations(invs []shellCommandInvocation, baseCwd string, allowed []string) string {
+func checkAllowlistedInvocations(invs []shellguard.ShellCommandInvocation, baseCwd string, allowed []string) string {
 	for _, inv := range invs {
 		if safeShellBuiltins[inv.Exe] {
 			continue
 		}
-		if hasInterpreterSubprocessEscape(inv) && !rawMatchesAllowedSubprocess(inv.Raw, allowed) {
+		if shellguard.HasInterpreterSubprocessEscape(inv) && !rawMatchesAllowedSubprocess(inv.Raw, allowed) {
 			return fmt.Sprintf("❌ [NOMOS INTERCEPT] Command Allowlist Violation (Law 7): Subprocess escape inside '%s' is not permitted.", inv.Exe)
 		}
 		fullCmd := normalizedInvocationText(inv)
-		realExe := filepath.Base(resolveRealPathDeep(inv.Exe, baseCwd))
+		realExe := filepath.Base(ResolveRealPathDeep(inv.Exe, baseCwd))
 		realCmd := strings.TrimSpace(realExe + " " + strings.Join(inv.Args, " "))
 		if !matchesCommandPrefixList(fullCmd, allowed) && !matchesCommandPrefixList(realCmd, allowed) {
 			return fmt.Sprintf("❌ [NOMOS INTERCEPT] Command Allowlist Violation (Law 7): Command '%s' is outside allowed_command_prefixes.", inv.Exe)
@@ -194,7 +196,7 @@ func rawMatchesAllowedSubprocess(raw string, allowed []string) bool {
 	return false
 }
 
-func checkDenylistedInvocations(rawCmd string, invs []shellCommandInvocation, denied []string) string {
+func checkDenylistedInvocations(rawCmd string, invs []shellguard.ShellCommandInvocation, denied []string) string {
 	if hasDenylistedDropRule(denied) && destructiveSQLTableRe.MatchString(rawCmd) {
 		return "❌ [NOMOS INTERCEPT] Command Denylist Violation (Law 7): Destructive DROP/TRUNCATE TABLE SQL equivalent is prohibited by denylist policy."
 	}
@@ -202,7 +204,7 @@ func checkDenylistedInvocations(rawCmd string, invs []shellCommandInvocation, de
 		if matchesCommandPrefixList(normalizedInvocationText(inv), denied) {
 			return fmt.Sprintf("❌ [NOMOS INTERCEPT] Command Denylist Violation (Law 7): Denied command '%s' blocked across shell unwrapping.", inv.Exe)
 		}
-		if hasInterpreterSubprocessEscape(inv) {
+		if shellguard.HasInterpreterSubprocessEscape(inv) {
 			if hit := findContainedPrefix(inv.Raw, denied); hit != "" {
 				return fmt.Sprintf("❌ [NOMOS INTERCEPT] Command Denylist Violation (Law 7): Subprocess invocation of denied command '%s' is prohibited.", hit)
 			}
@@ -231,7 +233,7 @@ func findContainedPrefix(raw string, list []string) string {
 	return ""
 }
 
-func normalizedInvocationText(inv shellCommandInvocation) string {
+func normalizedInvocationText(inv shellguard.ShellCommandInvocation) string {
 	if len(inv.Args) == 0 {
 		return inv.Exe
 	}
@@ -247,8 +249,4 @@ func matchesCommandPrefixList(cmdStr string, prefixes []string) bool {
 		}
 	}
 	return false
-}
-
-func denyDecision(reason string) HookDecision {
-	return HookDecision{Decision: hookDecisionDeny, Reason: reason}
 }

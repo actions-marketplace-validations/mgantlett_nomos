@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+const openCodeExtJSON = ".json"
+
 type openCodeSessionDoc struct {
 	ID        string `json:"id"`
 	Slug      string `json:"slug"`
@@ -49,7 +51,7 @@ func (p *ProviderOpenCode) populateOpenCodeDetailEvents(root, sessionID string, 
 	var rawLinesForSentinel []string
 
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), openCodeExtJSON) {
 			continue
 		}
 		data, rErr := os.ReadFile(filepath.Join(msgDir, e.Name()))
@@ -173,8 +175,10 @@ func (p *ProviderOpenCode) scanSessionMessages(root, sessionID string) (int, int
 	toolCalls := 0
 	firstPrompt := ""
 
+const openCodeExtJSON = ".json"
+
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), openCodeExtJSON) {
 			continue
 		}
 		data, rErr := os.ReadFile(filepath.Join(msgDir, e.Name()))

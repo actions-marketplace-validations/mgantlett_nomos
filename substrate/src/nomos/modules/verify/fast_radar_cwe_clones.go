@@ -3,9 +3,6 @@
 package verify
 
 import (
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -14,18 +11,23 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/ratchet"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
 
 var (
-	dbExecSinkRe       = regexp.MustCompile(`(?i)\.(?:execute(?:many)?|Query(?:Row|Context)?|Exec(?:Context)?)\s*\(`)
+	dbExecSinkRe         = regexp.MustCompile(`(?i)\.(?:execute(?:many)?|Query(?:Row|Context)?|Exec(?:Context)?)\s*\(`)
 	pyFStringSQLWhere    = regexp.MustCompile(`(?i)f["']\s*(?:SELECT|INSERT|UPDATE|DELETE)\b[^\n]*?\bWHERE\b[^\n]*?(?:=|\bLIKE\b|\bIN\b)\s*['"]?\{`)
 	pyUnboundExecFStr    = regexp.MustCompile(`(?i)\.execute\s*\(\s*f["']\s*(?:INSERT|UPDATE|DELETE)\b[^\n"']*\{`)
 	pyFormatConcatSQL    = regexp.MustCompile(`(?is)(?:SELECT|INSERT|UPDATE|DELETE)\b[^\n;]{0,160}(?:\.format\s*\(|%\s*\(|\+\s*[A-Za-z_])`)
-	pySQLValuesInterpRe  = regexp.MustCompile(`(?i)\bVALUES\s*\([^\n;)]*(?:\{|\.format\s*\(|%\s*|\+\s*[A-Za-z_])`)
+	pySQLValuesInterpRe  = regexp.MustCompile(`(?i)\bVALUES\s*\([^\n;)]*(?:\{|\.format\s*\(|\+\s*[A-Za-z_])|\bVALUES\s*\([^\n;)]*\)\s*['"]\s*%\s*[A-Za-z0-9_(]`)
 	sqlIdentQuoteGuardRe = regexp.MustCompile(`(?i)(?:\bquote(?:_ident|_id)?\s*\(|\b_?q\s*\(|\bvalidate_ident\b|\bisidentifier\s*\(|replace\s*\(\s*['"]"['"]\s*,\s*['"]""['"])`)
 	pyFStringOrderBy     = regexp.MustCompile(`(?i)f["']\s*SELECT\b[^\n]*?\bORDER\s+BY\s+\{`)
-	sqlAllowlistHintRe = regexp.MustCompile(`(?i)(?:allow|valid|whitelist|permitted|\.get\s*\(|\bin\s*[\(\[\{])`)
-	goSprintfSQLRe     = regexp.MustCompile(`(?is)fmt\.Sprintf\s*\(\s*["` + "`" + `]\s*(?:SELECT|INSERT|UPDATE|DELETE)\b[^"` + "`" + `]*?%[svq]`)
+	sqlAllowlistHintRe   = regexp.MustCompile(`(?i)(?:allow|valid|whitelist|permitted|\.get\s*\(|\bin\s*[\(\[\{])`)
+	goSprintfSQLRe       = regexp.MustCompile(`(?is)fmt\.Sprintf\s*\(\s*["` + "`" + `]\s*(?:SELECT|INSERT|UPDATE|DELETE)\b[^"` + "`" + `]*?%[svq]`)
 
 	baseDirParamRe     = regexp.MustCompile(`\b(?:base_dir|baseDir|root_dir|rootDir)\b`)
 	pyBaseDirSlashRe   = regexp.MustCompile(`(?:Path\s*\(\s*(?:base_dir|baseDir|root_dir|rootDir)\s*\)|(?:base_dir|baseDir|root_dir|rootDir))\s*/\s*([A-Za-z_][A-Za-z0-9_]*)`)
@@ -138,7 +140,7 @@ func scanRatchetedCWELeaks(ctx *vscope.VerifyContext, wtRoot, absPath, relFile s
 	if len(curHits) == 0 || !vscope.IsBrownfieldRatchetActive(ctx) {
 		return curHits
 	}
-	baseBytes, ok := loadBaselineFileBytes(ctx, wtRoot, absPath)
+	baseBytes, ok := ratchet.LoadBaselineFileBytes(ctx, wtRoot, absPath)
 	if !ok {
 		return curHits
 	}
@@ -189,12 +191,12 @@ func loadSiblingPackageSources(ctx *vscope.VerifyContext, wtRoot, pkgDir, target
 	if err != nil || len(entries) > 32 {
 		return nil, nil
 	}
-	ratchet := vscope.IsBrownfieldRatchetActive(ctx)
+	ratchetActive := vscope.IsBrownfieldRatchetActive(ctx)
 	curMap := map[string][]byte{targetRel: targetData}
 	var baseMap map[string][]byte
-	if ratchet {
+	if ratchetActive {
 		baseMap = make(map[string][]byte)
-		if bData, ok := loadBaselineFileBytes(ctx, wtRoot, targetAbs); ok {
+		if bData, ok := ratchet.LoadBaselineFileBytes(ctx, wtRoot, targetAbs); ok {
 			baseMap[targetRel] = bData
 		}
 	}
@@ -216,12 +218,12 @@ func appendSiblingFileBytes(ctx *vscope.VerifyContext, wtRoot, targetAbs string,
 	if err != nil || info.Size() > 512*1024 {
 		return
 	}
-	sibRel := relativeOrFullPath(wtRoot, sibAbs)
+	sibRel := ratchet.RelativeOrFullPath(wtRoot, sibAbs)
 	if sibBytes, rErr := os.ReadFile(sibAbs); rErr == nil {
 		curMap[sibRel] = sibBytes
 	}
 	if baseMap != nil {
-		if bBytes, ok := loadBaselineFileBytes(ctx, wtRoot, sibAbs); ok {
+		if bBytes, ok := ratchet.LoadBaselineFileBytes(ctx, wtRoot, sibAbs); ok {
 			baseMap[sibRel] = bBytes
 		}
 	}
@@ -308,7 +310,7 @@ func hasGoInterfaceOrMethodReceiver(node *ast.File) bool {
 
 func evaluateFastDesignSlopAndHygiene(ctx *vscope.VerifyContext, wtRoot, absPath, relFile string, data []byte, res *FastFileRadarResult) {
 	curHits := collectFileDesignSlopHits(wtRoot, absPath, relFile, data)
-	filtered := filterNetNewLineViolations(ctx, wtRoot, absPath, curHits, func(baseBytes []byte) []string {
+	filtered := ratchet.FilterNetNewLineViolations(ctx, wtRoot, absPath, curHits, func(baseBytes []byte) []string {
 		return collectFileDesignSlopHits(wtRoot, absPath, relFile, baseBytes)
 	})
 	res.Breaches = append(res.Breaches, filtered...)
@@ -326,4 +328,48 @@ func collectFileDesignSlopHits(wtRoot, absPath, relFile string, data []byte) []s
 		hits = append(hits, astdebt.DetectPolyglotDesignSlop(wtRoot, map[string][]byte{relFile: data})...)
 	}
 	return hits
+}
+
+func scanSecretsScoped(ctx *vscope.VerifyContext, root string) ([]string, error) {
+	if !vscope.IsBrownfieldRatchetActive(ctx) || (ctx != nil && ctx.AllFiles) || !vscope.HasGitMetadata(root) {
+		return scanSecrets(ctx, root)
+	}
+	leaks := impact.ScanUnignoredEnvFiles(root)
+	err := vscope.WalkTargetFiles(ctx, root, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil || info == nil || info.IsDir() {
+			return nil
+		}
+		if isIgnoredSecretFile(path) || (impact.IsProhibitedEnvFileName(info.Name()) && impact.IsGitIgnoredPath(root, path)) {
+			return nil
+		}
+		if data, rErr := vscope.MemoizedReadFile(ctx, path); rErr == nil {
+			relPath := ratchet.RelativeOrFullPath(root, path)
+			if label := impact.MatchSecretTokenLabel(string(data)); label != "" {
+				leaks = append(leaks, relPath+" ("+label+")")
+			}
+			for _, cwe := range scanRatchetedCWELeaks(ctx, root, path, relPath, data) {
+				leaks = append(leaks, relPath+" ("+cwe+")")
+			}
+		}
+		return nil
+	})
+	return leaks, err
+}
+
+func scanBrokenLinksScoped(ctx *vscope.VerifyContext, root string) ([]string, error) {
+	if !vscope.IsBrownfieldRatchetActive(ctx) || (ctx != nil && ctx.AllFiles) || !vscope.HasGitMetadata(root) {
+		return scanBrokenLinks(ctx, root)
+	}
+	var broken []string
+	linkRegex := regexp.MustCompile(`\[[^\]]+\]\(([^)]+)\)`)
+	err := vscope.WalkTargetFiles(ctx, root, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil || info == nil || info.IsDir() || !strings.HasSuffix(path, ".md") {
+			return nil
+		}
+		if data, rErr := vscope.MemoizedReadFile(ctx, path); rErr == nil {
+			broken = append(broken, checkLinksInContent(root, path, string(data), linkRegex)...)
+		}
+		return nil
+	})
+	return broken, err
 }

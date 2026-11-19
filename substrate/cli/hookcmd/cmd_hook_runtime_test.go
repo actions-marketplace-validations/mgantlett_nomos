@@ -179,4 +179,3 @@ func TestHookPostTool_SessionBudgetCheckpointRadar(t *testing.T) {
 		t.Fatalf("expected zero filesystem footprint inside sandbox dir, got %v", entries)
 	}
 }
-

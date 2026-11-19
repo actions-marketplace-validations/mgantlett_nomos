@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -33,15 +34,15 @@ type loopBreakerState struct {
 
 // EvaluateLoopCircuitBreaker enforces the identical-failure and no-edit runner circuit-breaker
 // when mutating or shell tool calls repeat without workspace mtime progress.
-func EvaluateLoopCircuitBreaker(p *HookPayload, hermeticDir string) HookDecision {
+func EvaluateLoopCircuitBreaker(p *shellguard.HookPayload, hermeticDir string) shellguard.HookDecision {
 	return EvaluateLoopCircuitBreakerWithStrikes(p, hermeticDir, resolveHookAdvisoryProfile(0, 0, 0, "").LoopStrikes)
 }
 
 // EvaluateLoopCircuitBreakerWithStrikes enforces a bounded N-strike identical-failure
 // and flag-permuted no-edit verification runner circuit-breaker.
-func EvaluateLoopCircuitBreakerWithStrikes(p *HookPayload, hermeticDir string, strikes int) HookDecision {
+func EvaluateLoopCircuitBreakerWithStrikes(p *shellguard.HookPayload, hermeticDir string, strikes int) shellguard.HookDecision {
 	if p == nil || !isLoopTrackedInvocation(p) {
-		return HookDecision{Decision: "allow"}
+		return shellguard.HookDecision{Decision: "allow"}
 	}
 	wsDir := resolveLoopTrackingDir(p, hermeticDir)
 	fp := computeInvocationFingerprint(p)
@@ -55,18 +56,18 @@ func EvaluateLoopCircuitBreakerWithStrikes(p *HookPayload, hermeticDir string, s
 
 	threshold := maxLoopStrikesWithThreshold(p, strikes)
 	if next.ConsecutiveCount >= threshold {
-		return HookDecision{
+		return shellguard.HookDecision{
 			Decision: "deny",
 			Reason:   formatLoopBreakerReason(threshold),
 		}
 	}
 	if runner != "" && (next.NoEditRunnerCount >= threshold || next.TestedDigests[wsDigest] >= threshold) {
-		return HookDecision{
+		return shellguard.HookDecision{
 			Decision: "deny",
 			Reason:   formatNoEditRunnerBreakerReason(runner, threshold),
 		}
 	}
-	return HookDecision{Decision: "allow"}
+	return shellguard.HookDecision{Decision: "allow"}
 }
 
 func copyTestedDigests(prev map[string]int) map[string]int {
@@ -131,8 +132,8 @@ func detectVerificationRunnerFamily(cmdLine string) string {
 	if trimmed == "" {
 		return ""
 	}
-	for _, seg := range splitUnquotedShellSegments(trimmed) {
-		exe, _, rawArgs := extractLeadingExeAndArgs(seg)
+	for _, seg := range shellguard.SplitUnquotedShellSegments(trimmed) {
+		exe, _, rawArgs := shellguard.ExtractLeadingExeAndArgs(seg)
 		if exe == "" {
 			continue
 		}
@@ -160,7 +161,7 @@ func isJSVerificationSegment(exe string, args []string) bool {
 }
 
 func hasPythonModuleArg(exe string, args []string, mod string) bool {
-	if !isPythonExe(exe) {
+	if !shellguard.IsPythonExe(exe) {
 		return false
 	}
 	for i := 0; i < len(args)-1; i++ {
@@ -172,7 +173,7 @@ func hasPythonModuleArg(exe string, args []string, mod string) bool {
 }
 
 func isPythonTestScriptSegment(exe string, args []string) bool {
-	if !isPythonExe(exe) {
+	if !shellguard.IsPythonExe(exe) {
 		return false
 	}
 	for i, arg := range args {
@@ -188,10 +189,6 @@ func isPythonTestScriptSegment(exe string, args []string) bool {
 		return strings.Contains(arg, "tests/") || strings.HasPrefix(filepath.Base(arg), "test_") || strings.HasSuffix(arg, "_test.py")
 	}
 	return false
-}
-
-func isPythonExe(exe string) bool {
-	return exe == "python" || exe == "python3" || strings.HasPrefix(exe, "python3.")
 }
 
 func lowerSlice(vals []string) []string {
@@ -219,7 +216,7 @@ func formatNoEditRunnerBreakerReason(runner string, threshold int) string {
 	)
 }
 
-func isLoopTrackedInvocation(p *HookPayload) bool {
+func isLoopTrackedInvocation(p *shellguard.HookPayload) bool {
 	if strings.TrimSpace(p.CommandLine) != "" {
 		return true
 	}
@@ -229,7 +226,7 @@ func isLoopTrackedInvocation(p *HookPayload) bool {
 	return strings.TrimSpace(p.ArgsDigest) != ""
 }
 
-func maxLoopStrikesWithThreshold(p *HookPayload, strikes int) int {
+func maxLoopStrikesWithThreshold(p *shellguard.HookPayload, strikes int) int {
 	cmd := strings.ToLower(strings.TrimSpace(p.CommandLine))
 	if cmd != "" {
 		for _, tok := range []string{"status", "poll", "wait", "ps ", "jobs"} {
@@ -244,11 +241,11 @@ func maxLoopStrikesWithThreshold(p *HookPayload, strikes int) int {
 	return clampAdvisoryInt(strikes, minLoopStrikes, maxLoopStrikesBound)
 }
 
-func resolveLoopTrackingDir(p *HookPayload, hermeticDir string) string {
+func resolveLoopTrackingDir(p *shellguard.HookPayload, hermeticDir string) string {
 	return resolveHookWorkspaceDir(p, hermeticDir)
 }
 
-func computeInvocationFingerprint(p *HookPayload) string {
+func computeInvocationFingerprint(p *shellguard.HookPayload) string {
 	raw := strings.ToLower(strings.TrimSpace(p.ToolName)) + "|" +
 		strings.TrimSpace(p.TargetFile) + "|" +
 		strings.TrimSpace(p.CommandLine) + "|" +
@@ -269,17 +266,7 @@ func resolveLoopStateFilePath(wsDir string) string {
 
 func loadLoopBreakerState(path string) loopBreakerState {
 	var st loopBreakerState
-	if path == "" {
-		return st
-	}
-	if fi, err := os.Lstat(path); err != nil || !fi.Mode().IsRegular() {
-		return st
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return st
-	}
-	if uErr := json.Unmarshal(data, &st); uErr != nil {
+	if !readRegularHookJSON(path, &st) {
 		return loopBreakerState{}
 	}
 	return st

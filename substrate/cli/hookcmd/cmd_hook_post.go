@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -29,51 +30,51 @@ const (
 	hookDecisionAllow = "allow"
 )
 
-func evaluateCommandGuard(cmdLine, baseCwd, hermeticDir string) HookDecision {
+func evaluateCommandGuard(cmdLine, baseCwd, hermeticDir string) shellguard.HookDecision {
 	if wildRmPattern.MatchString(cmdLine) {
-		return HookDecision{
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason:   "❌ [NOMOS INTERCEPT] Wildcard or root/parent deletion ('rm ... *', 'rm -rf /', 'rm -rf ~', 'rm -rf ..') is strictly prohibited (Law 7). Verify item-level eligibility and remove explicit file paths only.",
 		}
 	}
-	if isForbiddenNomosGoInstall(cmdLine, baseCwd, hermeticDir) {
-		return HookDecision{
+	if shellguard.IsForbiddenNomosGoInstall(cmdLine, baseCwd, hermeticDir) {
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason:   "❌ [NOMOS INTERCEPT] Manual binary installation ('go install' of nomos) outside a clean IDLE 'main' trunk is prohibited by Law 4 (Single Source of Truth). Sync active tasks to 'main' first or invoke the installed 'nomos' CLI binary directly.",
 		}
 	}
 	if isForbiddenSQLiteCmd(cmdLine) {
-		return HookDecision{
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason:   "❌ [NOMOS INTERCEPT] Direct SQLite access prohibited (Law 1 Database Encapsulation). Use canonical CLI commands: 'nomos mem recall', 'nomos mem list', or 'nomos task show'.",
 		}
 	}
 	if isForbiddenGitStashCmd(cmdLine) {
-		return HookDecision{
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason:   "❌ [NOMOS INTERCEPT] 'git stash' is prohibited (Law 2 & Law 3). Use 'nomos task chore \"<title>\"' or 'git restore <file>'.",
 		}
 	}
 	if isForbiddenGitHooksCmd(cmdLine) {
-		return HookDecision{
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason:   "❌ [NOMOS INTERCEPT] Tampering with CapBAC Git defense hooks (.git/hooks) is strictly prohibited (Law 3 & Law 7).",
 		}
 	}
 	if isForbiddenHookBypassCmd(cmdLine) {
-		return HookDecision{
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason:   "❌ [NOMOS INTERCEPT] Bypassing CapBAC Git verification hooks ('--no-verify', 'git commit -n', or internal NOMOS_*_IN_PROGRESS env spoofing) is strictly prohibited (Law 2 & Law 7).",
 		}
 	}
 	if hermeticDir != "" && strings.Contains(cmdLine, "/etc/") {
-		return HookDecision{
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason:   "❌ [NOMOS INTERCEPT] Hermetic Container Violation (Law 3): System directory access outside hermetic root is prohibited.",
 		}
 	}
 	if hermeticDir != "" {
-		if dec := evaluateInteractiveCommandGuard(cmdLine); dec.Decision == hookDecisionDeny {
+		if dec := shellguard.EvaluateInteractiveCommandGuard(cmdLine); dec.Decision == hookDecisionDeny {
 			return dec
 		}
 	}
@@ -114,25 +115,25 @@ func isForbiddenHookBypassCmd(cmdLine string) bool {
 }
 
 // evaluatePostToolHostHealth surfaces deduplicated host/tool-health snapshots on verified PostToolUse faults.
-func evaluatePostToolHostHealth(p *HookPayload, hermeticDir, style string) string {
+func evaluatePostToolHostHealth(p *shellguard.HookPayload, hermeticDir, style string) string {
 	return evaluateVerifiedHostHealthWithStyle(p, hermeticDir, style)
 }
 
 // EvaluatePostToolHook runs Law 4 zero-footprint in-memory syntax, AST radar, and one-time
 // JIT directory-scoped Mneme pitfall recall on mutated worktree files (@intent mneme_memory_spec.md).
 // It returns an empty string (100% silent) on Bash/Read/MCP channels and clean mutations without matching pitfalls.
-func EvaluatePostToolHook(p *HookPayload, hermeticDir string) string {
+func EvaluatePostToolHook(p *shellguard.HookPayload, hermeticDir string) string {
 	if p == nil || p.IsPostInvoke || capbac.IsMCPToolName(p.ToolName) {
 		return ""
 	}
 	if p.CommandLine != "" {
 		return evaluateShellMutatedPaths(p, hermeticDir, false)
 	}
-	if p.TargetFile == "" || isReadOnlyTool(p.ToolName) {
+	if p.TargetFile == "" || shellguard.IsReadOnlyTool(p.ToolName) {
 		return ""
 	}
 	baseCwd := resolveHookWorkspaceDir(p, hermeticDir)
-	resolved := normalizeCanonicalPath(p.TargetFile, baseCwd)
+	resolved := shellguard.NormalizeCanonicalPath(p.TargetFile, baseCwd)
 	if !isPostToolTargetInScope(resolved, hermeticDir) {
 		return ""
 	}
@@ -155,7 +156,7 @@ func EvaluatePostToolHook(p *HookPayload, hermeticDir string) string {
 
 func isPostToolTargetInScope(resolved, hermeticDir string) bool {
 	if hermeticDir != "" {
-		canonRoot := normalizeCanonicalPath(hermeticDir, "/")
+		canonRoot := shellguard.NormalizeCanonicalPath(hermeticDir, "/")
 		return resolved == canonRoot || strings.HasPrefix(resolved, canonRoot+"/")
 	}
 	if strings.Contains(resolved, "/worktrees/") {

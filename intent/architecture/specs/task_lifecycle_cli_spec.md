@@ -313,7 +313,7 @@ type UpdateCheckCache struct {
 
 ### 4.12 `nomos update`
 * **Syntax**: `nomos update [--check] [--version <TAG>] [--sync-workspace] [--dir <PATH>] [--json]`
-* **Semantics**: Evaluates binary install provenance (`standalone`, `homebrew`, `aur`, `nix`, or `system`) and resolves release tags via HTTP redirect or API fallback. Verifies `checksums.txt` SHA-256 digests and atomically replaces standalone binaries, staging `.old` aside on Windows. Rejects in-place overwrites of package-manager binaries with platform-accurate upgrade remedies. Refreshes managed `AGENTS.md`, `CLAUDE.md`, ambient lifecycle hooks, and `nomos.yaml` schema tags under `--sync-workspace`. Caches release checks for 24 hours under `NOMOS_HOME` for `handshake` and `version` notices (`NOMOS_NO_UPDATE_CHECK=1` opts out).
+* **Semantics**: Evaluates binary install provenance (`standalone`, `homebrew`, `aur`, `nix`, or `system`) and resolves release tags via HTTP redirect or API fallback. Verifies `checksums.txt` SHA-256 digests and atomically replaces standalone binaries, staging `.old` aside on Windows. Rejects in-place overwrites of package-manager binaries with platform-accurate upgrade remedies. Detects contract drift across `AGENTS.md`, `CLAUDE.md`, `nomos.yaml` schema tags, and present agent hook adapters (`.agents`, `.claude`, `.cursor`, `.gemini`, `.opencode`). Refreshes only present repo adapters and preserves `.git/info/exclude` stealth blocks under `--sync-workspace`. Caches release checks for 24 hours under `NOMOS_HOME` for `handshake` and `version` notices (`NOMOS_NO_UPDATE_CHECK=1` opts out).
 
 ### 4.13 Pre-Tag GoReleaser, Semver Parity & Changelog Airlock
 * **Gate Coordinate**: `Cell 3.3 (release_receipt)` (`ReleaseReceiptGate`) and 2PC release readiness checks.
@@ -327,12 +327,13 @@ type UpdateCheckCache struct {
 * **Fail-Closed Invalidation**: Purges or bypasses cached receipts on any file byte mutation, untracked file addition, trunk `HEAD` advance, `--all` scan, or `NOMOS_NO_VERIFY_CACHE=1`.
 
 ### 4.15 Day-0 Progressive Onboarding (`nomos init`, Modes & `--help-agent`)
-* **Default Branch Guard (`nomos init [--dir <PATH>]`)**: Scaffolds `isolation_mode: "branch"`, skips creating `worktrees/`, merges compact `templates/AGENTS_BRANCH.md`, and makes zero silent trunk commits.
+* **Default Branch Guard (`nomos init [--dir <PATH>]`)**: Scaffolds `isolation_mode: "branch"`, skips `worktrees/`, merges `templates/AGENTS_BRANCH.md`, and makes zero silent trunk commits. Agents self-heal rejections invisibly without manual operator CLI chores or unprompted `--worktrees` upgrades.
 * **Smart Auto-Baselining & Strict Override (`--baseline`, `--strict`)**: Bare `nomos init` scans via `xray.ScanRepository` and writes `nomos.baseline.json` (`strict_mode: false`) when `HangoverScore > 0`. Passing `--strict` preserves `strict_mode: true` without creating a baseline manifest. Passing `--baseline` forces baseline creation regardless of score.
 * **Stealth Local Trial (`--local`)**: Skips `.gitignore` edits and registers untracked governance files inside `.git/info/exclude` (`# Nomos Local Stealth Trial`) so `git status` stays clean. Running `nomos init` without `--local` removes that exclude block cleanly.
 * **Agent Detection & Filtering (`--agents`)**: Auto-detects present agent configs or binaries (`claude`, `cursor`, `opencode`, `gemini`, `agy`) and falls back to all five when none appear. Passing `--agents <csv|all>` filters hook manifests strictly to named targets and emits `CLAUDE.md` only when `claude` is active or pre-existing.
 * **Hermetic Worktree Graduation (`--worktrees`)**: Scaffolds `isolation_mode: "worktree"`, provisions `worktrees/`, merges full `templates/AGENTS.md`, seeds `mneme.db`, and stages governance commits when `--local` is false.
-* **Two-Tier Root Help (`--help-agent`)**: Default `nomos --help` displays core developer commands (`init`, `status`, `task`, `verify`, `xray`, `mem`, `issue`, `update`, `version`) and a `--help-agent` footer. Passing `nomos --help-agent` unhides internal harness RPCs (`handshake`, `hook`, `directive`, `capabilities`, `physics`, `session`, `mcp`) with zero Cobra aliases under Law 6.
+* **Two-Tier Root Help (`--help-agent`)**: Default `nomos --help` displays core developer commands (`init`, `status`, `task`, `verify`, `xray`, `mem`, `issue`, `update`, `version`) and a `--help-agent` footer. Passing `nomos --help-agent` unhides internal agent RPCs (`handshake`, `hook`, `directive`, `capabilities`, `physics`, `session`, `mcp`) with zero Cobra aliases under Law 6.
+* **Thin Binary Bootstrapper Manifests (`skills/nomos/SKILL.md`, `.claude-plugin/`)**: Root skill and plugin manifests install the static `nomos` binary, run `nomos xray .` and `nomos init`, and carry zero prompt-pack rules. Ongoing enforcement delegates strictly to compiled Go hooks.
 
 ### 4.16 Zero-Init Brownfield X-Ray & Baseline Lock (`nomos xray` & `nomos init --baseline`)
 * **`nomos xray [dir] [--json] [--markdown] [--top <N>]`**: Scans any directory across 11 languages without writing files or mutating SQLite stores. Emits `HangoverScore` (`0-100`), `Grade`, clones, monoliths, stubs, skipped tests, and `XrayHotspot` outputs.
@@ -402,6 +403,7 @@ type UpdateCheckCache struct {
 | `TC-UPD-004` | Law 1 (24h Cached Update Notice) | `nomos handshake` / `nomos version` cached check | Emits 24h cached update notice; honors `NOMOS_NO_UPDATE_CHECK=1` |
 | `TC-UPD-005` | Law 4 (Workspace Contract Refresh) | `nomos update --sync-workspace` on drifted workspace | Detects managed template drift and refreshes contracts idempotently |
 | `TC-UPD-006` | Law 5 & Law 7 (Windows Swap & Linux Provenance) | `AtomicReplaceBinary` over active binary and non-Arch `/usr/bin/nomos` | Stages `.old` backup cleanly on Windows and classifies non-Arch `/usr/bin` as `system` |
+| `TC-UPD-007` | Law 3 & Law 6 (Selective Adapter & Stealth Sync) | `nomos update --check` and `--sync-workspace` on `--agents` or `--local` repo | Detects and refreshes present adapters; preserves `.git/info/exclude` stealth blocks |
 | `TC-INIT-01` | Law 4 & Law 7 (Day-0 Boundary & Mneme Seed) | `nomos init` on layered brownfield repo | Scaffolds zero-violation `architecture_boundaries` and seeds `mneme.db` idempotently |
 | `TC-INIT-02` | Law 1 (Cold-Start Recall & Lean Steering) | `nomos handshake` with `intent_twin_mode: off` and zero `pattern` records | Recalls Day-0 `architecture` memory and steers `IDLE` to `chore` |
 | `TC-INIT-03` | Law 4 & Law 7 (Auto-Calibrated Baseline Lock) | `nomos init --baseline` on legacy repository with pre-existing debt | Writes `nomos.baseline.json`, sets `strict_mode: false`, and freezes observed `BaselineEnvelope` |
@@ -410,7 +412,7 @@ type UpdateCheckCache struct {
 | `TC-INIT-06` | Law 6 (Agent Adapter Filtering) | `nomos init --agents claude` | Scaffolds selected agent hooks and compact `AGENTS_BRANCH.md` |
 | `TC-INIT-07` | Law 3 & Law 7 (Worktree & Strict Overrides) | `nomos init --worktrees` and `nomos init --strict` | `--worktrees` sets `isolation_mode: "worktree"`; `--strict` preserves `strict_mode: true` |
 | `TC-HELP-01` | Law 6 (Two-Tier Root Help) | `nomos --help` vs `nomos --help-agent` | Default help hides agent RPCs; `--help-agent` prints full catalog without aliases |
-| `TC-CI-01` | Law 5 & Law 6 (Offline CI Scaffolding) | `nomos init --ci` vs `nomos init --ci --local` | Writes offline GitHub and GitLab CI configs; rejects `--ci --local` |
+| `TC-CI-01` | Law 5 & Law 6 (Offline CI & Action) | `nomos init --ci`, `--ci --local`, and root `action.yml` | Writes CI configs, rejects `--ci --local`, and bootstraps static binary + baseline PR proofs |
 | `TC-SARIF-01` | Law 2 & Law 4 (OASIS SARIF 2.1.0 Output) | `nomos xray --sarif` and `nomos verify --sarif` | Emits valid SARIF 2.1.0 JSON with driver rules and locations |
 | `TC-MCP-01` | Law 1 & Law 6 (Read-Only MCP Server) | `nomos mcp` JSON-RPC 2.0 stdio | Serves `initialize`, `tools/list`, read tools; rejects mutating calls |
 | `TC-XRAY-03` | Law 2 & Law 3 (Read-Only CLI X-Ray) | `nomos xray --json` and `nomos xray --markdown` on uninitialized directory | Emits structured `XrayReport` and Markdown card with zero filesystem or ledger writes |

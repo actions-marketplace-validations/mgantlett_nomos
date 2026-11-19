@@ -21,41 +21,88 @@ inputs:
     description: 'Output file path for the Markdown PR proof receipt'
     required: false
     default: 'nomos-pr-proof.md'
+  sarif-path:
+    description: 'Optional file path to write an OASIS SARIF 2.1.0 report for GitHub Code Scanning'
+    required: false
+    default: ''
 
 runs:
   using: 'composite'
   steps:
-    - name: Set up Go for Nomos CLI
+    - name: Install Static Nomos Release Binary
+      id: fast-binary
+      shell: bash
+      env:
+        ACTION_REF: ${{ github.action_ref }}
+      run: |
+        if command -v nomos >/dev/null 2>&1; then
+          echo "installed=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        BIN_DIR="$RUNNER_TEMP/nomos-bin"
+        mkdir -p "$BIN_DIR"
+        if [ -f "${{ github.action_path }}/install.sh" ]; then
+          PIN_VER=""
+          if [[ "${ACTION_REF}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            PIN_VER="${ACTION_REF}"
+          fi
+          if NOMOS_INSTALL_DIR="$BIN_DIR" NOMOS_VERSION="$PIN_VER" NOMOS_NO_UPDATE_CHECK="1" bash "${{ github.action_path }}/install.sh" >/dev/null 2>&1; then
+            echo "$BIN_DIR" >> "$GITHUB_PATH"
+            echo "installed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+        fi
+        echo "installed=false" >> "$GITHUB_OUTPUT"
+
+    - name: Set up Go Fallback for Unreleased Refs
+      if: steps.fast-binary.outputs.installed != 'true'
       uses: actions/setup-go@v6
       with:
         go-version: '1.26.x'
 
-    - name: Install or Reuse Nomos CLI
+    - name: Compile Nomos Fallback from Action Source
+      if: steps.fast-binary.outputs.installed != 'true'
       shell: bash
       run: |
-        if ! command -v nomos >/dev/null 2>&1; then
-          if [ -f "${{ github.action_path }}/substrate/go.mod" ]; then
-            GOTOOLCHAIN=auto CGO_ENABLED=0 go -C "${{ github.action_path }}/substrate" build -o "$RUNNER_TEMP/nomos" ./cmd/nomos
-            echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
-          else
-            GOTOOLCHAIN=auto CGO_ENABLED=0 go install github.com/mgantlett/nomos/substrate/cmd/nomos@latest
-          fi
+        BIN_DIR="$RUNNER_TEMP/nomos-bin"
+        mkdir -p "$BIN_DIR"
+        if [ -f "${{ github.action_path }}/substrate/go.mod" ]; then
+          GOTOOLCHAIN=auto CGO_ENABLED=0 go -C "${{ github.action_path }}/substrate" build -o "$BIN_DIR/nomos" ./cmd/nomos
+        else
+          GOBIN="$BIN_DIR" GOTOOLCHAIN=auto CGO_ENABLED=0 go install github.com/mgantlett/nomos/substrate/cmd/nomos@latest
         fi
+        echo "$BIN_DIR" >> "$GITHUB_PATH"
 
     - name: Execute Zero-Trust PR Verification & Seal Receipt
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
+        NOMOS_NO_UPDATE_CHECK: "1"
         INPUT_BASE_REF: ${{ inputs.base-ref }}
         INPUT_MUTATE_DIFF: ${{ inputs.mutate-diff }}
         INPUT_RECEIPT_PATH: ${{ inputs.receipt-path }}
+        INPUT_SARIF_PATH: ${{ inputs.sarif-path }}
       run: |
+        SAVED_BASELINE=""
+        if [ ! -f "nomos.yaml" ]; then
+          if [ -f "nomos.baseline.json" ]; then
+            SAVED_BASELINE="$RUNNER_TEMP/nomos-saved-baseline.json"
+            cp "nomos.baseline.json" "$SAVED_BASELINE"
+          fi
+          nomos init --local -d . >/dev/null
+          if [ -n "$SAVED_BASELINE" ] && [ -f "$SAVED_BASELINE" ]; then
+            cp "$SAVED_BASELINE" "nomos.baseline.json"
+          fi
+        fi
         EXTRA_FLAGS=()
         if [ "${INPUT_MUTATE_DIFF}" = "true" ]; then
           EXTRA_FLAGS+=(--mutate-diff)
         fi
         VERIFY_EXIT=0
         nomos verify --pr --base-ref "${INPUT_BASE_REF}" --pr-output "${INPUT_RECEIPT_PATH}" "${EXTRA_FLAGS[@]}" || VERIFY_EXIT=$?
+        if [ -n "${INPUT_SARIF_PATH}" ]; then
+          nomos verify --sarif > "${INPUT_SARIF_PATH}" || true
+        fi
         if [ -f "${INPUT_RECEIPT_PATH}" ] && [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
           cat "${INPUT_RECEIPT_PATH}" >> "$GITHUB_STEP_SUMMARY"
         fi

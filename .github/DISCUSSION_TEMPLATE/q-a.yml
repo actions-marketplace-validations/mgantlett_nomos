@@ -8,7 +8,7 @@ body:
   - type: dropdown
     id: agent
     attributes:
-      label: Coding Agent Harness
+      label: Coding Agent / CLI
       description: Which coding agent or CLI environment are you pairing with Nomos?
       options:
         - "Claude Code"

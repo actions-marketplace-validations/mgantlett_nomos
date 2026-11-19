@@ -2,6 +2,7 @@ package verify
 
 import (
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/polygate"
 	"strings"
 	"testing"
 )
@@ -27,11 +28,11 @@ func TestDefaultThresholds(t *testing.T) {
 
 func TestEvaluations(t *testing.T) {
 	// Coverage
-	vCov := EvaluateCoverageViolations(50.0, 55.0)
+	vCov := polygate.EvaluateCoverageViolations(50.0, 55.0)
 	if len(vCov) != 1 {
 		t.Errorf("expected coverage violation")
 	}
-	vCovPass := EvaluateCoverageViolations(80.0, 55.0)
+	vCovPass := polygate.EvaluateCoverageViolations(80.0, 55.0)
 	if len(vCovPass) != 0 {
 		t.Errorf("expected zero coverage violations for 80%%")
 	}
@@ -41,13 +42,13 @@ func TestEvaluations(t *testing.T) {
 		{Name: "clean.go", CDS: 20},
 		{Name: "debt.go", CDS: 60},
 	}
-	vCDS := EvaluateCDSViolations(files, 45)
+	vCDS := polygate.EvaluateCDSViolations(files, 45)
 	if len(vCDS) != 1 {
 		t.Fatalf("expected 1 CDS violation, got %d", len(vCDS))
 	}
 
 	// Docstrings
-	vDocs := EvaluateDocstringViolations(5, 10, 1, 20, []string{"Foo", "Bar"})
+	vDocs := polygate.EvaluateDocstringViolations(5, 10, 1, 20, []string{"Foo", "Bar"})
 	if len(vDocs) != 1 {
 		t.Fatalf("expected 1 docstring violation")
 	}
@@ -56,24 +57,24 @@ func TestEvaluations(t *testing.T) {
 	funcs := []astdebt.FunctionMetric{
 		{File: "a.go", Line: 10, Name: "BigFn", Complexity: 20, LOC: 80},
 	}
-	vComp := EvaluateComplexityViolations(funcs, 15, 60)
+	vComp := polygate.EvaluateComplexityViolations(funcs, 15, 60)
 	if len(vComp) != 2 {
 		t.Fatalf("expected 2 complexity/loc violations, got %d", len(vComp))
 	}
 
 	// File LOC
 	fileMetrics := []astdebt.FileMetric{{Name: "giant.go", LOC: 500}}
-	vFile := EvaluateFileLOCViolations(fileMetrics, 400)
+	vFile := polygate.EvaluateFileLOCViolations(fileMetrics, 400)
 	if len(vFile) != 1 {
 		t.Fatalf("expected 1 file loc violation, got %d", len(vFile))
 	}
 
 	// Symlinks
-	vSym := EvaluateZeroFilesystemAliasViolations([]string{"alias.txt"})
+	vSym := polygate.EvaluateZeroFilesystemAliasViolations([]string{"alias.txt"})
 	if len(vSym) != 1 {
 		t.Fatalf("expected 1 symlink violation, got %d", len(vSym))
 	}
-	if len(EvaluateZeroFilesystemAliasViolations(nil)) != 0 {
+	if len(polygate.EvaluateZeroFilesystemAliasViolations(nil)) != 0 {
 		t.Fatalf("expected 0 symlink violations for nil")
 	}
 

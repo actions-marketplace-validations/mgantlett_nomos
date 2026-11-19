@@ -4,7 +4,9 @@ package verify
 import (
 	"bufio"
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/polygate"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/polyrun"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/ratchet"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"go/ast"
 	"go/parser"
@@ -57,7 +59,7 @@ func (g *ForbiddenLiteralsGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.Gat
 			return nil
 		}
 		cur := scanFileForLiterals(root, path, cleanPatterns)
-		cur = filterRatchetedForbiddenLiterals(ctx, root, path, cleanPatterns, cur)
+		cur = ratchet.FilterRatchetedForbiddenLiterals(ctx, root, path, cleanPatterns, cur, scanFileForLiterals)
 		violations = append(violations, cur...)
 		return nil
 	})
@@ -83,7 +85,7 @@ func defaultForbiddenLiterals() []string {
 }
 
 func isScannableSourceFile(path string) bool {
-	if !isPolyglotTargetFile(path) {
+	if !ratchet.IsPolyglotTargetFile(path) {
 		return false
 	}
 	if strings.HasSuffix(path, "gates_governance.go") {
@@ -179,7 +181,7 @@ func (g *DeadCodeGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, 
 			Remedy:  "remove orphan Go packages or import them into active substrate modules",
 		}, nil
 	}
-	if orphanMods := findUnimportedPolyglotModules(ctx, root); len(orphanMods) > 0 {
+	if orphanMods := polygate.FindUnimportedPolyglotModules(ctx, root); len(orphanMods) > 0 {
 		return &vscope.GateResult{
 			GateName: g.Name(), ProbeID: probeIDDeadCode, Law: 2, Ring: RingSyntactic,
 			Passed:  false,
@@ -241,7 +243,7 @@ func findUnimportedInternalPackages(root string) []string {
 		if err != nil || info == nil || !info.IsDir() {
 			return nil
 		}
-		hasGo, hasTest := inspectPackageFiles(path)
+		hasGo, hasTest := polygate.InspectPackageFiles(path)
 		if !hasGo && !hasTest {
 			return nil
 		}
@@ -357,8 +359,9 @@ func (g *ReviewReceiptGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateRes
 	}
 
 	if ctx.TaskID != "" && ctx.WorktreePath != "" && phase == types.PhaseSync {
-		walkthrough := filepath.Join(ctx.RepoRoot, ".tmp", "walkthrough.md")
-		taskWalkthrough := filepath.Join(ctx.WorktreePath, ".tmp", "walkthrough.md")
+		const dirScratchTmp = ".tmp"
+		walkthrough := filepath.Join(ctx.RepoRoot, dirScratchTmp, "walkthrough.md")
+		taskWalkthrough := filepath.Join(ctx.WorktreePath, dirScratchTmp, "walkthrough.md")
 		_, errRoot := os.Stat(walkthrough)
 		_, errTask := os.Stat(taskWalkthrough)
 		if os.IsNotExist(errRoot) && os.IsNotExist(errTask) {

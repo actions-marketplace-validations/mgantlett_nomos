@@ -28,4 +28,3 @@ func TestHandshakeCmd_JSONOutput(t *testing.T) {
 		t.Fatalf("expected non-empty update help text")
 	}
 }
-

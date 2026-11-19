@@ -2,6 +2,7 @@
 package hookcmd
 
 import (
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"io/fs"
 	"path/filepath"
 	"strings"
@@ -48,7 +49,7 @@ func isRecognizedTestCommand(cmdLine string) bool {
 }
 
 // resolveWorktreeTraceRoot extracts the enclosing '/worktrees/<name>' root when operating in a task worktree.
-func resolveWorktreeTraceRoot(p *HookPayload, hermeticDir string) string {
+func resolveWorktreeTraceRoot(p *shellguard.HookPayload, hermeticDir string) string {
 	candidates := []string{hermeticDir, p.TargetFile, p.Cwd}
 	candidates = append(candidates, p.WorkspacePaths...)
 	baseCwd := resolveHookWorkspaceDir(p, hermeticDir)
@@ -56,7 +57,7 @@ func resolveWorktreeTraceRoot(p *HookPayload, hermeticDir string) string {
 		if strings.TrimSpace(raw) == "" {
 			continue
 		}
-		norm := normalizeCanonicalPath(raw, baseCwd)
+		norm := shellguard.NormalizeCanonicalPath(raw, baseCwd)
 		if wt := extractEnclosingWorktreeRoot(norm); wt != "" {
 			return wt
 		}
