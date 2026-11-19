@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v4.27.1] - 2026-11-19
+
+> Upgrade `nomos mcp` stdio server to negotiate MCP `2025-11-25` / `2025-06-18` and expose read-only `resources/*`, `prompts/*`, and `nomos_capabilities`; Add SHA-256 verified `@sophialabs/nomos` `npx` launcher and synchronize Homebrew, OpenAPI 3.1, and remote Streamable HTTP MCP discovery across `llms.txt`, `README.md`, `SKILL.md`, and `plugin.json` (Apache 2.0)
+
+### CLI, MCP & Agent Discovery (`nomos mcp`, `packaging/npm`, `llms.txt`)
+- **Upgrade `nomos mcp` to negotiate `2025-11-25` and serve read-only resources, prompts, and capabilities (`INT-2167`, `SUB-3322`)**: Negotiate MCP protocol versions `2025-11-25`, `2025-06-18`, `2025-03-26`, and `2024-11-05` in `nomos mcp` `initialize`, expose read-only `resources/list` + `resources/read` (`nomos://status`, `nomos://capabilities`, `nomos://directives`) and `prompts/list` + `prompts/get` (`xray-audit`, `verify-impact`, `recall-pitfalls`), and add the read-only `nomos_capabilities` tool (`TC-MCP-02`).
+- **Add SHA-256 verified `@sophialabs/nomos` `npx` launcher and remote HTTP MCP discovery (`SUB-3320`, `SUB-3321`, `SUB-3314`)**: Ship zero-dependency Node.js launcher (`packaging/npm/bin/nomos-cli.mjs`) with automatic latest GitHub Release resolution and `checksums.txt` SHA-256 verification, wire remote Streamable HTTP MCP (`https://sophialabs.ca/mcp`) into `.claude-plugin/plugin.json`, and synchronize Homebrew (`mgantlett/tap/nomos`), `npx`, and OpenAPI 3.1 discovery across `llms.txt`, `README.md`, and `skills/nomos/SKILL.md`.
+
+---
+
 ## [v4.27.0] - 2026-11-19
 
 > Numeric ratchet guard and refactor AST ceiling hotspots; Eliminate self-referential harness terminology in favor of deterministic substrate; Ratchet `max_package_files` to 20 and lock subpackage DAG boundaries in `nomos.yaml`; Extract polygate and ratchet subpackages, co-locate astdebt tests, and cap xray CDS <= 45 (Apache 2.0)

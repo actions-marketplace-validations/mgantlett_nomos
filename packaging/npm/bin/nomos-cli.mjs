@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pkgJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
-const FALLBACK_VERSION = String(pkgJson.version || '4.27.0').replace(/^v/, '');
+const FALLBACK_VERSION = String(pkgJson.version || '4.27.1').replace(/^v/, '');
 
 async function resolveEffectiveVersion() {
 	if (process.env.NOMOS_VERSION) {
@@ -37,7 +37,8 @@ async function resolveEffectiveVersion() {
 	return FALLBACK_VERSION;
 }
 
-function resolveTargetPlatform(version) {
+function resolveTargetPlatform(rawVersion) {
+	const version = String(rawVersion || FALLBACK_VERSION).replace(/^v/, '');
 	const platMap = { linux: 'linux', darwin: 'darwin', win32: 'windows' };
 	const archMap = { x64: 'x86_64', arm64: 'arm64' };
 	const goos = platMap[process.platform];
