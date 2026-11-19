@@ -27,13 +27,13 @@
 **Nomos** is a single `~20 MB` static Go binary (`Apache 2.0`, `0` LLM tokens, zero cloud account) between your coding agent (**Claude Code**, **Cursor**, **OpenCode**, **Codex**, **Gemini CLI**, **Antigravity**, **Windsurf**, or **Aider**) and Git. Run `nomos init` once (or paste 1 prompt into your agent) - Nomos blocks skipped tests, hollow stubs, and leaked secrets in `24ms`, your agent fixes its own mess mid-turn, and your `feat/*` workflow never changes:
 
 ```text
-You            -> Same plain-English prompts, same IDE, normal feat/* PRs (0 new commands to learn)
+You             -> Same plain-English prompts, same IDE, normal feat/* PRs (0 new commands to learn)
   |
-Coding Agent   -> Claude Code · Cursor · OpenCode · Codex · Gemini CLI · Antigravity · Windsurf
+Coding Agent    -> Claude Code · Cursor · OpenCode · Codex · Gemini CLI · Antigravity · Windsurf
   |
-Nomos Harness  -> Invisible ~4ms hooks + 42 AST gates + Day-0 debt ratchet (0 LLM tokens)
+Nomos Substrate -> Invisible ~4ms hooks + 42 AST gates + Day-0 debt ratchet (0 LLM tokens)
   |
-Git            -> main stays read-only & verified; shortcuts fail closed before commit
+Git             -> main stays read-only & verified; shortcuts fail closed before commit
 ```
 
 > **Initialize once, then forget `nomos` exists.** Nomos supplies `0`-token repository physics; **your coding agent supplies the intelligence** to self-correct before ending its turn. Use `nomos xray .` anytime you want a 5-second codebase health scan.

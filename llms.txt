@@ -18,7 +18,7 @@ Human Developer -> Same plain-English prompts, same IDE, normal feat/* PRs (0 ne
   |
 Coding Agent    -> Claude Code, Cursor, OpenCode, Codex, Gemini CLI, Antigravity, Windsurf, Aider
   |
-Nomos Harness   -> Invisible ~4ms pre-tool airlock + 42 AST pre-commit gates + Day-0 debt ratchet
+Nomos Substrate -> Invisible ~4ms pre-tool airlock + 42 AST pre-commit gates + Day-0 debt ratchet
   |
 Git Repository  -> main stays read-only & verified; broken shortcuts fail closed before commit
 ```
@@ -61,6 +61,6 @@ nomos init --worktrees    # Optional scale-up: isolated git worktrees & formal I
   - `nomos verify [--pr --mutate-diff] [--sarif] [--impact]` - Evaluates all 42 Definition of Done gates, optional diff mutation proofs, SARIF 2.1.0, and 1-hop AST blast radius.
   - `nomos mem recall "<query>" [-A]` - Searches local or cross-repository verified episodic lessons.
   - `nomos status` - Displays active governance mode, branch/worktree state, and baseline posture.
-  - `nomos --help-agent` - Reveals internal agent-harness RPCs (`handshake`, `hook`, `capabilities`, `directive`, `physics`, `mcp`).
+  - `nomos --help-agent` - Reveals internal agent lifecycle RPCs (`handshake`, `hook`, `capabilities`, `directive`, `physics`, `mcp`).
 - **Optional Worktree Lifecycle (`--worktrees` Mode Only):**
   - `nomos task chore "<title>"` | `nomos task start <KEY> --edit` | `nomos task sync <KEY> -m "<summary>"`
