@@ -195,7 +195,7 @@ func evaluateContainerAutonomousSafetyGuard(p *HookPayload, baseCwd string, pol 
 		return HookDecision{Decision: hookDecisionAllow}
 	}
 	if strings.Contains(strings.ToLower(p.CommandLine), ".claude/settings") {
-		return denyDecision("❌ [NOMOS INTERCEPT] Harness Self-Protection Violation (Law 7): Shell access to hook settings is prohibited.")
+		return denyDecision("❌ [NOMOS INTERCEPT] Substrate Self-Protection Violation (Law 7): Shell access to hook settings is prohibited.")
 	}
 	if hasDisallowedHiddenDotScript(p.CommandLine, pol.UntrustedProject) {
 		return denyDecision("❌ [NOMOS INTERCEPT] Autonomous Supply-Chain Guard (Law 7): Executing unverified script inside hidden dot-directory requires operator approval.")

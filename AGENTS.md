@@ -24,7 +24,7 @@
 
 ## 0.1 ⚡ BOOTUP, HATEOAS AFFORDANCES & EMBEDDED PLAYBOOKS
 
-1. **Session Boot & Invisible Harness:** Run `nomos handshake` on session boot (auto-injected when `SessionStart` hooks are active) to initialize state, verify CapBAC tokens, auto-install Git defense hooks, and receive phase-specific `Next Actions:`.
+1. **Session Boot & Invisible Substrate:** Run `nomos handshake` on session boot (auto-injected when `SessionStart` hooks are active) to initialize state, verify CapBAC tokens, auto-install Git defense hooks, and receive phase-specific `Next Actions:`.
 2. **1-Turn Task Inception & Phase Machine:** Workspace mutability is procedurally locked across lifecycle phases:
    `IDLE` (`nomos task chore "<title>"` or `nomos task start <KEY> --edit`) → `PLAN` → `EDIT` (strictly in `worktrees/<repo>-<KEY>`) → `REVIEW` (`nomos verify` DoD gates) → `SYNC` (`nomos task sync <KEY> -m "<summary>"` or `-F <walkthrough-file>` 2PC atomic release) → `LEARN` (distillation).
 3. **Self-Contained Embedded Discovery (Zero Nomos Source Required):**
@@ -55,4 +55,4 @@
 
 ## Nomos Open-Core Contributor Boundary
 
-Open-core Nomos operates strictly as an indirect control harness for Tier 1 coding agents. Enterprise multi-seat and Tier 2 runtime modules remain excluded per [intent/intent.md](intent/intent.md).
+Open-core Nomos operates strictly as an indirect control substrate for Tier 1 coding agents. Enterprise multi-seat and Tier 2 runtime modules remain excluded per [intent/intent.md](intent/intent.md).

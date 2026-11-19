@@ -51,7 +51,7 @@ Progressive guardrails between coding agents and Git: zero-write codebase X-Ray,
 		},
 	}
 	rootCmd.SetVersionTemplate(selfupdate.FormatVersionOutput())
-	rootCmd.Flags().BoolVar(&helpAgent, "help-agent", false, "Show internal agent harness and RPC commands")
+	rootCmd.Flags().BoolVar(&helpAgent, "help-agent", false, "Show internal agent lifecycle and RPC commands")
 
 	hiddenAgentCmds := registerSubcommands(rootCmd)
 	configureRootHelp(rootCmd, &helpAgent, hiddenAgentCmds)
@@ -76,7 +76,7 @@ func configureRootHelp(rootCmd *cobra.Command, helpAgent *bool, hiddenAgentCmds 
 			return
 		}
 		defaultHelp(cmd, args)
-		if _, err := fmt.Fprintln(cmd.OutOrStdout(), "\nAgent Harness & Internal RPCs: run \"nomos --help-agent\" for handshake, hook, directive, capabilities, physics, session, and mcp commands."); err != nil {
+		if _, err := fmt.Fprintln(cmd.OutOrStdout(), "\nAgent Lifecycle & Internal RPCs: run \"nomos --help-agent\" for handshake, hook, directive, capabilities, physics, session, and mcp commands."); err != nil {
 			return
 		}
 	})

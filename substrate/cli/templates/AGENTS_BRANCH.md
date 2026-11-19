@@ -3,7 +3,7 @@
 
 # AGENTS.md - Nomos Branch Guard
 
-**Governance Mode:** `branch` (invisible harness underneath normal `feat/*` branches; `main` and governance contracts stay locked)
+**Governance Mode:** `branch` (invisible substrate underneath normal `feat/*` branches; `main` and governance contracts stay locked)
 
 1. **Protect `main` and Contracts:** Never edit or commit directly on `main` (`master`), `nomos.yaml`, `nomos.baseline.json`, `.git/hooks/*`, or `.git/info/exclude`. Create a feature branch first: `git switch -c feat/<topic>`.
 2. **Verify & Self-Heal Invisibly:** Run `nomos verify` before committing or ending your turn (`pre-commit` enforces it automatically on `git commit`). Resolve gate rejections yourself without weakening tests (`t.Skip`, deleted assertions, `// TODO` stubs), and never ask the human operator to run `nomos` commands manually.

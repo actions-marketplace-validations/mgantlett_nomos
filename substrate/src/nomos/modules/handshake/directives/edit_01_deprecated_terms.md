@@ -57,6 +57,7 @@ graph LR
 | Filesystem symlinks (`ln -s`) | Physical canonical files | Symlinks create path aliases and escape worktree boundaries; blocked by `ZeroFilesystemAliasGate` (Law 6). |
 | Custom `.agents/skills/` or slash workflows | `AGENTS.md`, `CLAUDE.md`, `.agents/hooks.json` | Indirect control operates via compiled sub-5ms ambient hooks without custom prompt wrappers (Law 1). |
 | `developer tier` / `tier 3` | `Adoption Profile (Solo / Team / Regulated)` | "Tier" refers strictly to coding agent autonomy (`Tier 1` indirect control vs sovereign `Tier 2`). |
+| `Nomos harness` / `governance harness` / `control harness` | `Deterministic Execution Substrate` / `Repository Transaction Layer` | "Agent harness" denotes the Tier 1 CLI/IDE wrapper (`Claude Code`, `OpenCode`); Nomos governs the repository substrate underneath (Law 1 & Law 6). |
 
 ---
 
@@ -78,4 +79,5 @@ Terminology and singularity compliance are verified across the following invaria
 | **VEC-TERM-02** | `path := "/Users/alice/repo"` | Hardcoded host path | `FAIL` (`Cell (5, 1)` violation) | Resolve workspace root dynamically via `workspace.FindRepoRoot` |
 | **VEC-TERM-03** | `ln -s ../shared/config.yaml` | Filesystem symlink | `FAIL` (`Cell (6, 2)` violation) | Replace symlink with canonical physical file |
 | **VEC-TERM-04** | `chmod -R a-w .` in script | Forbidden OS lock pattern | `FAIL` (`Cell (5, 1)` violation) | Provision isolated task worktree via `nomos task chore` or `start` |
-| **VEC-TERM-05** | `Nomos is a deterministic governance harness` | None | `PASS` | Clean canonical terminology |
+| **VEC-TERM-05** | `Nomos is a deterministic governance harness` | Self-referential `harness` drift | `FAIL` (`Law 1 / Law 6` category drift) | Replace with `deterministic execution substrate` or `repository transaction layer` |
+| **VEC-TERM-06** | `Nomos is a deterministic execution substrate` | None | `PASS` | Clean canonical terminology |
