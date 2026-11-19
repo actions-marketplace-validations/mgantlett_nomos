@@ -201,6 +201,10 @@ func isPolyglotFileSatisfyingBrownfieldTDD(ctx *vscope.VerifyContext, root, rel,
 	if hasPairedPolyglotTest(root, rel) || hasModTest {
 		return true
 	}
+	return satisfiesUnpairedPolyglotTDD(ctx, root, absPath, mode, hasRepoSuite, hasManifest)
+}
+
+func satisfiesUnpairedPolyglotTDD(ctx *vscope.VerifyContext, root, absPath, mode string, hasRepoSuite, hasManifest bool) bool {
 	if mode == config.TDDModeDiff {
 		return false
 	}
@@ -208,10 +212,10 @@ func isPolyglotFileSatisfyingBrownfieldTDD(ctx *vscope.VerifyContext, root, rel,
 		return !hasManifest && !hasRepoSuite
 	}
 	_, existedOnBaseline := loadBaselineFileBytes(ctx, root, absPath)
-	if existedOnBaseline && (hasRepoSuite || !hasManifest) {
-		return true
+	if existedOnBaseline {
+		return hasRepoSuite || !hasManifest
 	}
-	return !existedOnBaseline && !hasManifest && !hasRepoSuite
+	return !hasManifest && !hasRepoSuite
 }
 
 const maxTestComplexity = 25

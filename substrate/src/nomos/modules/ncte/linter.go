@@ -65,27 +65,28 @@ func NewEngine(policy *NCTEPolicy) *Engine {
 // LintMarkdown analyzes Markdown prose while isolating YAML frontmatter, fenced code, and inline literals.
 func (e *Engine) LintMarkdown(filePath string, content []byte) (*NCTESpecReport, error) {
 	lines := strings.Split(strings.ReplaceAll(string(content), "\r\n", "\n"), "\n")
-	startIdx := skipYAMLFrontmatter(lines)
-
 	rep := &NCTESpecReport{
 		FilePath:   filePath,
 		VerifiedAt: time.Now().UTC(),
 	}
+	e.scanMarkdownBody(lines, skipYAMLFrontmatter(lines), rep)
+	rep.ViolationsCount = len(rep.Diagnostics)
+	rep.Passed = rep.ViolationsCount == 0
+	return rep, nil
+}
+
+func (e *Engine) scanMarkdownBody(lines []string, startIdx int, rep *NCTESpecReport) {
 	inFence := false
 	var paraLines []indexedLine
 	var tableHeaders []string
-
 	flushParagraph := func() {
-		if len(paraLines) == 0 {
-			return
+		if len(paraLines) > 0 {
+			e.lintParagraph(paraLines, rep)
+			paraLines = nil
 		}
-		e.lintParagraph(paraLines, rep)
-		paraLines = nil
 	}
-
 	for i := startIdx; i < len(lines); i++ {
-		raw := lines[i]
-		trimmed := strings.TrimSpace(raw)
+		trimmed := strings.TrimSpace(lines[i])
 		if isFenceDelimiter(trimmed) {
 			flushParagraph()
 			tableHeaders = nil
@@ -114,10 +115,6 @@ func (e *Engine) LintMarkdown(filePath string, content []byte) (*NCTESpecReport,
 		paraLines = append(paraLines, indexedLine{line: i + 1, text: trimmed})
 	}
 	flushParagraph()
-
-	rep.ViolationsCount = len(rep.Diagnostics)
-	rep.Passed = rep.ViolationsCount == 0
-	return rep, nil
 }
 
 type indexedLine struct {

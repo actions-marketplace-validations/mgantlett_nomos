@@ -74,59 +74,53 @@ func SynthesizeDynamicHandshake(repoRoot string) (*HandshakeEvent, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	seat := resolveHandshakeSeat()
-	repo := filepath.Base(primaryRoot)
-
 	branch, activeTask := detectBranchAndTask(treeRoot)
-	healthy := checkDatabasesHealth()
-	gateCount := verify.RegisteredGateCount()
-
 	phase, plane, leaseID, stepBudget, tokensUsed := queryTaskAndLease(activeTask)
 	wavefront := queryReadyWavefront(task.ResolveRepoProject(primaryRoot))
 	directives := loadPhaseDirectives(primaryRoot, phase)
 	modifiedFiles, impactSummary := computeActiveTaskImpact(treeRoot, activeTask)
 	pitfalls, patterns, graduations := recallMnemeHandshakeContext(primaryRoot, activeTask, modifiedFiles)
 	strictMode, intentTwinOff, bfTopology := resolveHandshakeGovernance(treeRoot, primaryRoot)
-	staleObligations := resolveHandshakeStaleObligations(primaryRoot)
-
-	wtRoot := ""
-	if activeTask != "" && strings.Contains(filepath.ToSlash(treeRoot), "/worktrees/") {
-		wtRoot = treeRoot
-	}
 	nextActions := resolveHandshakeNextActions(handshakeNextActionsInput{
 		treeRoot: treeRoot, primaryRoot: primaryRoot, branch: branch, phase: phase,
-		activeTask: activeTask, wtRoot: wtRoot, directives: directives, wavefront: wavefront, intentTwinOff: intentTwinOff,
+		activeTask: activeTask, wtRoot: activeWorktreeRoot(treeRoot, activeTask),
+		directives: directives, wavefront: wavefront, intentTwinOff: intentTwinOff,
 	})
-
 	event := &HandshakeEvent{
 		Seat:                 seat,
-		Repository:           repo,
+		Repository:           filepath.Base(primaryRoot),
 		Plane:                plane,
 		Phase:                phase,
 		ActiveTask:           activeTask,
 		TokenID:              leaseID,
 		StepBudget:           stepBudget,
 		TokensUsed:           tokensUsed,
-		DatabasesHealthy:     healthy,
-		GateCount:            gateCount,
+		DatabasesHealthy:     checkDatabasesHealth(),
+		GateCount:            verify.RegisteredGateCount(),
 		ReadyWavefront:       wavefront,
 		Directives:           directives,
 		LearnedPitfalls:      pitfalls,
 		VerifiedPatterns:     patterns,
 		GraduationCandidates: graduations,
 		ImpactSummary:        impactSummary,
-		StaleObligations:     staleObligations,
+		StaleObligations:     resolveHandshakeStaleObligations(primaryRoot),
 		StrictMode:           strictMode,
 		BrownfieldTopology:   bfTopology,
 		NextActions:          nextActions,
 		Timestamp:            time.Now().UTC().Format(time.RFC3339),
 	}
-
 	if valErr := ValidateHandshakeEvent(event); valErr != nil {
 		return nil, valErr
 	}
 	return event, nil
+}
+
+func activeWorktreeRoot(treeRoot, activeTask string) string {
+	if activeTask != "" && strings.Contains(filepath.ToSlash(treeRoot), "/worktrees/") {
+		return treeRoot
+	}
+	return ""
 }
 
 func resolveHandshakeSeat() string {

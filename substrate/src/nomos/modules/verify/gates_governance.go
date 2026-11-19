@@ -357,8 +357,9 @@ func (g *ReviewReceiptGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateRes
 	}
 
 	if ctx.TaskID != "" && ctx.WorktreePath != "" && phase == types.PhaseSync {
-		walkthrough := filepath.Join(ctx.RepoRoot, ".tmp", "walkthrough.md")
-		taskWalkthrough := filepath.Join(ctx.WorktreePath, ".tmp", "walkthrough.md")
+		const dirScratchTmp = ".tmp"
+		walkthrough := filepath.Join(ctx.RepoRoot, dirScratchTmp, "walkthrough.md")
+		taskWalkthrough := filepath.Join(ctx.WorktreePath, dirScratchTmp, "walkthrough.md")
 		_, errRoot := os.Stat(walkthrough)
 		_, errTask := os.Stat(taskWalkthrough)
 		if os.IsNotExist(errRoot) && os.IsNotExist(errTask) {

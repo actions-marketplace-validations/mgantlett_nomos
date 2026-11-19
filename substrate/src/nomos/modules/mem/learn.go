@@ -108,8 +108,14 @@ func DistillTaskLearnings(repoRoot, taskKey, walkthrough string, touchedFiles []
 	}()
 
 	repoID := filepath.Base(filepath.Clean(repoRoot))
-	fixSummary := summarizeWalkthroughFix(walkthrough)
-	saved := persistDistilledTraps(store, entries, repoRoot, repoID, touchedFiles, taskKey, walkthrough, fixSummary)
+	saved := persistDistilledTraps(store, entries, trapDistillContext{
+		repoRoot:     repoRoot,
+		repoID:       repoID,
+		touchedFiles: touchedFiles,
+		taskKey:      taskKey,
+		walkthrough:  walkthrough,
+		fixSummary:   summarizeWalkthroughFix(walkthrough),
+	})
 	SweepRepoPitfallHygiene(store, repoRoot, repoID, time.Now().UTC())
 	removeTaskRecallLedger(repoRoot, taskKey)
 
@@ -119,26 +125,35 @@ func DistillTaskLearnings(repoRoot, taskKey, walkthrough string, touchedFiles []
 	return saved, nil
 }
 
-func persistDistilledTraps(store *Store, entries []GateTrapEntry, repoRoot, repoID string, touchedFiles []string, taskKey, walkthrough, fixSummary string) int {
+type trapDistillContext struct {
+	repoRoot     string
+	repoID       string
+	touchedFiles []string
+	taskKey      string
+	walkthrough  string
+	fixSummary   string
+}
+
+func persistDistilledTraps(store *Store, entries []GateTrapEntry, dctx trapDistillContext) int {
 	saved := 0
 	seenTrapSig := make(map[string]bool)
-	upperTask := strings.ToUpper(taskKey)
+	upperTask := strings.ToUpper(dctx.taskKey)
 
 	for _, entry := range entries {
 		if saved >= 5 {
 			break
 		}
-		salient := compactTrapDiagnostic(entry.Message, repoRoot, touchedFiles, 140)
-		scope := resolveAlignedTrapScope(repoRoot, salient, entry, touchedFiles)
+		salient := compactTrapDiagnostic(entry.Message, dctx.repoRoot, dctx.touchedFiles, 140)
+		scope := resolveAlignedTrapScope(dctx.repoRoot, salient, entry, dctx.touchedFiles)
 		sigKey := strings.ToLower(strings.TrimSpace(scope + "|" + salient))
 		if salient == "" || seenTrapSig[sigKey] {
 			continue
 		}
 		seenTrapSig[sigKey] = true
 		topic := formatPitfallTopic(entry.GateName, scope)
-		resolvedFix := synthesizeTrapResolution(repoRoot, entry, salient, touchedFiles, walkthrough, fixSummary)
+		resolvedFix := synthesizeTrapResolution(dctx.repoRoot, entry, salient, dctx.touchedFiles, dctx.walkthrough, dctx.fixSummary)
 		rec := &Memory{
-			RepoID:  repoID,
+			RepoID:  dctx.repoID,
 			Kind:    KindPitfall,
 			Topic:   topic,
 			Content: fmt.Sprintf("[%s in %s] Trap: %s -> Verified Fix (%s): %s", entry.GateName, scope, salient, upperTask, resolvedFix),
@@ -146,7 +161,7 @@ func persistDistilledTraps(store *Store, entries []GateTrapEntry, repoRoot, repo
 			Status:  StatusActive,
 		}
 		if store.Save(rec) == nil {
-			store.supersedeOlderTopicPitfalls(repoID, topic, rec.ID)
+			store.supersedeOlderTopicPitfalls(dctx.repoID, topic, rec.ID)
 			saved++
 		}
 	}

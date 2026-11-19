@@ -156,14 +156,14 @@ func extractUnquotedRedirectTargets(seg string) []string {
 }
 
 func consumeRedirectTargetAt(seg string, idx int) (string, int) {
-	if idx > 0 && (seg[idx-1] == '=' || seg[idx-1] == '-') {
+	if isNonRedirectLeftByte(seg, idx) {
 		return "", idx
 	}
 	j := idx + 1
 	if j < len(seg) && seg[j] == '>' {
 		j++
 	}
-	if j < len(seg) && (seg[j] == '&' || seg[j] == '=' || seg[j] == '(') {
+	if isSpecialRedirectRightByte(seg, j) {
 		return "", j
 	}
 	for j < len(seg) && (seg[j] == ' ' || seg[j] == '\t') {
@@ -173,6 +173,13 @@ func consumeRedirectTargetAt(seg string, idx int) (string, int) {
 	for j < len(seg) && !strings.ContainsRune(" \t;|<>()", rune(seg[j])) {
 		j++
 	}
-	tok := strings.Trim(seg[start:j], "\"'`")
-	return tok, j - 1
+	return strings.Trim(seg[start:j], "\"'`"), j - 1
+}
+
+func isNonRedirectLeftByte(seg string, idx int) bool {
+	return idx > 0 && (seg[idx-1] == '=' || seg[idx-1] == '-')
+}
+
+func isSpecialRedirectRightByte(seg string, j int) bool {
+	return j < len(seg) && (seg[j] == '&' || seg[j] == '=' || seg[j] == '(')
 }

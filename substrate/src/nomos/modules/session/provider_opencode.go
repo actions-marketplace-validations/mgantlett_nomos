@@ -96,7 +96,7 @@ func (p *ProviderOpenCode) Discover(repoRoot string, activeWorktrees map[string]
 		if err != nil || info.IsDir() {
 			return nil
 		}
-		if strings.HasSuffix(info.Name(), ".json") && !strings.HasSuffix(info.Name(), ".meta.json") {
+		if strings.HasSuffix(info.Name(), openCodeExtJSON) && !strings.HasSuffix(info.Name(), ".meta.json") {
 			sessionFiles = append(sessionFiles, path)
 		}
 		return nil
@@ -217,7 +217,7 @@ func (p *ProviderOpenCode) SaveName(sessionID, name string) (*SessionMetadata, e
 		}
 	}
 
-	metaPath := strings.TrimSuffix(filePath, ".json") + ".meta.json"
+	metaPath := strings.TrimSuffix(filePath, openCodeExtJSON) + ".meta.json"
 	meta := SessionMetadata{
 		ID:        doc.ID,
 		Name:      name,
@@ -249,8 +249,8 @@ func (p *ProviderOpenCode) resolveSessionDoc(root, sessionID string) (string, *o
 		if err != nil || info.IsDir() {
 			return nil
 		}
-		if strings.HasSuffix(info.Name(), ".json") && !strings.HasSuffix(info.Name(), ".meta.json") {
-			base := strings.TrimSuffix(info.Name(), ".json")
+		if strings.HasSuffix(info.Name(), openCodeExtJSON) && !strings.HasSuffix(info.Name(), ".meta.json") {
+			base := strings.TrimSuffix(info.Name(), openCodeExtJSON)
 			if strings.EqualFold(base, target) || strings.HasPrefix(strings.ToLower(base), target) {
 				data, rErr := os.ReadFile(path)
 				if rErr == nil && json.Unmarshal(data, &matchedDoc) == nil {
@@ -272,7 +272,7 @@ func (p *ProviderOpenCode) resolveSessionDoc(root, sessionID string) (string, *o
 }
 
 func (p *ProviderOpenCode) readOpenCodeCustomName(filePath, defaultTitle string) string {
-	metaPath := strings.TrimSuffix(filePath, ".json") + ".meta.json"
+	metaPath := strings.TrimSuffix(filePath, openCodeExtJSON) + ".meta.json"
 	if data, err := os.ReadFile(metaPath); err == nil {
 		var meta SessionMetadata
 		if json.Unmarshal(data, &meta) == nil && meta.Name != "" {

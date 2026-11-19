@@ -215,9 +215,13 @@ func hasPolyglotEntrypointRoot(scanRoot string) bool {
 	return found
 }
 
+var orphanEligibleExts = map[string]bool{
+	astdebt.ExtPy: true, astdebt.ExtTS: true, astdebt.ExtJS: true,
+	astdebt.ExtMJS: true, astdebt.ExtRB: true, astdebt.ExtRS: true,
+}
+
 func collectOrphanPolyglotCandidates(ctx *vscope.VerifyContext, root, scanRoot string) map[string]string {
 	candidates := make(map[string]string)
-	eligibleExts := map[string]bool{astdebt.ExtPy: true, astdebt.ExtTS: true, astdebt.ExtJS: true, astdebt.ExtMJS: true, astdebt.ExtRB: true, astdebt.ExtRS: true}
 	if err := filepath.WalkDir(scanRoot, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil || d == nil {
 			return nil
@@ -228,27 +232,31 @@ func collectOrphanPolyglotCandidates(ctx *vscope.VerifyContext, root, scanRoot s
 			}
 			return nil
 		}
-		ext := strings.ToLower(filepath.Ext(path))
-		if !eligibleExts[ext] || !isPolyglotTargetFile(path) || isPolyglotEntrypointOrFrameworkFile(path, ext) {
-			return nil
-		}
-		if vscope.IsBrownfieldRatchetActive(ctx) {
-			if _, existed := loadBaselineFileBytes(ctx, root, path); existed {
-				return nil
-			}
-		}
-		stem := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-		if len(stem) < 3 || orphanEntrypointSet[stem] {
-			return nil
-		}
-		if rel, rErr := filepath.Rel(root, path); rErr == nil {
-			candidates[filepath.ToSlash(rel)] = stem
-		}
+		recordOrphanPolyglotCandidate(ctx, root, path, candidates)
 		return nil
 	}); err != nil {
 		return candidates
 	}
 	return candidates
+}
+
+func recordOrphanPolyglotCandidate(ctx *vscope.VerifyContext, root, path string, candidates map[string]string) {
+	ext := strings.ToLower(filepath.Ext(path))
+	if !orphanEligibleExts[ext] || !isPolyglotTargetFile(path) || isPolyglotEntrypointOrFrameworkFile(path, ext) {
+		return
+	}
+	if vscope.IsBrownfieldRatchetActive(ctx) {
+		if _, existed := loadBaselineFileBytes(ctx, root, path); existed {
+			return
+		}
+	}
+	stem := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	if len(stem) < 3 || orphanEntrypointSet[stem] {
+		return
+	}
+	if rel, err := filepath.Rel(root, path); err == nil {
+		candidates[filepath.ToSlash(rel)] = stem
+	}
 }
 
 func isPolyglotEntrypointOrFrameworkFile(path, ext string) bool {

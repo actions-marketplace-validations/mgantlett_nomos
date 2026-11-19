@@ -97,17 +97,30 @@ func (sc *sentinelShellScanner) stepUnquoted(s string, i int) int {
 		sc.inDouble = ch == '"'
 		return i
 	}
-	if ch == ';' || ch == '|' || ch == '&' || ch == '\n' || ch == '(' || ch == ')' || ch == '`' {
+	if isSentinelSegmentDelimiter(ch) {
 		sc.flushSegment()
 		return i
 	}
-	if ch == ' ' || ch == '\t' || ch == '\r' {
+	if isSentinelTokenWhitespace(ch) {
 		sc.flushToken()
 		return i
 	}
 	sc.tokStarted = true
 	sc.tok.WriteByte(ch)
 	return i
+}
+
+func isSentinelSegmentDelimiter(ch byte) bool {
+	switch ch {
+	case ';', '|', '&', '\n', '(', ')', '`':
+		return true
+	default:
+		return false
+	}
+}
+
+func isSentinelTokenWhitespace(ch byte) bool {
+	return ch == ' ' || ch == '\t' || ch == '\r'
 }
 
 func (sc *sentinelShellScanner) flushToken() {

@@ -319,18 +319,8 @@ func loadHookSessionTrace(wtPath string) *HookSessionTrace {
 }
 
 func loadHookSessionTraceByFile(path string) *HookSessionTrace {
-	if path == "" {
-		return nil
-	}
-	if fi, err := os.Lstat(path); err != nil || !fi.Mode().IsRegular() {
-		return nil
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
 	var tr HookSessionTrace
-	if uErr := json.Unmarshal(data, &tr); uErr != nil {
+	if !readRegularHookJSON(path, &tr) {
 		return nil
 	}
 	return &tr

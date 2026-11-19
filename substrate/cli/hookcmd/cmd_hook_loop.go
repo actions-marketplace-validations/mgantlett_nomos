@@ -269,17 +269,7 @@ func resolveLoopStateFilePath(wsDir string) string {
 
 func loadLoopBreakerState(path string) loopBreakerState {
 	var st loopBreakerState
-	if path == "" {
-		return st
-	}
-	if fi, err := os.Lstat(path); err != nil || !fi.Mode().IsRegular() {
-		return st
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return st
-	}
-	if uErr := json.Unmarshal(data, &st); uErr != nil {
+	if !readRegularHookJSON(path, &st) {
 		return loopBreakerState{}
 	}
 	return st

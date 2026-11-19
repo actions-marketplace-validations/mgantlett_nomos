@@ -129,32 +129,39 @@ func evaluateCrossCorpusCloneViolations(ctx *vscope.VerifyContext, root string, 
 	}
 	groups := astdebt.DetectFocusedCorpusClones(sources, baseSources, minLines, func(langs map[string]bool, visit func(relPath string, src []byte)) {
 		excludes := vscope.ResolveScopeExcludes(ctx, absRoot, absRoot)
-		if wErr := workspace.WalkWithExcludes(absRoot, excludes, func(path string, info os.FileInfo, walkErr error) error {
-			return visitCorpusCloneCandidate(absRoot, path, info, walkErr, focusNorm, langs, minLines, visit)
-		}); wErr != nil {
+		spec := corpusCloneWalkSpec{absRoot: absRoot, focusNorm: focusNorm, langs: langs, minLines: minLines, visit: visit}
+		if wErr := workspace.WalkWithExcludes(absRoot, excludes, spec.visitPath); wErr != nil {
 			return
 		}
 	})
 	return astdebt.FormatCloneViolations(groups)
 }
 
-func visitCorpusCloneCandidate(absRoot, path string, info os.FileInfo, walkErr error, focusNorm, langs map[string]bool, minLines int, visit func(string, []byte)) error {
+type corpusCloneWalkSpec struct {
+	absRoot   string
+	focusNorm map[string]bool
+	langs     map[string]bool
+	minLines  int
+	visit     func(string, []byte)
+}
+
+func (s corpusCloneWalkSpec) visitPath(path string, info os.FileInfo, walkErr error) error {
 	if walkErr != nil || info == nil || info.IsDir() || !isPolyglotTargetFile(path) {
 		return nil
 	}
-	rel, rErr := filepath.Rel(absRoot, path)
+	rel, rErr := filepath.Rel(s.absRoot, path)
 	if rErr != nil {
 		return nil
 	}
 	normRel := filepath.ToSlash(filepath.Clean(rel))
-	if focusNorm[normRel] || !langs[astdebt.CloneLangFamily(normRel)] {
+	if s.focusNorm[normRel] || !s.langs[astdebt.CloneLangFamily(normRel)] {
 		return nil
 	}
 	raw, err := os.ReadFile(path)
-	if err != nil || countBytesLines(raw) < minLines {
+	if err != nil || countBytesLines(raw) < s.minLines {
 		return nil
 	}
-	visit(normRel, raw)
+	s.visit(normRel, raw)
 	return nil
 }
 

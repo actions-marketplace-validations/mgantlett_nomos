@@ -209,33 +209,29 @@ func isReadOnlyInspectionShellCmd(cmdLine string) bool {
 }
 
 func formatReadSpiralAdvisory(readCalls int, urgent bool, style string) string {
-	if style == advisoryStyleTerse {
-		return fmt.Sprintf("🧭 [Nomos Pacing] %d read calls without edit: apply a minimal fix and run tests now.", readCalls)
-	}
-	if urgent {
-		return fmt.Sprintf(
-			"🧭 [Nomos Pacing Advisory] %d consecutive read/search calls without a source edit: stop passive reading, apply your best minimal fix hypothesis now, and run tests to verify.",
-			readCalls,
-		)
-	}
-	return fmt.Sprintf(
+	return formatSpiralAdvisoryTemplate(
+		readCalls, urgent, style,
+		"🧭 [Nomos Pacing] %d read calls without edit: apply a minimal fix and run tests now.",
+		"🧭 [Nomos Pacing Advisory] %d consecutive read/search calls without a source edit: stop passive reading, apply your best minimal fix hypothesis now, and run tests to verify.",
 		"🧭 [Nomos Pacing Advisory] %d consecutive read/search calls without a source edit: formulate a minimal draft edit now and validate iteratively with tests.",
-		readCalls,
 	)
 }
 
 func formatTrunkReadSpiralAdvisory(readCalls int, urgent bool, style string) string {
+	return formatSpiralAdvisoryTemplate(
+		readCalls, urgent, style,
+		"🧭 [Nomos Trunk Pacing] %d trunk read calls: synthesize findings or start an isolated worktree ('nomos task chore \"<title>\"').",
+		"🧭 [Nomos Trunk Pacing Advisory] %d consecutive exploratory reads on trunk: stop passive exploration and either synthesize your findings now or provision an isolated worktree via 'nomos task chore \"<title>\"' (or 'nomos task start <KEY> --edit').",
+		"🧭 [Nomos Trunk Pacing Advisory] %d consecutive exploratory reads on trunk: converge on a concrete answer or provision an isolated worktree via 'nomos task chore \"<title>\"' before reading further.",
+	)
+}
+
+func formatSpiralAdvisoryTemplate(readCalls int, urgent bool, style, terseFmt, urgentFmt, stdFmt string) string {
 	if style == advisoryStyleTerse {
-		return fmt.Sprintf("🧭 [Nomos Trunk Pacing] %d trunk read calls: synthesize findings or start an isolated worktree ('nomos task chore \"<title>\"').", readCalls)
+		return fmt.Sprintf(terseFmt, readCalls)
 	}
 	if urgent {
-		return fmt.Sprintf(
-			"🧭 [Nomos Trunk Pacing Advisory] %d consecutive exploratory reads on trunk: stop passive exploration and either synthesize your findings now or provision an isolated worktree via 'nomos task chore \"<title>\"' (or 'nomos task start <KEY> --edit').",
-			readCalls,
-		)
+		return fmt.Sprintf(urgentFmt, readCalls)
 	}
-	return fmt.Sprintf(
-		"🧭 [Nomos Trunk Pacing Advisory] %d consecutive exploratory reads on trunk: converge on a concrete answer or provision an isolated worktree via 'nomos task chore \"<title>\"' before reading further.",
-		readCalls,
-	)
+	return fmt.Sprintf(stdFmt, readCalls)
 }

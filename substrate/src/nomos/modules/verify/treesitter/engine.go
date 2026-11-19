@@ -208,19 +208,24 @@ func emptyFuncReport(filePath string, totalLines int) *GateEvaluationReport {
 	}
 }
 
+const (
+	langTypeScript = "typescript"
+	langRust       = "rust"
+)
+
 var extToLangMap = map[string]string{
 	".go":     "go",
-	".ts":     "typescript",
-	".tsx":    "typescript",
-	".js":     "typescript",
-	".jsx":    "typescript",
-	".mjs":    "typescript",
-	".cjs":    "typescript",
+	".ts":     langTypeScript,
+	".tsx":    langTypeScript,
+	".js":     langTypeScript,
+	".jsx":    langTypeScript,
+	".mjs":    langTypeScript,
+	".cjs":    langTypeScript,
 	".svelte": "svelte",
 	".py":     "python",
 	".rb":     "ruby",
 	".rake":   "ruby",
-	".rs":     "rust",
+	".rs":     langRust,
 	".c":      "c",
 	".h":      "c",
 	".cpp":    "cpp",

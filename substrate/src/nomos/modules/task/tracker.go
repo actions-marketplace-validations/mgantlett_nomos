@@ -34,19 +34,7 @@ func NewMemoryTaskStore() *MemoryTaskStore {
 
 // CreateTask registers a new task, ensuring key uniqueness and invariant compliance.
 func (s *MemoryTaskStore) CreateTask(task TaskRecord) error {
-	if err := ValidateTaskRecord(&task); err != nil {
-		return err
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if _, exists := s.tasks[task.Key]; exists {
-		return types.NewNomosError(types.ErrCodeInvariant, "task %s already exists", task.Key)
-	}
-
-	s.tasks[task.Key] = task
-	return nil
+	return s.putValidatedTask(task, false)
 }
 
 // GetTask retrieves a task record by its canonical key.
@@ -64,17 +52,22 @@ func (s *MemoryTaskStore) GetTask(key string) (*TaskRecord, error) {
 
 // UpdateTask modifies an existing task record.
 func (s *MemoryTaskStore) UpdateTask(task TaskRecord) error {
+	return s.putValidatedTask(task, true)
+}
+
+func (s *MemoryTaskStore) putValidatedTask(task TaskRecord, mustExist bool) error {
 	if err := ValidateTaskRecord(&task); err != nil {
 		return err
 	}
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	if _, exists := s.tasks[task.Key]; !exists {
+	_, exists := s.tasks[task.Key]
+	if !mustExist && exists {
+		return types.NewNomosError(types.ErrCodeInvariant, "task %s already exists", task.Key)
+	}
+	if mustExist && !exists {
 		return types.NewNomosError(types.ErrCodeValidationFailed, "task %s not found", task.Key)
 	}
-
 	s.tasks[task.Key] = task
 	return nil
 }

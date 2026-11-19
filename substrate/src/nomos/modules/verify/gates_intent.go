@@ -285,6 +285,9 @@ func checkWorktreeGovernanceDowngrade(ctx *vscope.VerifyContext, wtCfg *config.E
 	if modeIssue := checkTestGateModeDowngrade(trunkCfg, wtCfg); modeIssue != "" {
 		return modeIssue
 	}
+	if threshIssue := impact.CheckThresholdsDowngrade(trunkCfg, wtCfg); threshIssue != "" {
+		return threshIssue
+	}
 	return impact.CheckArchitectureBoundariesDowngrade(trunkCfg, wtCfg)
 }
 

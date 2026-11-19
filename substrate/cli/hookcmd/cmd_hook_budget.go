@@ -82,27 +82,8 @@ func evaluateSessionBudgetRadarWithProfile(p *HookPayload, hermeticDir string, b
 	if elapsed < 0 {
 		return ""
 	}
-	warnPct := profile.WarnPct
-	if warnPct <= 0 {
-		warnPct = defaultBudgetWarnPct
-	}
-	critPct := profile.CritPct
-	if critPct <= warnPct {
-		critPct = defaultBudgetCritPct
-	}
-	pct := (elapsed * 100) / budgetSec
-	var checkpointMsg string
 	dirty := false
-	if pct >= critPct && !st.Warned90 {
-		st.Warned75 = true
-		st.Warned90 = true
-		dirty = true
-		checkpointMsg = formatBudgetCheckpointAdvisory(pct, elapsed, budgetSec, true, profile.AdvisoryStyle)
-	} else if pct >= warnPct && !st.Warned75 {
-		st.Warned75 = true
-		dirty = true
-		checkpointMsg = formatBudgetCheckpointAdvisory(pct, elapsed, budgetSec, false, profile.AdvisoryStyle)
-	}
+	checkpointMsg := evaluateBudgetThresholdCheckpoint(&st, elapsed, budgetSec, profile, &dirty)
 	slowMsg := evaluateSlowStepBurn(&st, p, nowUnix, elapsed, budgetSec, profile.AdvisoryStyle, &dirty)
 	if st.LastPreToolUnix != nowUnix {
 		st.LastPreToolUnix = nowUnix
@@ -112,6 +93,30 @@ func evaluateSessionBudgetRadarWithProfile(p *HookPayload, hermeticDir string, b
 		saveBudgetState(path, st)
 	}
 	return joinHookAdvisories(checkpointMsg, slowMsg)
+}
+
+func evaluateBudgetThresholdCheckpoint(st *sessionBudgetState, elapsed, budgetSec int, profile HookAdvisoryProfile, dirty *bool) string {
+	warnPct := profile.WarnPct
+	if warnPct <= 0 {
+		warnPct = defaultBudgetWarnPct
+	}
+	critPct := profile.CritPct
+	if critPct <= warnPct {
+		critPct = defaultBudgetCritPct
+	}
+	pct := (elapsed * 100) / budgetSec
+	if pct >= critPct && !st.Warned90 {
+		st.Warned75 = true
+		st.Warned90 = true
+		*dirty = true
+		return formatBudgetCheckpointAdvisory(pct, elapsed, budgetSec, true, profile.AdvisoryStyle)
+	}
+	if pct >= warnPct && !st.Warned75 {
+		st.Warned75 = true
+		*dirty = true
+		return formatBudgetCheckpointAdvisory(pct, elapsed, budgetSec, false, profile.AdvisoryStyle)
+	}
+	return ""
 }
 
 func evaluateSlowStepBurn(st *sessionBudgetState, p *HookPayload, nowUnix int64, elapsed, budgetSec int, style string, dirty *bool) string {
@@ -164,11 +169,7 @@ func resolveBudgetStateFilePath(p *HookPayload, hermeticDir string) string {
 
 // resolveHookStateCacheDir returns a verified non-symlink 0700 user cache directory for hook state files.
 func resolveHookStateCacheDir() string {
-	baseDir, err := os.UserCacheDir()
-	if err != nil || baseDir == "" {
-		baseDir = filepath.Join(os.TempDir(), fmt.Sprintf("nomos-cache-%d", os.Getuid()))
-	}
-	hookDir := filepath.Join(baseDir, "nomos", "hooks")
+	hookDir := filepath.Join(resolveHookBaseCacheDir(), "nomos", "hooks")
 	if mkErr := os.MkdirAll(hookDir, 0700); mkErr != nil {
 		return ""
 	}
@@ -179,16 +180,30 @@ func resolveHookStateCacheDir() string {
 	return hookDir
 }
 
-func loadBudgetState(path string) sessionBudgetState {
-	var st sessionBudgetState
+func resolveHookBaseCacheDir() string {
+	if baseDir, err := os.UserCacheDir(); err == nil && baseDir != "" {
+		return baseDir
+	}
+	return filepath.Join(os.TempDir(), fmt.Sprintf("nomos-cache-%d", os.Getuid()))
+}
+
+func readRegularHookJSON[T any](path string, dst *T) bool {
+	if path == "" {
+		return false
+	}
 	if fi, err := os.Lstat(path); err != nil || !fi.Mode().IsRegular() {
-		return st
+		return false
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return st
+		return false
 	}
-	if uErr := json.Unmarshal(data, &st); uErr != nil {
+	return json.Unmarshal(data, dst) == nil
+}
+
+func loadBudgetState(path string) sessionBudgetState {
+	var st sessionBudgetState
+	if !readRegularHookJSON(path, &st) {
 		return sessionBudgetState{}
 	}
 	return st

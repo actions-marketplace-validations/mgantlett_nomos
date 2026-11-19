@@ -46,6 +46,7 @@ func TestTimedEvaluate_AndPipeline_RecoverGatePanicFailClosed(t *testing.T) {
 	}
 }
 
+// @verifies TC-COV-007
 func TestThresholdIntegrityGate_RejectsWorktreeGovernanceDowngrades(t *testing.T) {
 	trunkDir := filepath.Join(t.TempDir(), "trunk")
 	wtDir := filepath.Join(t.TempDir(), "worktree-INT-1")
@@ -65,10 +66,12 @@ governance:
   quality_gates:
     strict_mode: true
     thresholds:
-      max_cyclomatic_complexity: 15
+      max_cyclomatic_complexity: 14
       max_file_loc: 400
-      max_func_loc: 60
-      min_test_coverage_pct: 55
+      max_func_loc: 55
+      max_package_files: 30
+      min_comment_density_pct: 90
+      min_test_coverage_pct: 65
 `
 	if err := os.WriteFile(filepath.Join(trunkDir, "nomos.yaml"), []byte(strictTrunk), 0644); err != nil {
 		t.Fatalf("write trunk nomos.yaml: %v", err)
@@ -77,6 +80,8 @@ governance:
 	verifyDowngradeVector(t, trunkDir, wtDir, strings.Replace(strictTrunk, "strict_mode: true", "strict_mode: false", 1), "strict_mode")
 	verifyDowngradeVector(t, trunkDir, wtDir, strings.Replace(strictTrunk, "enforce: true", "enforce: false", 1), "boundary.enforce")
 	verifyDowngradeVector(t, trunkDir, wtDir, strings.Replace(strictTrunk, "lock_dependencies: true", "lock_dependencies: false", 1), "boundary.lock_dependencies")
+	verifyDowngradeVector(t, trunkDir, wtDir, strings.Replace(strictTrunk, "max_package_files: 30", "max_package_files: 40", 1), "thresholds.max_package_files")
+	verifyDowngradeVector(t, trunkDir, wtDir, strings.Replace(strictTrunk, "min_comment_density_pct: 90", "min_comment_density_pct: 10", 1), "thresholds.min_comment_density_pct")
 	verifyDowngradeVector(t, trunkDir, wtDir, "project: [unclosed yaml\n", "malformed")
 
 	// Brownfield trunk baseline (WorktreePath == "") with strict_mode: false continues to pass

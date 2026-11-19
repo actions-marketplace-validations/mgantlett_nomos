@@ -122,7 +122,7 @@ func (g *CoverageGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, 
 func buildCoverageGateResult(gateName string, rec *polyrun.ToolchainSuiteReceipt, threshold float64) *vscope.GateResult {
 	if !rec.GoPassed {
 		return &vscope.GateResult{
-			GateName: gateName, ProbeID: "coverage", Law: 2, Ring: RingDynamic,
+			GateName: gateName, ProbeID: probeIDCoverage, Law: 2, Ring: RingDynamic,
 			Passed:  false,
 			Message: fmt.Sprintf("Go test coverage execution failed: %s", polyrun.TruncateToolchainOutput(rec.GoOutput)),
 			Remedy:  "resolve failing Go unit tests or compiler errors (go test -cover ./...)",
@@ -130,20 +130,20 @@ func buildCoverageGateResult(gateName string, rec *polyrun.ToolchainSuiteReceipt
 	}
 	if rec.GoSkippedNonGo {
 		return &vscope.GateResult{
-			GateName: gateName, ProbeID: "coverage", Law: 2, Ring: RingDynamic,
+			GateName: gateName, ProbeID: probeIDCoverage, Law: 2, Ring: RingDynamic,
 			Passed: true, Message: "no Go or contract files modified in diff scope; coverage attested via baseline",
 		}
 	}
 	if rec.AvgCoverage < threshold {
 		return &vscope.GateResult{
-			GateName: gateName, ProbeID: "coverage", Law: 2, Ring: RingDynamic,
+			GateName: gateName, ProbeID: probeIDCoverage, Law: 2, Ring: RingDynamic,
 			Passed:  false,
 			Message: fmt.Sprintf("statement coverage %.1f%% is below minimum required %.1f%%", rec.AvgCoverage, threshold),
 			Remedy:  fmt.Sprintf("author additional unit tests to raise statement coverage to >= %.1f%%", threshold),
 		}
 	}
 	return &vscope.GateResult{
-		GateName: gateName, ProbeID: "coverage", Law: 2, Ring: RingDynamic,
+		GateName: gateName, ProbeID: probeIDCoverage, Law: 2, Ring: RingDynamic,
 		Passed: true, Message: fmt.Sprintf("statement coverage %.1f%% meets required threshold (>= %.1f%%)", rec.AvgCoverage, threshold),
 	}
 }

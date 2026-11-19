@@ -15,7 +15,7 @@ var (
 
 // ValidateBraceSyntax verifies balanced braces and parentheses outside comments and string literals.
 func ValidateBraceSyntax(lang, filePath string, content []byte) error {
-	cleaned := stripCLikeLiterals(string(content), lang != "rust")
+	cleaned := stripCLikeLiterals(string(content), lang != langRust)
 	if eng := peekDefaultEngine(); eng != nil {
 		if ok, handled := eng.scanDelimiterBalanceWasm(cleaned); handled {
 			if !ok {

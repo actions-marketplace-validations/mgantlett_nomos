@@ -60,25 +60,31 @@ func buildDesignSlopCorpusCountsWithLimit(root string, sources map[string][]byte
 	return counts, exceeded
 }
 
+type slopWalkState struct {
+	root      string
+	maxFiles  int
+	collected int
+	exceeded  bool
+	dst       map[string][]byte
+}
+
 // collectWorkspaceSlopFiles walks root collecting bounded source files into dst.
 func collectWorkspaceSlopFiles(root string, maxFiles int, dst map[string][]byte) bool {
 	if root == "" || maxFiles <= 0 {
 		return false
 	}
-	collected, exceeded := 0, false
-	walkErr := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		return visitWorkspaceSlopEntry(root, path, d, err, maxFiles, &collected, &exceeded, dst)
-	})
-	return (walkErr != nil && walkErr != fs.SkipAll) || exceeded
+	st := &slopWalkState{root: root, maxFiles: maxFiles, dst: dst}
+	walkErr := filepath.WalkDir(root, st.visit)
+	return (walkErr != nil && walkErr != fs.SkipAll) || st.exceeded
 }
 
-// visitWorkspaceSlopEntry filters skipped directories, extensions, and oversized corpus files.
-func visitWorkspaceSlopEntry(root, path string, d fs.DirEntry, err error, maxFiles int, collected *int, exceeded *bool, dst map[string][]byte) error {
+// visit filters skipped directories, extensions, and oversized corpus files.
+func (s *slopWalkState) visit(path string, d fs.DirEntry, err error) error {
 	if err != nil || d == nil {
 		return nil
 	}
 	if d.IsDir() {
-		if path != root && designSlopSkipDirName[d.Name()] {
+		if path != s.root && designSlopSkipDirName[d.Name()] {
 			return filepath.SkipDir
 		}
 		return nil
@@ -86,13 +92,13 @@ func visitWorkspaceSlopEntry(root, path string, d fs.DirEntry, err error, maxFil
 	if !designSlopCorpusExts[strings.ToLower(filepath.Ext(d.Name()))] {
 		return nil
 	}
-	if *collected >= maxFiles {
-		*exceeded = true
+	if s.collected >= s.maxFiles {
+		s.exceeded = true
 		return fs.SkipAll
 	}
-	if key, raw, ok := readBoundedCorpusFile(root, path, d); ok {
-		dst[key] = raw
-		*collected++
+	if key, raw, ok := readBoundedCorpusFile(s.root, path, d); ok {
+		s.dst[key] = raw
+		s.collected++
 	}
 	return nil
 }

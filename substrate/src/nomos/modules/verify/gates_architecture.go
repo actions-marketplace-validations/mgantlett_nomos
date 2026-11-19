@@ -219,6 +219,11 @@ func (g *MagicStringsGate) Name() string {
 	return "Magic Strings & Topology Hardcoding Gate (Law 5)"
 }
 
+var (
+	rawPortLiteralRe   = regexp.MustCompile(`['"]:(?:[1-9][0-9]{3,4})['"]`)
+	localhostLiteralRe = regexp.MustCompile(`https?://(?:localhost|127\.0\.0\.1):[0-9]{4,5}`)
+)
+
 // Evaluate checks source files for hardcoded network literals.
 func (g *MagicStringsGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
 	root := resolveArchRoot(ctx)
@@ -230,32 +235,15 @@ func (g *MagicStringsGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResu
 		}, nil
 	}
 
-	rawPortRegex := regexp.MustCompile(`['"]:(?:[1-9][0-9]{3,4})['"]`)
-	localhostRegex := regexp.MustCompile(`https?://(?:localhost|127\.0\.0\.1):[0-9]{4,5}`)
-
 	var findings []string
 	vscope.WalkTargetFiles(ctx, targetDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
+		if err != nil || info.IsDir() || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
 		if !isPolyglotTargetFile(path) && !strings.HasSuffix(path, ".go") {
 			return nil
 		}
-		if strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		data, rErr := os.ReadFile(path)
-		if rErr != nil {
-			return nil
-		}
-		content := string(data)
-		if rawPortRegex.MatchString(content) || localhostRegex.MatchString(content) {
-			if baseBytes, ok := loadBaselineFileBytes(ctx, targetDir, path); ok {
-				baseStr := string(baseBytes)
-				if rawPortRegex.MatchString(baseStr) || localhostRegex.MatchString(baseStr) {
-					return nil
-				}
-			}
+		if hasNetNewMagicNetworkLiteral(ctx, targetDir, path) {
 			rel, rErr := filepath.Rel(targetDir, path)
 			if rErr != nil {
 				rel = path
@@ -278,6 +266,21 @@ func (g *MagicStringsGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResu
 		GateName: g.Name(), ProbeID: "magic_strings", Law: 5, Ring: RingSyntactic,
 		Passed: true, Message: "zero magic strings or hardcoded topology mappings detected",
 	}, nil
+}
+
+func hasNetNewMagicNetworkLiteral(ctx *vscope.VerifyContext, targetDir, path string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil || !matchesMagicNetworkLiteral(string(data)) {
+		return false
+	}
+	if baseBytes, ok := loadBaselineFileBytes(ctx, targetDir, path); ok && matchesMagicNetworkLiteral(string(baseBytes)) {
+		return false
+	}
+	return true
+}
+
+func matchesMagicNetworkLiteral(s string) bool {
+	return rawPortLiteralRe.MatchString(s) || localhostLiteralRe.MatchString(s)
 }
 
 // MagicStringDuplicationGate detects repeated string literals in code (Cell 5.1, Law 5).

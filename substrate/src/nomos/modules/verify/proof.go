@@ -165,10 +165,29 @@ func collectFileSampleFuncs(fset *token.FileSet, file string, overflowBudget int
 
 // EvaluateMutationSensitivity tests the gate suite against real codebase and synthetic mutants.
 func EvaluateMutationSensitivity(root string, files []string) (int, int, error) {
-	killed := 0
-	total := 0
-
 	samples := sampleRealFunctions(files, 4)
+	killed, total := evaluateSampleAntiShimMutants(samples)
+
+	sprawlMetrics := []astdebt.FileMetric{{Name: "mutant_sprawl.go", LOC: 75}}
+	if len(EvaluateFileLOCViolations(sprawlMetrics, 60)) > 0 {
+		killed++
+	}
+	total++
+
+	staticKilled, staticTotal := evaluateStaticCobraAndErrMutants()
+	killed += staticKilled
+	total += staticTotal
+
+	if len(samples) == 0 {
+		synKilled, synTotal := evaluateSyntheticMutants()
+		killed += synKilled
+		total += synTotal
+	}
+	return killed, total, nil
+}
+
+func evaluateSampleAntiShimMutants(samples []*ast.FuncDecl) (int, int) {
+	killed, total := 0, 0
 	for _, fn := range samples {
 		emptyMut := &ast.FuncDecl{Name: fn.Name, Type: fn.Type, Body: &ast.BlockStmt{List: []ast.Stmt{}}}
 		if ValidateAntiShim(ScanFunctionAntiShim(emptyMut)) != nil {
@@ -178,50 +197,34 @@ func EvaluateMutationSensitivity(root string, files []string) (int, int, error) 
 
 		panicMut := &ast.FuncDecl{
 			Name: fn.Name, Type: fn.Type,
-			Body: &ast.BlockStmt{List: []ast.Stmt{
-				&ast.ExprStmt{X: &ast.CallExpr{Fun: ast.NewIdent("panic")}},
-			}},
+			Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ExprStmt{X: &ast.CallExpr{Fun: ast.NewIdent("panic")}}}},
 		}
 		if ValidateAntiShim(ScanFunctionAntiShim(panicMut)) != nil {
 			killed++
 		}
 		total++
 	}
+	return killed, total
+}
 
-	sprawlMetrics := []astdebt.FileMetric{{Name: "mutant_sprawl.go", LOC: 75}}
-	if len(EvaluateFileLOCViolations(sprawlMetrics, 60)) > 0 {
-		killed++
-	}
-	total++
-
+func evaluateStaticCobraAndErrMutants() (int, int) {
+	killed := 0
 	fset := token.NewFileSet()
-	file, pErr := parser.ParseFile(fset, "mutant_err.go", "package main\nfunc test() {\n\t_ = fail()\n}\n", 0)
-	if pErr == nil {
+	if file, pErr := parser.ParseFile(fset, "mutant_err.go", "package main\nfunc test() {\n\t_ = fail()\n}\n", 0); pErr == nil {
 		var violations []string
 		checkUncheckedErrorsInFile(file, fset, "mutant_err.go", &violations)
 		if len(violations) > 0 {
 			killed++
 		}
 	}
-	total++
-
-	cobraStub, cErr := parser.ParseExpr(`&cobra.Command{Use: "stub", Short: "missing long and example"}`)
-	if cErr == nil {
+	if cobraStub, cErr := parser.ParseExpr(`&cobra.Command{Use: "stub", Short: "missing long and example"}`); cErr == nil {
 		if unary, ok := cobraStub.(*ast.UnaryExpr); ok {
 			if comp, ok := unary.X.(*ast.CompositeLit); ok && len(astdebt.ValidateCobraCommandCompositeLit(comp)) > 0 {
 				killed++
 			}
 		}
 	}
-	total++
-
-	if len(samples) == 0 {
-		synKilled, synTotal := evaluateSyntheticMutants()
-		killed += synKilled
-		total += synTotal
-	}
-
-	return killed, total, nil
+	return killed, 2
 }
 
 func evaluateSyntheticMutants() (int, int) {
