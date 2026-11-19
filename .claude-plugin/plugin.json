@@ -1,6 +1,6 @@
 {
   "name": "nomos",
-  "description": "Thin binary bootstrapper for Nomos: zero-token 11-language AST & Git guardrails, 5s brownfield X-Ray, and ~4ms PreToolUse security airlock powered by your coding agent.",
+  "description": "Thin binary bootstrapper for Nomos: Apache 2.0 Go execution substrate beneath any coding agent (0 LLM tokens), with 11-language AST & Git guardrails, 5s brownfield X-Ray, and ~4ms PreToolUse security airlock.",
   "author": {
     "name": "SophiaLabs",
     "url": "https://sophialabs.ca"

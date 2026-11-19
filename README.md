@@ -4,7 +4,7 @@
 
 # Nomos (Νόμος)
 
-**Agents guess; Git cannot. Zero-token AST & Git guardrails powered by your coding agent.**
+**Agents guess; Git cannot. The Apache 2.0 Go execution substrate beneath any coding agent (0 LLM tokens).**
 
 [![CI](https://github.com/mgantlett/nomos/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/mgantlett/nomos/actions/workflows/ci.yaml)
 [![Release](https://img.shields.io/github/v/release/mgantlett/nomos?color=0EA5E9)](https://github.com/mgantlett/nomos/releases/latest)

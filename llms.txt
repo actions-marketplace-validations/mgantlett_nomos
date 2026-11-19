@@ -1,6 +1,6 @@
 # Nomos Open-Core
 
-> Agents guess; Git cannot. Zero-token AST and Git guardrails powered by your coding agent - initialized once so ~4ms security hooks, 42 polyglot AST gates, and brownfield debt ratchets run invisibly underneath normal feature-branch workflows.
+> Agents guess; Git cannot. Apache 2.0 Go execution substrate beneath any coding agent (0 LLM tokens) - initialized once so ~4ms security hooks, 42 polyglot AST gates, and brownfield debt ratchets run invisibly underneath normal feature-branch workflows.
 
 - **License:** Apache-2.0
 - **Repository:** https://github.com/mgantlett/nomos
