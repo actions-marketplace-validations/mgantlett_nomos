@@ -200,6 +200,27 @@ func operationalSurfaceContractCases() []repoContractCase {
 			},
 			forbid: []string{"cockpit"},
 		},
+		{
+			name:    "llms.txt and npm launcher expose Homebrew, npx, and remote Streamable HTTP MCP",
+			relPath: "llms.txt",
+			mustHave: []string{
+				"brew install --cask mgantlett/tap/nomos",
+				"npx --yes @sophialabs/nomos xray .",
+				"https://sophialabs.ca/mcp",
+				"https://sophialabs.ca/.well-known/openapi.json",
+			},
+			forbid: []string{"cockpit"},
+		},
+		{
+			name:    "npm launcher package manifest exposes @sophialabs/nomos Apache-2.0 CLI wrapper",
+			relPath: filepath.Join("packaging", "npm", "package.json"),
+			mustHave: []string{
+				`"@sophialabs/nomos"`,
+				`"Apache-2.0"`,
+				`"./bin/nomos-cli.mjs"`,
+			},
+			forbid: []string{"cockpit"},
+		},
 	}
 }
 

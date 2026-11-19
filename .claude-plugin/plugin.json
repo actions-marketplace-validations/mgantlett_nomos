@@ -18,5 +18,11 @@
     "testing",
     "mutation-testing"
   ],
-  "skills": "./skills/"
+  "skills": "./skills/",
+  "mcpServers": {
+    "nomos": {
+      "type": "http",
+      "url": "https://sophialabs.ca/mcp"
+    }
+  }
 }

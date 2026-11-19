@@ -1,0 +1,33 @@
+{
+  "name": "@sophialabs/nomos",
+  "version": "4.27.0",
+  "description": "Zero-dependency launcher for Nomos: Apache-2.0 static Go AST & Git execution substrate for AI coding agents (nomos xray, nomos init, nomos verify, nomos mcp).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "nomos": "./bin/nomos-cli.mjs"
+  },
+  "files": [
+    "bin/nomos-cli.mjs",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mgantlett/nomos.git",
+    "directory": "packaging/npm"
+  },
+  "homepage": "https://sophialabs.ca/docs/introduction",
+  "keywords": [
+    "ai-agents",
+    "ast",
+    "claude-code",
+    "cursor",
+    "git-hooks",
+    "mcp",
+    "guardrails",
+    "sarif"
+  ]
+}
