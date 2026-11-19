@@ -347,8 +347,8 @@ type UpdateCheckCache struct {
 * **`nomos xray [dir] --sarif` and `nomos verify [path] --sarif`**: Emits valid OASIS SARIF 2.1.0 JSON (`version: "2.1.0"`, `$schema: "https://json.schemastore.org/sarif-2.1.0.json"`, `#SarifLog`) ingestible by GitHub Code Scanning. Rejects combining `--sarif` with `--json`, `--markdown`, or `--pr` (`ERR_VALIDATION_FAILED`).
 
 ### 4.19 Zero-Dependency MCP Stdio Server (`nomos mcp`)
-* **`nomos mcp`**: Hidden agent command revealed under `nomos --help-agent` serving MCP JSON-RPC 2.0 (`#MCPRequest`, `#MCPResponse`, `protocolVersion: "2024-11-05"`) over newline-delimited stdio without external runtimes.
-* **Read-Only Tool Boundaries**: Exposes strictly read-only orientation and verification tools (`nomos_handshake`, `nomos_status`, `nomos_task_dag`, `nomos_mem_recall`, `nomos_verify_impact`, `nomos_xray`). Rejects mutating requests under Law 1 and Law 3 CapBAC boundaries.
+* **`nomos mcp`**: Hidden agent command serving MCP JSON-RPC 2.0 (`#MCPRequest`, `#MCPResponse`) over stdio across protocol versions `2025-11-25`, `2025-06-18`, `2025-03-26`, and `2024-11-05`.
+* **Read-Only Tool, Resource, and Directive Boundaries**: Exposes read-only tools (`nomos_handshake`, `nomos_status`, `nomos_task_dag`, `nomos_mem_recall`, `nomos_verify_impact`, `nomos_xray`, `nomos_capabilities`), `resources/*`, and `prompts/*` while rejecting mutations.
 
 ---
 
@@ -415,6 +415,7 @@ type UpdateCheckCache struct {
 | `TC-CI-01` | Law 5 & Law 6 (Offline CI & Action) | `nomos init --ci`, `--ci --local`, and root `action.yml` | Writes CI configs, rejects `--ci --local`, and bootstraps static binary + baseline PR proofs |
 | `TC-SARIF-01` | Law 2 & Law 4 (OASIS SARIF 2.1.0 Output) | `nomos xray --sarif` and `nomos verify --sarif` | Emits valid SARIF 2.1.0 JSON with driver rules and locations |
 | `TC-MCP-01` | Law 1 & Law 6 (Read-Only MCP Server) | `nomos mcp` JSON-RPC 2.0 stdio | Serves `initialize`, `tools/list`, read tools; rejects mutating calls |
+| `TC-MCP-02` | Law 4 & Law 6 (MCP Resources & `prompts/*`) | `nomos mcp` `2025-11-25` `resources/*` and `prompts/*` | Negotiates modern MCP versions, resources, `prompts/*`, and capabilities |
 | `TC-XRAY-03` | Law 2 & Law 3 (Read-Only CLI X-Ray) | `nomos xray --json` and `nomos xray --markdown` on uninitialized directory | Emits structured `XrayReport` and Markdown card with zero filesystem or ledger writes |
 | `TC-BG-07` | Law 1 & Law 2 (Post-Commit Mneme Distill) | `nomos hook post-commit` after `nomos verify` trap fix on `feat/auth` | Distills `BRANCH-*` trap-to-fix pitfall into `mneme.db` and clears branch trace |
 | `TC-REL-001` | Law 4 (SPDX Apache-2.0 License) | `LICENSE` audit in `legal_release_contract_test.go` | Verifies verbatim SPDX Apache-2.0 text and appendix |
