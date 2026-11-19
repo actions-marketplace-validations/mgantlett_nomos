@@ -29,6 +29,7 @@ type MCPRequest struct {
 	ID      json.RawMessage `json:"id,omitempty"`
 	Method  string          `json:"method"`
 	Params  json.RawMessage `json:"params,omitempty"`
+	Meta    map[string]any  `json:"_meta,omitempty"`
 }
 
 // MCPResponse models a JSON-RPC 2.0 response frame (#MCPResponse).
@@ -43,6 +44,7 @@ type MCPResponse struct {
 type MCPError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
 }
 
 // MCPToolDescriptor declares a read-only MCP tool entry for tools/list.
@@ -130,7 +132,15 @@ func dispatchRPCFrame(raw []byte, version string) (MCPResponse, bool) {
 }
 
 func routeRPCMethod(req MCPRequest, version string) MCPResponse {
+	if errResp, blocked := validateStatelessMeta(req); blocked {
+		return errResp
+	}
+	if resResp, handled := routeResourceOrPromptMethod(req); handled {
+		return resResp
+	}
 	switch req.Method {
+	case "server/discover":
+		return okResponse(req.ID, buildServerDiscoverPayload(version))
 	case "initialize":
 		return okResponse(req.ID, buildInitializePayload(req.Params, version))
 	case "ping":
@@ -139,16 +149,6 @@ func routeRPCMethod(req MCPRequest, version string) MCPResponse {
 		return okResponse(req.ID, map[string]any{"tools": ReadOnlyTools()})
 	case "tools/call":
 		return handleToolCall(req)
-	case "resources/list":
-		return okResponse(req.ID, map[string]any{"resources": listReadOnlyResources()})
-	case "resources/templates/list":
-		return okResponse(req.ID, map[string]any{"resourceTemplates": []any{}})
-	case "resources/read":
-		return handleResourceRead(req)
-	case "prompts/list":
-		return okResponse(req.ID, map[string]any{"prompts": listReadOnlyPrompts()})
-	case "prompts/get":
-		return handlePromptGet(req)
 	default:
 		return errorResponse(req.ID, rpcErrMethodFound, fmt.Sprintf("method not found: %s", req.Method))
 	}
@@ -180,10 +180,14 @@ func okResponse(id json.RawMessage, result any) MCPResponse {
 }
 
 func errorResponse(id json.RawMessage, code int, msg string) MCPResponse {
+	return errorDataResponse(id, code, msg, nil)
+}
+
+func errorDataResponse(id json.RawMessage, code int, msg string, data any) MCPResponse {
 	return MCPResponse{
 		JSONRPC: jsonRPCVersion,
 		ID:      id,
-		Error:   &MCPError{Code: code, Message: msg},
+		Error:   &MCPError{Code: code, Message: msg, Data: data},
 	}
 }
 

@@ -14,12 +14,85 @@ import (
 )
 
 const (
-	modernMCPProtocolVersion = "2025-06-18"
-	rpcErrInvalidParams      = -32602
+	statelessMCPProtocolVersion = "2026-07-28"
+	mcpProtocol20251125         = "2025-11-25"
+	modernMCPProtocolVersion    = "2025-06-18"
+	mcpProtocol20250326         = "2025-03-26"
+	mcpMetaVersionKey           = "io.modelcontextprotocol/protocolVersion"
+	rpcErrInvalidParams         = -32602
+	rpcErrUnsupportedVersion    = -32022
+	mcpServerInstructions       = "Read-only local Nomos MCP server. Use nomos_handshake, nomos_xray, nomos_verify_impact, nomos_capabilities, and nomos_mem_recall to inspect repository governance without mutating files."
 )
 
+func supportedMCPVersions() []string {
+	return []string{
+		statelessMCPProtocolVersion,
+		mcpProtocol20251125,
+		modernMCPProtocolVersion,
+		mcpProtocol20250326,
+		mcpProtocolVersion,
+	}
+}
+
+func isSupportedMCPVersion(v string) bool {
+	for _, s := range supportedMCPVersions() {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+type mcpMetaEnvelope struct {
+	Meta map[string]any `json:"_meta"`
+}
+
 type mcpInitParams struct {
-	ProtocolVersion string `json:"protocolVersion"`
+	ProtocolVersion string         `json:"protocolVersion"`
+	Meta            map[string]any `json:"_meta,omitempty"`
+}
+
+func extractMetaProtocolVersion(req MCPRequest) string {
+	if len(req.Params) > 0 {
+		var env mcpMetaEnvelope
+		if err := json.Unmarshal(req.Params, &env); err == nil {
+			if v, ok := env.Meta[mcpMetaVersionKey].(string); ok && strings.TrimSpace(v) != "" {
+				return strings.TrimSpace(v)
+			}
+		}
+	}
+	if v, ok := req.Meta[mcpMetaVersionKey].(string); ok && strings.TrimSpace(v) != "" {
+		return strings.TrimSpace(v)
+	}
+	return ""
+}
+
+func validateStatelessMeta(req MCPRequest) (MCPResponse, bool) {
+	requested := extractMetaProtocolVersion(req)
+	if requested == "" || isSupportedMCPVersion(requested) {
+		return MCPResponse{}, false
+	}
+	return errorDataResponse(req.ID, rpcErrUnsupportedVersion, "unsupported protocol version", map[string]any{
+		"supported": supportedMCPVersions(),
+		"requested": requested,
+	}), true
+}
+
+func routeResourceOrPromptMethod(req MCPRequest) (MCPResponse, bool) {
+	switch req.Method {
+	case "resources/list":
+		return okResponse(req.ID, map[string]any{"resources": listReadOnlyResources()}), true
+	case "resources/templates/list":
+		return okResponse(req.ID, map[string]any{"resourceTemplates": []any{}}), true
+	case "resources/read":
+		return handleResourceRead(req), true
+	case "prompts/list":
+		return okResponse(req.ID, map[string]any{"prompts": listReadOnlyPrompts()}), true
+	case "prompts/get":
+		return handlePromptGet(req), true
+	default:
+		return MCPResponse{}, false
+	}
 }
 
 type mcpResourceReadParams struct {
@@ -40,29 +113,53 @@ func negotiateProtocolVersion(rawParams json.RawMessage) string {
 		return mcpProtocolVersion
 	}
 	req := strings.TrimSpace(p.ProtocolVersion)
-	switch req {
-	case "2025-11-25", modernMCPProtocolVersion, "2025-03-26", mcpProtocolVersion:
-		return req
-	case "":
-		return mcpProtocolVersion
-	default:
-		if strings.HasPrefix(req, "2025-") || strings.HasPrefix(req, "2026-") {
-			return modernMCPProtocolVersion
+	if req == "" {
+		if v, ok := p.Meta[mcpMetaVersionKey].(string); ok {
+			req = strings.TrimSpace(v)
 		}
+	}
+	if isSupportedMCPVersion(req) {
+		return req
+	}
+	if req == "" {
 		return mcpProtocolVersion
+	}
+	if strings.HasPrefix(req, "2026-") || strings.HasPrefix(req, "2027-") {
+		return statelessMCPProtocolVersion
+	}
+	if strings.HasPrefix(req, "2025-") {
+		return modernMCPProtocolVersion
+	}
+	return mcpProtocolVersion
+}
+
+func mcpCapabilitiesMap() map[string]any {
+	return map[string]any{
+		"tools":     map[string]any{"listChanged": false},
+		"resources": map[string]any{"subscribe": false, "listChanged": false},
+		"prompts":   map[string]any{"listChanged": false},
 	}
 }
 
 func buildInitializePayload(rawParams json.RawMessage, version string) map[string]any {
 	return map[string]any{
 		"protocolVersion": negotiateProtocolVersion(rawParams),
-		"capabilities": map[string]any{
-			"tools":     map[string]any{"listChanged": false},
-			"resources": map[string]any{"subscribe": false, "listChanged": false},
-			"prompts":   map[string]any{"listChanged": false},
+		"capabilities":    mcpCapabilitiesMap(),
+		"serverInfo":      map[string]any{"name": "nomos", "version": version},
+		"instructions":    mcpServerInstructions,
+	}
+}
+
+func buildServerDiscoverPayload(version string) map[string]any {
+	return map[string]any{
+		"protocolVersion":   statelessMCPProtocolVersion,
+		"supportedVersions": supportedMCPVersions(),
+		"capabilities":      mcpCapabilitiesMap(),
+		"serverInfo":        map[string]any{"name": "nomos", "version": version},
+		"instructions":      mcpServerInstructions,
+		"_meta": map[string]any{
+			mcpMetaVersionKey: statelessMCPProtocolVersion,
 		},
-		"serverInfo": map[string]any{"name": "nomos", "version": version},
-		"instructions": "Read-only local Nomos MCP server. Use nomos_handshake, nomos_xray, nomos_verify_impact, nomos_capabilities, and nomos_mem_recall to inspect repository governance without mutating files.",
 	}
 }
 

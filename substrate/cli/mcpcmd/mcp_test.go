@@ -283,8 +283,8 @@ func TestMCPInteractiveTTYHintWritesOnlyToStderr(t *testing.T) {
 func TestMCPVersionNegotiationResourcesPromptsAndCapabilities(t *testing.T) {
 	t.Setenv(constants.EnvNomosHome, t.TempDir())
 	frames := []string{
-		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}`,
-		`{"jsonrpc":"2.0","id":2,"method":"initialize","params":{"protocolVersion":"2026-04-01"}}`,
+		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2026-07-28"}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"initialize","params":{"protocolVersion":"2026-12-01"}}`,
 		`{"jsonrpc":"2.0","id":3,"method":"resources/list"}`,
 		`{"jsonrpc":"2.0","id":4,"method":"resources/templates/list"}`,
 		`{"jsonrpc":"2.0","id":5,"method":"resources/read","params":{"uri":"nomos://status"}}`,
@@ -293,23 +293,26 @@ func TestMCPVersionNegotiationResourcesPromptsAndCapabilities(t *testing.T) {
 		`{"jsonrpc":"2.0","id":8,"method":"prompts/get","params":{"name":"xray-audit","arguments":{"dir":"."}}}`,
 		`{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"nomos_capabilities","arguments":{"type":"gate"}}}`,
 		`{"jsonrpc":"2.0","id":10,"method":"resources/read","params":{"uri":"nomos://unknown"}}`,
+		`{"jsonrpc":"2.0","id":11,"method":"server/discover"}`,
+		`{"jsonrpc":"2.0","id":12,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"1999-01-01"}}}`,
 	}
 	resps := runMCPSession(t, frames)
 	if len(resps) != len(frames) {
 		t.Fatalf("expected %d responses, got %d", len(frames), len(resps))
 	}
 	assertModernMCPResponses(t, resps)
+	assertStatelessDiscoverAndMeta(t, resps[10], resps[11])
 }
 
 func assertModernMCPResponses(t *testing.T, resps []MCPResponse) {
 	t.Helper()
 	r0, err := json.Marshal(resps[0].Result)
-	if err != nil || !strings.Contains(string(r0), `"2025-11-25"`) || !strings.Contains(string(r0), `"resources"`) || !strings.Contains(string(r0), `"prompts"`) {
-		t.Fatalf("expected negotiated 2025-11-25 with resources & prompts capabilities, got %s (err=%v)", string(r0), err)
+	if err != nil || !strings.Contains(string(r0), `"2026-07-28"`) || !strings.Contains(string(r0), `"resources"`) || !strings.Contains(string(r0), `"prompts"`) {
+		t.Fatalf("expected negotiated 2026-07-28 with resources & prompts capabilities, got %s (err=%v)", string(r0), err)
 	}
 	r1, err := json.Marshal(resps[1].Result)
-	if err != nil || !strings.Contains(string(r1), `"2025-06-18"`) {
-		t.Fatalf("expected 2026-* client to negotiate 2025-06-18, got %s (err=%v)", string(r1), err)
+	if err != nil || !strings.Contains(string(r1), `"2026-07-28"`) {
+		t.Fatalf("expected 2026-* client to negotiate 2026-07-28, got %s (err=%v)", string(r1), err)
 	}
 	r2, err := json.Marshal(resps[2].Result)
 	if err != nil || !strings.Contains(string(r2), "nomos://capabilities") {
@@ -324,5 +327,16 @@ func assertModernMCPResponses(t *testing.T, resps []MCPResponse) {
 	}
 	if resps[9].Error == nil || resps[9].Error.Code != rpcErrInvalidParams {
 		t.Fatalf("expected invalid params (-32602) on unknown resource URI, got %+v", resps[9].Error)
+	}
+}
+
+func assertStatelessDiscoverAndMeta(t *testing.T, discResp, badMetaResp MCPResponse) {
+	t.Helper()
+	discRaw, err := json.Marshal(discResp.Result)
+	if err != nil || !strings.Contains(string(discRaw), `"supportedVersions"`) || !strings.Contains(string(discRaw), statelessMCPProtocolVersion) {
+		t.Fatalf("expected server/discover supportedVersions with 2026-07-28, got %s (err=%v)", string(discRaw), err)
+	}
+	if badMetaResp.Error == nil || badMetaResp.Error.Code != rpcErrUnsupportedVersion {
+		t.Fatalf("expected -32022 unsupported protocol version error, got %+v", badMetaResp.Error)
 	}
 }
