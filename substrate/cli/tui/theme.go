@@ -278,6 +278,12 @@ var TemplatesFS fs.FS
 // ScaffoldAmbientHooksFn stores the workspace ambient-hook scaffolding callback wired by root CLI startup (@intent task_lifecycle_cli_spec.md).
 var ScaffoldAmbientHooksFn func(repoRoot string) error
 
+// DetectAdapterDriftFn stores the per-provider hook and stealth-exclude drift detector wired by root CLI startup (@intent task_lifecycle_cli_spec.md).
+var DetectAdapterDriftFn func(repoRoot string) []string
+
+// RefreshLocalStealthFn stores the git-exclude stealth refresh callback wired by root CLI startup (@intent task_lifecycle_cli_spec.md).
+var RefreshLocalStealthFn func(repoRoot string) error
+
 // ReadEmbeddedTemplate reads a template file from TemplatesFS (@intent task_lifecycle_cli_spec.md).
 func ReadEmbeddedTemplate(relPath string) ([]byte, error) {
 	if TemplatesFS == nil {

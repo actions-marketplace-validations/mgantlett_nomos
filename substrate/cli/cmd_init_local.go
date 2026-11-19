@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
+	"github.com/mgantlett/nomos/substrate/src/nomos/core/config"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/constants"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/types"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
@@ -92,6 +93,39 @@ func stripStealthExcludeBlock(existing string) string {
 	return cleaned
 }
 
+func formatStealthExcludeBlock(includeWorktrees bool) string {
+	var sb strings.Builder
+	sb.WriteString(localStealthStartMarker)
+	sb.WriteString("\n")
+	for _, pat := range localStealthPatterns(includeWorktrees) {
+		sb.WriteString(pat)
+		sb.WriteString("\n")
+	}
+	sb.WriteString(localStealthEndMarker)
+	return sb.String()
+}
+
+func extractStealthExcludeBlock(existing string) (string, bool) {
+	start := strings.Index(existing, localStealthStartMarker)
+	end := strings.Index(existing, localStealthEndMarker)
+	if start == -1 || end == -1 || end < start {
+		return "", false
+	}
+	return existing[start : end+len(localStealthEndMarker)], true
+}
+
+func renderLocalStealthExcludeContent(existing string, includeWorktrees bool) string {
+	cleaned := stripStealthExcludeBlock(existing)
+	var sb strings.Builder
+	sb.WriteString(cleaned)
+	if cleaned != "" && !strings.HasSuffix(cleaned, "\n\n") {
+		sb.WriteString("\n")
+	}
+	sb.WriteString(formatStealthExcludeBlock(includeWorktrees))
+	sb.WriteString("\n")
+	return sb.String()
+}
+
 func syncLocalStealthExcludes(absDir string, includeWorktrees bool) error {
 	excludePath, err := resolveGitExcludeFile(absDir)
 	if err != nil {
@@ -101,24 +135,50 @@ func syncLocalStealthExcludes(absDir string, includeWorktrees bool) error {
 	if rErr != nil && !os.IsNotExist(rErr) {
 		return types.NewNomosError(types.ErrCodeSubstrate, "failed reading %s: %v", excludePath, rErr)
 	}
-	cleaned := stripStealthExcludeBlock(string(raw))
-	var sb strings.Builder
-	sb.WriteString(cleaned)
-	if cleaned != "" && !strings.HasSuffix(cleaned, "\n\n") {
-		sb.WriteString("\n")
-	}
-	sb.WriteString(localStealthStartMarker)
-	sb.WriteString("\n")
-	for _, pat := range localStealthPatterns(includeWorktrees) {
-		sb.WriteString(pat)
-		sb.WriteString("\n")
-	}
-	sb.WriteString(localStealthEndMarker)
-	sb.WriteString("\n")
-	if wErr := os.WriteFile(excludePath, []byte(sb.String()), 0644); wErr != nil {
+	rendered := renderLocalStealthExcludeContent(string(raw), includeWorktrees)
+	if wErr := os.WriteFile(excludePath, []byte(rendered), 0644); wErr != nil {
 		return types.NewNomosError(types.ErrCodeSubstrate, "failed writing %s: %v", excludePath, wErr)
 	}
 	return nil
+}
+
+func isWorktreeIsolationRepo(absDir string) bool {
+	cfg, err := config.LoadConfig(absDir)
+	return err == nil && cfg != nil && cfg.Governance.Boundary.EffectiveIsolationMode() == config.IsolationModeWorktree
+}
+
+func hasLocalStealthExcludeDrift(absDir string) bool {
+	if _, err := os.Stat(filepath.Join(absDir, constants.DirGit)); err != nil {
+		return false
+	}
+	excludePath, err := resolveGitExcludeFile(absDir)
+	if err != nil {
+		return false
+	}
+	raw, rErr := os.ReadFile(excludePath)
+	if rErr != nil {
+		return false
+	}
+	block, ok := extractStealthExcludeBlock(string(raw))
+	if !ok {
+		return false
+	}
+	return strings.TrimSpace(block) != strings.TrimSpace(formatStealthExcludeBlock(isWorktreeIsolationRepo(absDir)))
+}
+
+func refreshLocalStealthIfPresent(absDir string) error {
+	if _, err := os.Stat(filepath.Join(absDir, constants.DirGit)); err != nil {
+		return nil
+	}
+	excludePath, err := resolveGitExcludeFile(absDir)
+	if err != nil {
+		return nil
+	}
+	raw, rErr := os.ReadFile(excludePath)
+	if rErr != nil || !strings.Contains(string(raw), localStealthStartMarker) {
+		return nil
+	}
+	return syncLocalStealthExcludes(absDir, isWorktreeIsolationRepo(absDir))
 }
 
 func clearLocalStealthExcludes(absDir string) error {

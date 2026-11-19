@@ -138,11 +138,27 @@ func containsAgent(agents []string, target string) bool {
 }
 
 func scaffoldAmbientHooks(dir string) error {
-	existing := detectExistingHookAgents(dir)
-	if len(existing) == 0 {
-		existing = canonicalInitAgents
+	existing := resolveExistingWorkspaceAgents(dir)
+	if containsAgent(existing, agentAgy) || pathExists(filepath.Join(dir, hookcmd.AgentsDirToken, "workflows")) {
+		pruneLegacyWorkflows(dir)
 	}
 	return scaffoldAmbientHooksForSelection(dir, existing)
+}
+
+func resolveExistingWorkspaceAgents(absDir string) []string {
+	if existing := detectExistingHookAgents(absDir); len(existing) > 0 {
+		return existing
+	}
+	var signaled []string
+	for _, agent := range canonicalInitAgents {
+		if hasAgentDirSignal(absDir, agent) {
+			signaled = append(signaled, agent)
+		}
+	}
+	if len(signaled) > 0 {
+		return signaled
+	}
+	return canonicalInitAgents
 }
 
 func scaffoldAmbientHooksForSelection(dir string, agents []string) error {

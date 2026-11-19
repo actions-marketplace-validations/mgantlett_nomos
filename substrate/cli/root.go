@@ -28,6 +28,8 @@ func init() {
 	tui.ResolveAppVersion = func() string { return RootCmdVersion }
 	tui.TemplatesFS = initTemplates
 	tui.ScaffoldAmbientHooksFn = scaffoldAmbientHooks
+	tui.DetectAdapterDriftFn = detectAdapterAndStealthDrift
+	tui.RefreshLocalStealthFn = refreshLocalStealthIfPresent
 }
 
 // NewRootCmd constructs the authoritative root Cobra command for Nomos.
