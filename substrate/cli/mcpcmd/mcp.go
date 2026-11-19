@@ -132,17 +132,23 @@ func dispatchRPCFrame(raw []byte, version string) (MCPResponse, bool) {
 func routeRPCMethod(req MCPRequest, version string) MCPResponse {
 	switch req.Method {
 	case "initialize":
-		return okResponse(req.ID, map[string]any{
-			"protocolVersion": mcpProtocolVersion,
-			"capabilities":    map[string]any{"tools": map[string]any{}},
-			"serverInfo":      map[string]any{"name": "nomos", "version": version},
-		})
+		return okResponse(req.ID, buildInitializePayload(req.Params, version))
 	case "ping":
 		return okResponse(req.ID, map[string]any{})
 	case "tools/list":
 		return okResponse(req.ID, map[string]any{"tools": ReadOnlyTools()})
 	case "tools/call":
 		return handleToolCall(req)
+	case "resources/list":
+		return okResponse(req.ID, map[string]any{"resources": listReadOnlyResources()})
+	case "resources/templates/list":
+		return okResponse(req.ID, map[string]any{"resourceTemplates": []any{}})
+	case "resources/read":
+		return handleResourceRead(req)
+	case "prompts/list":
+		return okResponse(req.ID, map[string]any{"prompts": listReadOnlyPrompts()})
+	case "prompts/get":
+		return handlePromptGet(req)
 	default:
 		return errorResponse(req.ID, rpcErrMethodFound, fmt.Sprintf("method not found: %s", req.Method))
 	}

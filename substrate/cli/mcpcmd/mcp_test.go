@@ -278,3 +278,51 @@ func TestMCPInteractiveTTYHintWritesOnlyToStderr(t *testing.T) {
 		})
 	}
 }
+
+// @verifies TC-MCP-02
+func TestMCPVersionNegotiationResourcesPromptsAndCapabilities(t *testing.T) {
+	t.Setenv(constants.EnvNomosHome, t.TempDir())
+	frames := []string{
+		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"initialize","params":{"protocolVersion":"2026-04-01"}}`,
+		`{"jsonrpc":"2.0","id":3,"method":"resources/list"}`,
+		`{"jsonrpc":"2.0","id":4,"method":"resources/templates/list"}`,
+		`{"jsonrpc":"2.0","id":5,"method":"resources/read","params":{"uri":"nomos://status"}}`,
+		`{"jsonrpc":"2.0","id":6,"method":"resources/read","params":{"uri":"nomos://directives"}}`,
+		`{"jsonrpc":"2.0","id":7,"method":"prompts/list"}`,
+		`{"jsonrpc":"2.0","id":8,"method":"prompts/get","params":{"name":"xray-audit","arguments":{"dir":"."}}}`,
+		`{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"nomos_capabilities","arguments":{"type":"gate"}}}`,
+		`{"jsonrpc":"2.0","id":10,"method":"resources/read","params":{"uri":"nomos://unknown"}}`,
+	}
+	resps := runMCPSession(t, frames)
+	if len(resps) != len(frames) {
+		t.Fatalf("expected %d responses, got %d", len(frames), len(resps))
+	}
+	assertModernMCPResponses(t, resps)
+}
+
+func assertModernMCPResponses(t *testing.T, resps []MCPResponse) {
+	t.Helper()
+	r0, err := json.Marshal(resps[0].Result)
+	if err != nil || !strings.Contains(string(r0), `"2025-11-25"`) || !strings.Contains(string(r0), `"resources"`) || !strings.Contains(string(r0), `"prompts"`) {
+		t.Fatalf("expected negotiated 2025-11-25 with resources & prompts capabilities, got %s (err=%v)", string(r0), err)
+	}
+	r1, err := json.Marshal(resps[1].Result)
+	if err != nil || !strings.Contains(string(r1), `"2025-06-18"`) {
+		t.Fatalf("expected 2026-* client to negotiate 2025-06-18, got %s (err=%v)", string(r1), err)
+	}
+	r2, err := json.Marshal(resps[2].Result)
+	if err != nil || !strings.Contains(string(r2), "nomos://capabilities") {
+		t.Fatalf("expected resources/list to include nomos://capabilities, got %s", string(r2))
+	}
+	if resps[4].Error != nil || resps[5].Error != nil || resps[7].Error != nil {
+		t.Fatalf("expected resources/read and prompts/get to succeed, got %+v / %+v / %+v", resps[4].Error, resps[5].Error, resps[7].Error)
+	}
+	capTool := decodeToolResult(t, resps[8])
+	if capTool.IsError || !strings.Contains(capTool.Content[0].Text, "gates_count") {
+		t.Fatalf("expected nomos_capabilities tool JSON output, got %+v", capTool)
+	}
+	if resps[9].Error == nil || resps[9].Error.Code != rpcErrInvalidParams {
+		t.Fatalf("expected invalid params (-32602) on unknown resource URI, got %+v", resps[9].Error)
+	}
+}

@@ -12,10 +12,32 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pkgJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
-const PINNED_VERSION = String(process.env.NOMOS_VERSION || pkgJson.version || '4.27.0').replace(/^v/, '');
-const RELEASE_BASE = `https://github.com/mgantlett/nomos/releases/download/v${PINNED_VERSION}`;
+const FALLBACK_VERSION = String(pkgJson.version || '4.27.0').replace(/^v/, '');
 
-function resolveTargetPlatform() {
+async function resolveEffectiveVersion() {
+	if (process.env.NOMOS_VERSION) {
+		return String(process.env.NOMOS_VERSION).replace(/^v/, '');
+	}
+	try {
+		const res = await fetch('https://api.github.com/repos/mgantlett/nomos/releases/latest', {
+			headers: {
+				Accept: 'application/vnd.github+json',
+				'User-Agent': 'sophialabs-nomos-npx-launcher'
+			},
+			signal: AbortSignal.timeout(2500)
+		});
+		if (res.ok) {
+			const data = await res.json();
+			const tag = String(data?.tag_name || '').replace(/^v/, '');
+			if (/^\d+\.\d+\.\d+/.test(tag)) return tag;
+		}
+	} catch {
+		// Fall back to bundled manifest version when offline or rate-limited.
+	}
+	return FALLBACK_VERSION;
+}
+
+function resolveTargetPlatform(version) {
 	const platMap = { linux: 'linux', darwin: 'darwin', win32: 'windows' };
 	const archMap = { x64: 'x86_64', arm64: 'arm64' };
 	const goos = platMap[process.platform];
@@ -25,8 +47,8 @@ function resolveTargetPlatform() {
 	}
 	const ext = goos === 'windows' ? 'zip' : 'tar.gz';
 	const binName = goos === 'windows' ? 'nomos.exe' : 'nomos';
-	const archive = `nomos_${PINNED_VERSION}_${goos}_${goarch}.${ext}`;
-	return { goos, goarch, ext, binName, archive };
+	const archive = `nomos_${version}_${goos}_${goarch}.${ext}`;
+	return { version, goos, goarch, ext, binName, archive };
 }
 
 function findExistingSystemBinary(selfPath, binName) {
@@ -67,15 +89,16 @@ async function fetchReleaseBytes(url) {
 }
 
 async function ensureCachedBinary(target) {
+	const releaseBase = `https://github.com/mgantlett/nomos/releases/download/v${target.version}`;
 	const cacheRoot = process.env.NOMOS_CACHE_DIR || path.join(os.homedir(), '.cache', 'nomos-launcher');
-	const verDir = path.join(cacheRoot, `v${PINNED_VERSION}-${target.goos}-${target.goarch}`);
+	const verDir = path.join(cacheRoot, `v${target.version}-${target.goos}-${target.goarch}`);
 	const binPath = path.join(verDir, target.binName);
 	if (fs.existsSync(binPath)) return binPath;
 
 	fs.mkdirSync(verDir, { recursive: true });
 	const [checksumsBuf, archiveBuf] = await Promise.all([
-		fetchReleaseBytes(`${RELEASE_BASE}/checksums.txt`),
-		fetchReleaseBytes(`${RELEASE_BASE}/${target.archive}`)
+		fetchReleaseBytes(`${releaseBase}/checksums.txt`),
+		fetchReleaseBytes(`${releaseBase}/${target.archive}`)
 	]);
 	const expectedHex = parseExpectedSha256(checksumsBuf.toString('utf8'), target.archive);
 	const actualHex = crypto.createHash('sha256').update(archiveBuf).digest('hex').toLowerCase();
@@ -97,13 +120,15 @@ async function ensureCachedBinary(target) {
 
 async function main() {
 	const args = process.argv.slice(2);
-	const target = resolveTargetPlatform();
 	if (args[0] === '--launcher-info') {
-		process.stdout.write(`${JSON.stringify({ version: PINNED_VERSION, ...target })}\n`);
+		const target = resolveTargetPlatform(process.env.NOMOS_VERSION || FALLBACK_VERSION);
+		process.stdout.write(`${JSON.stringify(target)}\n`);
 		return;
 	}
 	const selfReal = fs.realpathSync(fileURLToPath(import.meta.url));
-	const bin = findExistingSystemBinary(selfReal, target.binName) || (await ensureCachedBinary(target));
+	const quickTarget = resolveTargetPlatform(FALLBACK_VERSION);
+	const systemBin = findExistingSystemBinary(selfReal, quickTarget.binName);
+	const bin = systemBin || (await ensureCachedBinary(resolveTargetPlatform(await resolveEffectiveVersion())));
 	const child = spawnSync(bin, args, { stdio: 'inherit' });
 	if (child.error) throw child.error;
 	process.exit(child.status ?? 0);

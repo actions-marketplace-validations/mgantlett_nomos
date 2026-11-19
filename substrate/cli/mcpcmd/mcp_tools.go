@@ -76,6 +76,19 @@ func ReadOnlyTools() []MCPToolDescriptor {
 			}, nil),
 			Annotations: ro,
 		},
+		capabilitiesToolDescriptor(ro),
+	}
+}
+
+func capabilitiesToolDescriptor(ro map[string]any) MCPToolDescriptor {
+	return MCPToolDescriptor{
+		Name:        "nomos_capabilities",
+		Description: "Inspect active Nomos quality gates, ambient hooks, engines, directives, or remediation details for a specific gate ID.",
+		InputSchema: objectSchema(map[string]any{
+			"id":   map[string]any{propTypeKey: schemaTypeString, propDescKey: "Optional capability or gate ID (for example plane_separation)"},
+			"type": map[string]any{propTypeKey: schemaTypeString, propDescKey: "Optional filter type: gate, hook, directive, engine, cli"},
+		}, nil),
+		Annotations: ro,
 	}
 }
 
@@ -94,6 +107,8 @@ func CallReadOnlyTool(name string, args map[string]any) (string, bool) {
 		return execVerifyImpactTool(args)
 	case "nomos_xray":
 		return execXrayTool(args)
+	case "nomos_capabilities":
+		return execCapabilitiesTool(args)
 	default:
 		return fmt.Sprintf("ERR_MCP_READ_ONLY: tool %q is unknown or mutating; only read-only orientation tools are exposed", name), true
 	}
