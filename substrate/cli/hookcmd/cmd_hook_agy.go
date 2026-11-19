@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"io"
 	"os"
 	"path/filepath"
@@ -122,7 +123,7 @@ func collectNestedPathSlices(m map[string]any) []string {
 }
 
 // resolveAntigravityPendingPath computes the session-scoped buffer path for pending Antigravity advisories.
-func resolveAntigravityPendingPath(p *HookPayload, hermeticDir string) string {
+func resolveAntigravityPendingPath(p *shellguard.HookPayload, hermeticDir string) string {
 	if p == nil {
 		return ""
 	}
@@ -139,7 +140,7 @@ func resolveAntigravityPendingPath(p *HookPayload, hermeticDir string) string {
 }
 
 // queueAntigravityAdvisory buffers non-empty PostToolUse advisories for injection at PostInvocation.
-func queueAntigravityAdvisory(p *HookPayload, hermeticDir, msg string) {
+func queueAntigravityAdvisory(p *shellguard.HookPayload, hermeticDir, msg string) {
 	trimmed := strings.TrimSpace(msg)
 	path := resolveAntigravityPendingPath(p, hermeticDir)
 	if trimmed == "" || path == "" {
@@ -163,7 +164,7 @@ func queueAntigravityAdvisory(p *HookPayload, hermeticDir, msg string) {
 }
 
 // popAntigravityAdvisory drains buffered PostToolUse advisories once PostInvocation fires.
-func popAntigravityAdvisory(p *HookPayload, hermeticDir string) string {
+func popAntigravityAdvisory(p *shellguard.HookPayload, hermeticDir string) string {
 	path := resolveAntigravityPendingPath(p, hermeticDir)
 	if path == "" {
 		return ""
@@ -249,7 +250,7 @@ func isCursorHookEnvelope(m map[string]any) bool {
 }
 
 // normalizeCursorPayload populates workspace_roots, command, file_path, edits, and stop state for Cursor events.
-func normalizeCursorPayload(p *HookPayload, m map[string]any, eventName string) {
+func normalizeCursorPayload(p *shellguard.HookPayload, m map[string]any, eventName string) {
 	if len(p.WorkspacePaths) == 0 {
 		p.WorkspacePaths = extractStringSlice(m, "workspace_roots")
 	}
@@ -272,8 +273,8 @@ func normalizeCursorPayload(p *HookPayload, m map[string]any, eventName string) 
 	normalizeCursorStopStatus(p, m)
 }
 
-// normalizeCursorStopStatus maps Cursor stop loop counts and termination statuses onto HookPayload.
-func normalizeCursorStopStatus(p *HookPayload, m map[string]any) {
+// normalizeCursorStopStatus maps Cursor stop loop counts and termination statuses onto shellguard.HookPayload.
+func normalizeCursorStopStatus(p *shellguard.HookPayload, m map[string]any) {
 	if status := strings.ToLower(extractStringField(m, "status")); status == "aborted" || status == "error" {
 		p.TerminationReason = strings.ToUpper(status)
 	}
@@ -328,7 +329,7 @@ func writeCursorSessionStartResponse(w io.Writer, banner string) error {
 }
 
 // writeCursorPreToolResponse emits Cursor's native permission decision JSON for preToolUse and beforeShellExecution.
-func writeCursorPreToolResponse(w io.Writer, dec HookDecision) error {
+func writeCursorPreToolResponse(w io.Writer, dec shellguard.HookDecision) error {
 	if dec.Decision != hookDecisionDeny {
 		return writeJSONMap(w, map[string]any{"permission": hookDecisionAllow})
 	}

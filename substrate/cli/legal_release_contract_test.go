@@ -117,8 +117,8 @@ func operationalSurfaceContractCases() []repoContractCase {
 			forbid: []string{"set -euo pipefail"},
 		},
 		{
-			name:    "TC-REL-011 bug report template excludes sovereign plugins and includes Windsurf",
-			relPath: filepath.Join(".github", "ISSUE_TEMPLATE", "01_bug_report.yml"),
+			name:     "TC-REL-011 bug report template excludes sovereign plugins and includes Windsurf",
+			relPath:  filepath.Join(".github", "ISSUE_TEMPLATE", "01_bug_report.yml"),
 			mustHave: []string{"Windsurf", "nomos hook / nomos capabilities"},
 			forbid:   []string{"nomos parity", "Nomos v4.0.0"},
 		},

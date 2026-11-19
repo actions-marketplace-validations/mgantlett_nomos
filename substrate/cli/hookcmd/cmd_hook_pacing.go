@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,14 +35,14 @@ var readOnlyShellPrefixes = []string{
 
 // evaluateReadSpiralAdvisory tracks consecutive read/search calls without a source edit
 // and emits non-blocking pacing nudges at configured thresholds.
-func evaluateReadSpiralAdvisory(p *HookPayload, hermeticDir, style string) string {
+func evaluateReadSpiralAdvisory(p *shellguard.HookPayload, hermeticDir, style string) string {
 	prof := resolveHookAdvisoryProfile(0, 0, 0, style)
 	return evaluateReadSpiralAdvisoryWithProfile(p, hermeticDir, prof)
 }
 
 // evaluateReadSpiralAdvisoryWithProfile evaluates consecutive exploratory read spirals
 // across active worktrees and session-keyed trunk traces (@intent mneme_memory_spec.md).
-func evaluateReadSpiralAdvisoryWithProfile(p *HookPayload, hermeticDir string, profile HookAdvisoryProfile) string {
+func evaluateReadSpiralAdvisoryWithProfile(p *shellguard.HookPayload, hermeticDir string, profile HookAdvisoryProfile) string {
 	if p == nil || p.IsPostInvoke {
 		return ""
 	}
@@ -68,7 +69,7 @@ func evaluateReadSpiralAdvisoryWithProfile(p *HookPayload, hermeticDir string, p
 	return msg
 }
 
-func resolvePacingTraceTarget(p *HookPayload, hermeticDir string) (string, string, bool) {
+func resolvePacingTraceTarget(p *shellguard.HookPayload, hermeticDir string) (string, string, bool) {
 	if wtRoot := resolveWorktreeTraceRoot(p, hermeticDir); wtRoot != "" {
 		return resolveTraceStateFilePath(wtRoot), wtRoot, false
 	}
@@ -109,7 +110,7 @@ func advanceReadSpiralWarning(tr *HookSessionTrace, warnAt, critAt int, isTrunk 
 
 // resolveTrunkSessionTracePath resolves a session-scoped pacing trace file under NOMOS_HOME/cache/pacing_traces
 // when operating on an idle Nomos-governed trunk with a non-empty session identifier.
-func resolveTrunkSessionTracePath(p *HookPayload, hermeticDir string) (string, string) {
+func resolveTrunkSessionTracePath(p *shellguard.HookPayload, hermeticDir string) (string, string) {
 	if p == nil || hermeticDir != "" {
 		return "", ""
 	}
@@ -134,12 +135,12 @@ func resolveTrunkSessionTracePath(p *HookPayload, hermeticDir string) (string, s
 	return filepath.Join(tracesDir, fileName), trunkRoot
 }
 
-func resolveGovernedTrunkRoot(p *HookPayload) string {
+func resolveGovernedTrunkRoot(p *shellguard.HookPayload) string {
 	baseCwd := resolveHookWorkspaceDir(p, "")
 	if strings.TrimSpace(baseCwd) == "" {
 		return ""
 	}
-	canonBase := normalizeCanonicalPath(baseCwd, "/")
+	canonBase := shellguard.NormalizeCanonicalPath(baseCwd, "/")
 	repoRoot := canonBase
 	if pr, err := workspace.FindRepoRoot(canonBase); err == nil && pr != "" {
 		repoRoot = filepath.ToSlash(filepath.Clean(pr))
@@ -162,7 +163,7 @@ func hasNomosWorkspaceMarker(dir string) bool {
 	return false
 }
 
-func isTrunkTaskTransition(p *HookPayload) bool {
+func isTrunkTaskTransition(p *shellguard.HookPayload) bool {
 	if strings.TrimSpace(p.CommandLine) == "" {
 		return false
 	}
@@ -176,15 +177,15 @@ func resetReadSpiralCounters(tr *HookSessionTrace) {
 	tr.WarnedReadSpiral20 = false
 }
 
-func isPacingSourceMutation(p *HookPayload) bool {
+func isPacingSourceMutation(p *shellguard.HookPayload) bool {
 	if p.CommandLine == "" {
-		return p.TargetFile != "" && !isReadOnlyTool(p.ToolName)
+		return p.TargetFile != "" && !shellguard.IsReadOnlyTool(p.ToolName)
 	}
 	lower := strings.ToLower(strings.TrimSpace(p.CommandLine))
 	return hasAnySubstring(lower, "sed -i", "git apply", "patch ")
 }
 
-func isExploratoryReadCall(p *HookPayload) bool {
+func isExploratoryReadCall(p *shellguard.HookPayload) bool {
 	if p.CommandLine == "" {
 		name := strings.ToLower(strings.TrimSpace(p.ToolName))
 		return exploratoryReadToolNames[name]

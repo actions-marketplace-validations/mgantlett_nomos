@@ -1,6 +1,7 @@
 package hookcmd
 
 import (
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,13 +24,13 @@ func TestZeroBaselineContainerScratchTestHygieneAdvisory(t *testing.T) {
 	if err := os.WriteFile(testFile, []byte("def test_run():\n    assert True\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if uninitMsg := EvaluateContainerPostToolHook(&HookPayload{ToolName: "Write", Cwd: dir, TargetFile: testFile}); uninitMsg != "" {
+	if uninitMsg := EvaluateContainerPostToolHook(&shellguard.HookPayload{ToolName: "Write", Cwd: dir, TargetFile: testFile}); uninitMsg != "" {
 		t.Fatalf("expected byte-for-byte silence without nomos.yaml, got %q", uninitMsg)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "nomos.yaml"), []byte("version: \"1\"\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	msg := EvaluateContainerPostToolHook(&HookPayload{ToolName: "Write", Cwd: dir, TargetFile: testFile})
+	msg := EvaluateContainerPostToolHook(&shellguard.HookPayload{ToolName: "Write", Cwd: dir, TargetFile: testFile})
 	if !strings.Contains(msg, "Nomos Deliverable Hygiene") || !strings.Contains(msg, ".tmp/tests/") {
 		t.Fatalf("expected non-blocking deliverable hygiene advisory steering to .tmp/tests/, got %q", msg)
 	}
@@ -38,7 +39,7 @@ func TestZeroBaselineContainerScratchTestHygieneAdvisory(t *testing.T) {
 	if err := os.WriteFile(secondFile, []byte("def test_more():\n    assert True\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if secondMsg := EvaluateContainerPostToolHook(&HookPayload{ToolName: "Write", Cwd: dir, TargetFile: secondFile}); secondMsg != "" {
+	if secondMsg := EvaluateContainerPostToolHook(&shellguard.HookPayload{ToolName: "Write", Cwd: dir, TargetFile: secondFile}); secondMsg != "" {
 		t.Fatalf("expected one-time hygiene advisory deduplication, got %q", secondMsg)
 	}
 
@@ -65,7 +66,7 @@ func TestZeroBaselineContainerScratchTestHygieneAdvisory(t *testing.T) {
 	if err := os.WriteFile(netNew, []byte("def test_extra(): assert True\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if bfMsg := EvaluateContainerPostToolHook(&HookPayload{ToolName: "Write", Cwd: brownDir, TargetFile: netNew}); bfMsg != "" {
+	if bfMsg := EvaluateContainerPostToolHook(&shellguard.HookPayload{ToolName: "Write", Cwd: brownDir, TargetFile: netNew}); bfMsg != "" {
 		t.Fatalf("expected silence when repo already has committed baseline tests, got %q", bfMsg)
 	}
 }

@@ -1,6 +1,4 @@
-// Package hookcmd implements Tier 1 agent adapters, software physics telemetry,
-// release readiness, upgrades, and CLI command dispatch contracts.
-package hookcmd
+package containerguard
 
 import (
 	"fmt"
@@ -9,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/capbac"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/config"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
@@ -37,23 +36,19 @@ var (
 	}
 )
 
-// evaluateOutboundEgressGuard enforces cloud metadata SSRF blocking, credential and PII
-// exfiltration airlocks, and declarative BoundaryConfig domain policies on PreToolUse.
-func evaluateOutboundEgressGuard(p *HookPayload, wsRoot string) HookDecision {
+// EvaluateOutboundEgressGuard enforces SSRF metadata blocking, secret/PII exfiltration airlocks, and domain policies.
+func EvaluateOutboundEgressGuard(p *shellguard.HookPayload, wsRoot string) shellguard.HookDecision {
 	if p == nil {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.AllowDecision()
 	}
 	boundary := loadEffectiveBoundaryConfig(wsRoot)
 	urls := extractOutboundHTTPURLsForPolicy(p, boundary)
 	if len(urls) == 0 {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.AllowDecision()
 	}
 	rawMaterial := strings.Join([]string{p.TargetURL, p.CommandLine, p.ArgsDigest}, "\n")
 	if hasOutboundSecretToken(rawMaterial) {
-		return HookDecision{
-			Decision: hookDecisionDeny,
-			Reason:   "❌ [NOMOS INTERCEPT] Outbound Secret Airlock (Law 7): Credential token detected in outbound HTTP request is strictly prohibited.",
-		}
+		return shellguard.DenyDecision("❌ [NOMOS INTERCEPT] Outbound Secret Airlock (Law 7): Credential token detected in outbound HTTP request is strictly prohibited.")
 	}
 	var gitEmail string
 	var loadedEmail bool
@@ -63,12 +58,9 @@ func evaluateOutboundEgressGuard(p *HookPayload, wsRoot string) HookDecision {
 			continue
 		}
 		if isBlockedMetadataHost(host) {
-			return HookDecision{
-				Decision: hookDecisionDeny,
-				Reason:   fmt.Sprintf("❌ [NOMOS INTERCEPT] Outbound SSRF Violation (Law 7): Cloud metadata or link-local endpoint '%s' is strictly prohibited.", host),
-			}
+			return shellguard.DenyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Outbound SSRF Violation (Law 7): Cloud metadata or link-local endpoint '%s' is strictly prohibited.", host))
 		}
-		if dec := evaluateDomainBoundaryPolicy(host, boundary); dec.Decision == hookDecisionDeny {
+		if dec := evaluateDomainBoundaryPolicy(host, boundary); dec.Decision == shellguard.DecisionDeny {
 			return dec
 		}
 		if isLoopbackHost(host) {
@@ -79,16 +71,13 @@ func evaluateOutboundEgressGuard(p *HookPayload, wsRoot string) HookDecision {
 			loadedEmail = true
 		}
 		if containsEmailExfiltration(rawMaterial, gitEmail) {
-			return HookDecision{
-				Decision: hookDecisionDeny,
-				Reason:   "❌ [NOMOS INTERCEPT] Outbound PII Airlock (Law 7): Operator git email detected in outbound HTTP request is strictly prohibited.",
-			}
+			return shellguard.DenyDecision("❌ [NOMOS INTERCEPT] Outbound PII Airlock (Law 7): Operator git email detected in outbound HTTP request is strictly prohibited.")
 		}
 	}
-	return HookDecision{Decision: hookDecisionAllow}
+	return shellguard.AllowDecision()
 }
 
-func extractOutboundHTTPURLsForPolicy(p *HookPayload, boundary config.BoundaryConfig) []string {
+func extractOutboundHTTPURLsForPolicy(p *shellguard.HookPayload, boundary config.BoundaryConfig) []string {
 	mode := boundary.EffectiveEgressMode()
 	if mode == config.EgressModeOffline || mode == config.EgressModeAllowlist || len(boundary.BlockedEgressDomains) > 0 {
 		return extractAllCandidateURLs(p)
@@ -96,7 +85,7 @@ func extractOutboundHTTPURLsForPolicy(p *HookPayload, boundary config.BoundaryCo
 	return extractOutboundHTTPURLs(p)
 }
 
-func extractAllCandidateURLs(p *HookPayload) []string {
+func extractAllCandidateURLs(p *shellguard.HookPayload) []string {
 	var out []string
 	if u := strings.TrimSpace(p.TargetURL); strings.HasPrefix(strings.ToLower(u), "http://") || strings.HasPrefix(strings.ToLower(u), "https://") {
 		out = append(out, u)
@@ -115,7 +104,7 @@ func extractURLHostname(rawURL string) string {
 	return strings.ToLower(strings.TrimSpace(parsed.Hostname()))
 }
 
-func extractOutboundHTTPURLs(p *HookPayload) []string {
+func extractOutboundHTTPURLs(p *shellguard.HookPayload) []string {
 	var out []string
 	if u := strings.TrimSpace(p.TargetURL); strings.HasPrefix(strings.ToLower(u), "http://") || strings.HasPrefix(strings.ToLower(u), "https://") {
 		out = append(out, u)
@@ -155,31 +144,22 @@ func isLoopbackHost(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-func evaluateDomainBoundaryPolicy(host string, boundary config.BoundaryConfig) HookDecision {
+func evaluateDomainBoundaryPolicy(host string, boundary config.BoundaryConfig) shellguard.HookDecision {
 	if domainMatchesPolicyList(host, boundary.BlockedEgressDomains) {
-		return HookDecision{
-			Decision: hookDecisionDeny,
-			Reason:   fmt.Sprintf("❌ [NOMOS INTERCEPT] Outbound Egress Policy Violation (Law 7): Domain '%s' is blocked by nomos.yaml blocked_egress_domains.", host),
-		}
+		return shellguard.DenyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Outbound Egress Policy Violation (Law 7): Domain '%s' is blocked by nomos.yaml blocked_egress_domains.", host))
 	}
 	if isLoopbackHost(host) {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.AllowDecision()
 	}
 	switch boundary.EffectiveEgressMode() {
 	case config.EgressModeOffline:
-		return HookDecision{
-			Decision: hookDecisionDeny,
-			Reason:   fmt.Sprintf("❌ [NOMOS INTERCEPT] Outbound Egress Policy Violation (Law 7): External network egress to '%s' is prohibited when egress_mode is 'offline'.", host),
-		}
+		return shellguard.DenyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Outbound Egress Policy Violation (Law 7): External network egress to '%s' is prohibited when egress_mode is 'offline'.", host))
 	case config.EgressModeAllowlist:
 		if !domainMatchesPolicyList(host, boundary.AllowedEgressDomains) {
-			return HookDecision{
-				Decision: hookDecisionDeny,
-				Reason:   fmt.Sprintf("❌ [NOMOS INTERCEPT] Outbound Egress Policy Violation (Law 7): Domain '%s' is not in nomos.yaml allowed_egress_domains.", host),
-			}
+			return shellguard.DenyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Outbound Egress Policy Violation (Law 7): Domain '%s' is not in nomos.yaml allowed_egress_domains.", host))
 		}
 	}
-	return HookDecision{Decision: hookDecisionAllow}
+	return shellguard.AllowDecision()
 }
 
 func domainMatchesPolicyList(host string, patterns []string) bool {
@@ -206,7 +186,7 @@ func loadWorkspaceBoundaryConfig(wsRoot string) config.BoundaryConfig {
 
 func loadEffectiveBoundaryConfig(wsRoot string) config.BoundaryConfig {
 	boundary := loadWorkspaceBoundaryConfig(wsRoot)
-	pol := loadContainerSandboxPolicy()
+	pol := LoadSandboxPolicy()
 	if boundary.EgressMode == "" && pol.EgressMode != "" {
 		boundary.EgressMode = pol.EgressMode
 	}
@@ -240,9 +220,10 @@ func containsEmailExfiltration(material, email string) bool {
 	return strings.Contains(lowerMat, lowerEmail) || strings.Contains(lowerMat, encodedEmail)
 }
 
-func evaluateCredentialReadGuard(p *HookPayload, wsRoot string) HookDecision {
+// EvaluateCredentialReadGuard blocks unauthorized reads of host or workspace credential files.
+func EvaluateCredentialReadGuard(p *shellguard.HookPayload, wsRoot string) shellguard.HookDecision {
 	if p == nil || (p.TargetFile == "" && len(p.TargetFiles) == 0 && p.CommandLine == "" && p.ArgsDigest == "") {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.AllowDecision()
 	}
 	boundary := loadWorkspaceBoundaryConfig(wsRoot)
 	dec := capbac.EvaluateCredentialReadAirlock(wsRoot, capbac.ToolFlowInvocation{
@@ -255,10 +236,7 @@ func evaluateCredentialReadGuard(p *HookPayload, wsRoot string) HookDecision {
 		BlockedReadPaths: boundary.BlockedReadPaths,
 	})
 	if !dec.Allowed {
-		return HookDecision{
-			Decision: hookDecisionDeny,
-			Reason:   dec.Reason,
-		}
+		return shellguard.DenyDecision(dec.Reason)
 	}
-	return HookDecision{Decision: hookDecisionAllow}
+	return shellguard.AllowDecision()
 }

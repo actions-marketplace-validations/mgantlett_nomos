@@ -3,6 +3,7 @@ package hookcmd_test
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"strings"
 	"testing"
 
@@ -27,9 +28,9 @@ func executeHookCmd(t *testing.T, args []string, payload map[string]any) string 
 	return strings.TrimSpace(outBuf.String())
 }
 
-func parseDecision(t *testing.T, raw string) hookcmd.HookDecision {
+func parseDecision(t *testing.T, raw string) shellguard.HookDecision {
 	t.Helper()
-	var dec hookcmd.HookDecision
+	var dec shellguard.HookDecision
 	if err := json.Unmarshal([]byte(raw), &dec); err != nil {
 		t.Fatalf("unmarshal decision %q: %v", raw, err)
 	}

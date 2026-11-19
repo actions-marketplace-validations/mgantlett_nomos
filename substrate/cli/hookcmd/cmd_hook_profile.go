@@ -24,9 +24,9 @@ const (
 	maxLoopStrikesBound      = 10
 	advisoryStyleStandard    = "standard"
 	// AdvisoryStyleTerse selects compact single-clause hook and handshake output.
-	AdvisoryStyleTerse       = "terse"
-	advisoryStyleTerse       = AdvisoryStyleTerse
-	advisoryProfileCarbon    = "carbon"
+	AdvisoryStyleTerse    = "terse"
+	advisoryStyleTerse    = AdvisoryStyleTerse
+	advisoryProfileCarbon = "carbon"
 )
 
 // HookAdvisoryProfile defines bounded, model-family-tunable advisory parameters

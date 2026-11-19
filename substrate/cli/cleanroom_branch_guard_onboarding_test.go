@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"os"
 	"path/filepath"
 	"strings"
@@ -61,7 +62,7 @@ func runRootCLIForTest(t *testing.T, stdin string, args ...string) (string, erro
 
 func assertHookJSONDecision(t *testing.T, raw, wantDecision string) {
 	t.Helper()
-	var dec hookcmd.HookDecision
+	var dec shellguard.HookDecision
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &dec); err != nil {
 		t.Fatalf("unmarshal hook decision (%q): %v", raw, err)
 	}

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -191,7 +192,7 @@ func isSkippedShellRelPath(slashRel string) bool {
 	return strings.HasSuffix(slashRel, "/")
 }
 
-func popShellMutatedFilesForRadar(p *HookPayload, hermeticDir string, containerMode bool) (string, []string) {
+func popShellMutatedFilesForRadar(p *shellguard.HookPayload, hermeticDir string, containerMode bool) (string, []string) {
 	traceKey, wsRoot, branchLabel := resolveTraceScopeAndWorkspace(p, hermeticDir)
 	if wsRoot == "" && (hermeticDir != "" || containerMode || branchLabel != "") {
 		wsRoot = firstNonEmpty(p.Cwd, resolveHookWorkspaceDir(p, hermeticDir))
@@ -238,7 +239,7 @@ func listRecentContainerShellTargets(wsRoot string) []string {
 	return out
 }
 
-func evaluateShellMutatedPaths(p *HookPayload, hermeticDir string, containerMode bool) string {
+func evaluateShellMutatedPaths(p *shellguard.HookPayload, hermeticDir string, containerMode bool) string {
 	if p == nil || !isPotentialMutatingShellCommand(p.CommandLine) {
 		return ""
 	}

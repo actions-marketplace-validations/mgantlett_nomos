@@ -4,6 +4,7 @@ package hookcmd
 
 import (
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"github.com/mgantlett/nomos/substrate/cli/tui"
 	"path/filepath"
 	"strings"
@@ -13,11 +14,11 @@ import (
 
 // evaluateTrunkShellRedirectGuard blocks unquoted shell output redirects ('>' / '>>')
 // targeting files on a Nomos-governed protected trunk outside '/worktrees/' and '/.tmp/'.
-func evaluateTrunkShellRedirectGuard(cmdLine, baseCwd, hermeticDir string) HookDecision {
+func evaluateTrunkShellRedirectGuard(cmdLine, baseCwd, hermeticDir string) shellguard.HookDecision {
 	if hermeticDir != "" || !strings.Contains(cmdLine, ">") {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
 	}
-	cwd := resolveInitialEvalDir(baseCwd)
+	cwd := shellguard.ResolveInitialEvalDir(baseCwd)
 	for _, rawSeg := range splitUnquotedCommandSegments(cmdLine) {
 		segs, subs := tui.ParseShellCommandSegments(rawSeg)
 		for _, sub := range subs {
@@ -37,16 +38,16 @@ func evaluateTrunkShellRedirectGuard(cmdLine, baseCwd, hermeticDir string) HookD
 			}
 		}
 	}
-	return HookDecision{Decision: hookDecisionAllow}
+	return shellguard.HookDecision{Decision: hookDecisionAllow}
 }
 
-func checkRedirectTargetAgainstTrunk(rawTarget, cwd string) HookDecision {
+func checkRedirectTargetAgainstTrunk(rawTarget, cwd string) shellguard.HookDecision {
 	if isBenignRedirectSink(rawTarget) {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
 	}
-	resolved := normalizeCanonicalPath(rawTarget, cwd)
+	resolved := shellguard.NormalizeCanonicalPath(rawTarget, cwd)
 	if isPermittedWorktreePath(resolved, cwd) {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
 	}
 	if repoRoot, cfg, branch, isBranch := ResolveBranchGuardContext(resolved); isBranch {
 		return evaluateBranchGuardMutation(rawTarget, resolved, repoRoot, branch, cfg)
@@ -54,12 +55,12 @@ func checkRedirectTargetAgainstTrunk(rawTarget, cwd string) HookDecision {
 	parentDir := filepath.Dir(resolved)
 	repoRoot, err := workspace.FindRepoRoot(parentDir)
 	if err != nil || repoRoot == "" {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
 	}
 	if !hasExplicitNomosConfig(resolved, repoRoot) {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
 	}
-	return HookDecision{
+	return shellguard.HookDecision{
 		Decision: hookDecisionDeny,
 		Reason: fmt.Sprintf(
 			"❌ [NOMOS INTERCEPT] Hermetic Worktree Violation (Law 3): Shell redirect targeting protected trunk path '%s' (resolved: '%s') is prohibited. Write temporary output to '.tmp/' or execute inside an isolated '/worktrees/' task directory.",

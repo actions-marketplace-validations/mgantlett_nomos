@@ -1,6 +1,7 @@
 package hookcmd
 
 import (
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,7 +50,7 @@ func TestEvaluatePostToolHook_MTPOCollisionAdvisory(t *testing.T) {
 	if err := os.WriteFile(f1, []byte("package core\n\n// MintRecord mints ledger item.\nfunc MintRecord() int { return 1 }\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	_ = EvaluatePostToolHook(&HookPayload{ToolName: "Write", TargetFile: f1, Cwd: wt1}, "")
+	_ = EvaluatePostToolHook(&shellguard.HookPayload{ToolName: "Write", TargetFile: f1, Cwd: wt1}, "")
 
 	f2 := filepath.Join(wt2, "pkg", "svc", "runner.go")
 	if err := os.MkdirAll(filepath.Dir(f2), 0750); err != nil {
@@ -58,7 +59,7 @@ func TestEvaluatePostToolHook_MTPOCollisionAdvisory(t *testing.T) {
 	if err := os.WriteFile(f2, []byte("package svc\n\nimport \"example.com/pkg/core\"\n\n// Execute runs MintRecord.\nfunc Execute() int { return core.MintRecord() }\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	msg := EvaluatePostToolHook(&HookPayload{ToolName: "Write", TargetFile: f2, Cwd: wt2}, "")
+	msg := EvaluatePostToolHook(&shellguard.HookPayload{ToolName: "Write", TargetFile: f2, Cwd: wt2}, "")
 	if !strings.Contains(msg, "Nomos MTPO Advisory") || !strings.Contains(msg, "SUB-401") {
 		t.Fatalf("expected PostToolUse MTPO collision advisory naming SUB-401, got %q", msg)
 	}

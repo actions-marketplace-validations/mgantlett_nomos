@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -24,7 +25,7 @@ type scopeMutationPair struct {
 
 // evaluateJITDirectoryPitfallAdvisory recalls matching directory-scoped pitfalls from Nomos Mneme
 // at most once per directory in a worktree session trace (@intent mneme_memory_spec.md).
-func evaluateJITDirectoryPitfallAdvisory(p *HookPayload, hermeticDir string) string {
+func evaluateJITDirectoryPitfallAdvisory(p *shellguard.HookPayload, hermeticDir string) string {
 	wtRoot := resolveWorktreeTraceRoot(p, hermeticDir)
 	if wtRoot == "" {
 		return ""
@@ -33,7 +34,7 @@ func evaluateJITDirectoryPitfallAdvisory(p *HookPayload, hermeticDir string) str
 	if tracePath == "" {
 		return ""
 	}
-	canonWt := normalizeCanonicalPath(wtRoot, "/")
+	canonWt := shellguard.NormalizeCanonicalPath(wtRoot, "/")
 	baseCwd := resolveHookWorkspaceDir(p, hermeticDir)
 	tr := loadOrInitHookSessionTrace(tracePath, wtRoot)
 	pairs, dirty := collectUnseenMutationScopes(p, &tr, canonWt, baseCwd)
@@ -59,7 +60,7 @@ func evaluateJITDirectoryPitfallAdvisory(p *HookPayload, hermeticDir string) str
 
 // collectUnseenMutationScopes records newly mutated worktree directories in HookSessionTrace
 // so subsequent edits in the same package never repeat Mneme queries or spam advisories.
-func collectUnseenMutationScopes(p *HookPayload, tr *HookSessionTrace, canonWt, baseCwd string) ([]scopeMutationPair, bool) {
+func collectUnseenMutationScopes(p *shellguard.HookPayload, tr *HookSessionTrace, canonWt, baseCwd string) ([]scopeMutationPair, bool) {
 	targets := p.TargetFiles
 	if len(targets) == 0 && p.TargetFile != "" {
 		targets = []string{p.TargetFile}
@@ -67,7 +68,7 @@ func collectUnseenMutationScopes(p *HookPayload, tr *HookSessionTrace, canonWt, 
 	var unseen []scopeMutationPair
 	dirty := false
 	for _, rawTarget := range targets {
-		resolved := normalizeCanonicalPath(rawTarget, baseCwd)
+		resolved := shellguard.NormalizeCanonicalPath(rawTarget, baseCwd)
 		if !strings.HasPrefix(resolved, canonWt+"/") {
 			continue
 		}

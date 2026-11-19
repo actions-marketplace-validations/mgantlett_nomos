@@ -46,4 +46,3 @@ func TestApplyTaskListFilters_AndRenderNextActions(t *testing.T) {
 		t.Fatalf("expected valid NewTaskPruneCmd")
 	}
 }
-

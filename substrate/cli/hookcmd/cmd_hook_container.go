@@ -5,6 +5,8 @@ package hookcmd
 import (
 	"context"
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/containerguard"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"go/parser"
 	"go/token"
 	"os"
@@ -51,15 +53,15 @@ var (
 // blocks reward-hacking access to verifier/solution roots, destructive wildcard
 // deletions, credential exfiltration, and identical-failure tool loops
 // while permitting legitimate OS-wide task paths (/etc, /tmp, /var, sqlite3).
-func EvaluateContainerPreToolHook(p *HookPayload) HookDecision {
+func EvaluateContainerPreToolHook(p *shellguard.HookPayload) shellguard.HookDecision {
 	return EvaluateContainerPreToolHookWithProfile(p, resolveHookAdvisoryProfile(0, 0, 0, ""))
 }
 
 // EvaluateContainerPreToolHookWithProfile enforces hard container guardrails alongside
 // the bounded loop circuit-breaker threshold from profile.
-func EvaluateContainerPreToolHookWithProfile(p *HookPayload, profile HookAdvisoryProfile) HookDecision {
+func EvaluateContainerPreToolHookWithProfile(p *shellguard.HookPayload, profile HookAdvisoryProfile) shellguard.HookDecision {
 	if p == nil {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
 	}
 	baseCwd := firstNonEmpty(p.Cwd, resolveHookWorkspaceDir(p, ""))
 	if baseCwd == "" || baseCwd == "." {
@@ -70,10 +72,10 @@ func EvaluateContainerPreToolHookWithProfile(p *HookPayload, profile HookAdvisor
 			return dec
 		}
 	}
-	if dec := evaluateOutboundEgressGuard(p, baseCwd); dec.Decision == hookDecisionDeny {
+	if dec := containerguard.EvaluateOutboundEgressGuard(p, baseCwd); dec.Decision == hookDecisionDeny {
 		return dec
 	}
-	if dec := evaluateCredentialReadGuard(p, baseCwd); dec.Decision == hookDecisionDeny {
+	if dec := containerguard.EvaluateCredentialReadGuard(p, baseCwd); dec.Decision == hookDecisionDeny {
 		return dec
 	}
 	if dec := evaluateMCPPreToolGuard(p, baseCwd); dec.Decision == hookDecisionDeny {
@@ -91,61 +93,61 @@ func EvaluateContainerPreToolHookWithProfile(p *HookPayload, profile HookAdvisor
 	return EvaluateLoopCircuitBreakerWithStrikes(p, "", profile.LoopStrikes)
 }
 
-func evaluateContainerSandboxPolicies(p *HookPayload, baseCwd string) HookDecision {
-	pol := loadContainerSandboxPolicy()
-	if dec := evaluateContainerPolicyGuards(p, baseCwd, pol); dec.Decision == hookDecisionDeny {
+func evaluateContainerSandboxPolicies(p *shellguard.HookPayload, baseCwd string) shellguard.HookDecision {
+	pol := containerguard.LoadSandboxPolicy()
+	if dec := containerguard.EvaluatePolicyGuards(p, baseCwd, pol); dec.Decision == hookDecisionDeny {
 		return dec
 	}
-	if dec := evaluateContainerMCPAndTrustGuard(p, baseCwd, pol); dec.Decision == hookDecisionDeny {
+	if dec := containerguard.EvaluateMCPAndTrustGuard(p, baseCwd, pol); dec.Decision == hookDecisionDeny {
 		return dec
 	}
-	if dec := evaluateContainerSupplyChainEgress(p, pol); dec.Decision == hookDecisionDeny {
+	if dec := containerguard.EvaluateSupplyChainEgress(p, pol); dec.Decision == hookDecisionDeny {
 		return dec
 	}
-	return evaluateContainerAutonomousSafetyGuard(p, baseCwd, pol)
+	return containerguard.EvaluateAutonomousSafetyGuard(p, baseCwd, pol)
 }
 
-func evaluateContainerCommandGuard(cmdLine, baseCwd string) HookDecision {
+func evaluateContainerCommandGuard(cmdLine, baseCwd string) shellguard.HookDecision {
 	if wildRmPattern.MatchString(cmdLine) {
-		return HookDecision{
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason:   "❌ [NOMOS INTERCEPT] Wildcard or root/parent deletion ('rm ... *', 'rm -rf /', 'rm -rf ~', 'rm -rf ..') is strictly prohibited (Law 7). Verify item-level eligibility and remove explicit file paths only.",
 		}
 	}
-	if isForbiddenNomosGoInstall(cmdLine, baseCwd, baseCwd) {
-		return HookDecision{
+	if shellguard.IsForbiddenNomosGoInstall(cmdLine, baseCwd, baseCwd) {
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason:   "❌ [NOMOS INTERCEPT] Manual binary installation ('go install' of nomos) is prohibited in container sandbox mode (Law 4).",
 		}
 	}
 	if isForbiddenGitHooksCmd(cmdLine) {
-		return HookDecision{
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason:   "❌ [NOMOS INTERCEPT] Tampering with CapBAC Git defense hooks (.git/hooks) is strictly prohibited (Law 3 & Law 7).",
 		}
 	}
 	if hit := findProtectedVerifierToken(cmdLine, baseCwd); hit != "" {
-		return HookDecision{
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason:   fmt.Sprintf("❌ [NOMOS INTERCEPT] Anti-Reward-Hacking Violation (Law 2 & Law 3): Shell access targeting protected verifier/oracle path '%s' is strictly prohibited.", hit),
 		}
 	}
 	if rootSweepCommandRe.MatchString(cmdLine) {
-		return HookDecision{
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason:   "❌ [NOMOS INTERCEPT] Anti-Reward-Hacking Violation (Law 2 & Law 3): Root-wide filesystem discovery sweeps targeting '/' are prohibited; scope searches to the task directory (e.g., '/app' or '.').",
 		}
 	}
 	if isMutatingWorkspaceTestShellCmd(cmdLine, baseCwd) {
-		return HookDecision{
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason:   "❌ [NOMOS INTERCEPT] Anti-Reward-Hacking Violation (Law 2 & Law 7): Shell mutation targeting workspace test files is strictly prohibited.",
 		}
 	}
-	return evaluateInteractiveCommandGuard(cmdLine)
+	return shellguard.EvaluateInteractiveCommandGuard(cmdLine)
 }
 
-func evaluateContainerTargetGuard(p *HookPayload, baseCwd string) HookDecision {
+func evaluateContainerTargetGuard(p *shellguard.HookPayload, baseCwd string) shellguard.HookDecision {
 	targets := p.TargetFiles
 	if len(targets) == 0 && p.TargetFile != "" {
 		targets = []string{p.TargetFile}
@@ -157,41 +159,41 @@ func evaluateContainerTargetGuard(p *HookPayload, baseCwd string) HookDecision {
 			return dec
 		}
 	}
-	return HookDecision{Decision: hookDecisionAllow}
+	return shellguard.HookDecision{Decision: hookDecisionAllow}
 }
 
-func evaluateSingleContainerTarget(p *HookPayload, baseCwd string) HookDecision {
+func evaluateSingleContainerTarget(p *shellguard.HookPayload, baseCwd string) shellguard.HookDecision {
 	if p.TargetFile == "" {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
 	}
 	if p.CommandLine == "" && hasUnexpandedShellPathToken(p.TargetFile) {
-		return HookDecision{
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason:   fmt.Sprintf("Hermetic Path Violation (Law 3): Unexpanded shell variable or tilde in target path '%s'. Pass a concrete resolved path.", p.TargetFile),
 		}
 	}
-	resolved := normalizeCanonicalPath(p.TargetFile, baseCwd)
-	if isProtectedContainerVerifierPath(resolved) || isProtectedContainerHookConfigPath(resolved) {
-		return HookDecision{
+	resolved := shellguard.NormalizeCanonicalPath(p.TargetFile, baseCwd)
+	if isProtectedContainerVerifierPath(resolved) || containerguard.IsProtectedContainerHookConfigPath(resolved) {
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason:   fmt.Sprintf("Anti-Reward-Hacking Violation (Law 2 & Law 3): Access to protected verifier/policy path '%s' is strictly prohibited.", resolved),
 		}
 	}
-	if !isReadOnlyTool(p.ToolName) && p.WrittenContent != "" {
+	if !shellguard.IsReadOnlyTool(p.ToolName) && p.WrittenContent != "" {
 		if hit := findEmbeddedProtectedVerifierRoot(p.WrittenContent); hit != "" {
-			return HookDecision{
+			return shellguard.HookDecision{
 				Decision: hookDecisionDeny,
 				Reason:   fmt.Sprintf("Anti-Reward-Hacking Violation (Law 2 & Law 3): Writing script or payload referencing protected verifier/oracle path '%s' is strictly prohibited.", hit),
 			}
 		}
 	}
-	if protectWorkspaceTestsEnabled() && !isReadOnlyTool(p.ToolName) && isWorkspaceTestPath(resolved, baseCwd) {
-		return HookDecision{
+	if protectWorkspaceTestsEnabled() && !shellguard.IsReadOnlyTool(p.ToolName) && isWorkspaceTestPath(resolved, baseCwd) {
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason:   fmt.Sprintf("Anti-Reward-Hacking Violation (Law 2 & Law 7): Modifying workspace test file '%s' is prohibited under test-plane separation.", resolved),
 		}
 	}
-	return evaluateBinaryReadGuard(p, true)
+	return shellguard.EvaluateBinaryReadGuard(p, true)
 }
 
 func protectWorkspaceTestsEnabled() bool {
@@ -228,7 +230,7 @@ func isMutatingWorkspaceTestShellCmd(cmdLine, baseCwd string) bool {
 		if cleaned == "" || strings.HasPrefix(cleaned, "-") {
 			continue
 		}
-		resolved := normalizeCanonicalPath(cleaned, baseCwd)
+		resolved := shellguard.NormalizeCanonicalPath(cleaned, baseCwd)
 		if isWorkspaceTestPath(resolved, baseCwd) {
 			return true
 		}
@@ -255,7 +257,7 @@ func findProtectedVerifierToken(cmdLine, baseCwd string) string {
 			continue
 		}
 		if strings.HasPrefix(cleaned, "/") || strings.HasPrefix(cleaned, ".") {
-			resolved := normalizeCanonicalPath(cleaned, baseCwd)
+			resolved := shellguard.NormalizeCanonicalPath(cleaned, baseCwd)
 			if isProtectedContainerVerifierPath(resolved) {
 				return resolved
 			}
@@ -282,11 +284,11 @@ func tokenizeShellWords(cmdLine string) []string {
 
 // EvaluateContainerPostToolHook runs sub-15ms in-memory syntax and AST verification
 // across edited container files while avoiding host-only LOC noise on non-Nomos repos.
-func EvaluateContainerPostToolHook(p *HookPayload) string {
+func EvaluateContainerPostToolHook(p *shellguard.HookPayload) string {
 	if p == nil || p.IsPostInvoke {
 		return ""
 	}
-	if carrierMsg := evaluateContainerUntrustedCarrierAdvisory(p); carrierMsg != "" {
+	if carrierMsg := containerguard.EvaluateUntrustedCarrierAdvisory(p); carrierMsg != "" {
 		return carrierMsg
 	}
 	if capbac.IsMCPToolName(p.ToolName) {
@@ -295,14 +297,14 @@ func EvaluateContainerPostToolHook(p *HookPayload) string {
 	if p.CommandLine != "" {
 		return evaluateShellMutatedPaths(p, "", true)
 	}
-	if p.TargetFile == "" || isReadOnlyTool(p.ToolName) {
+	if p.TargetFile == "" || shellguard.IsReadOnlyTool(p.ToolName) {
 		return ""
 	}
 	baseCwd := firstNonEmpty(p.Cwd, resolveHookWorkspaceDir(p, ""))
 	if baseCwd == "" || baseCwd == "." {
 		baseCwd = containerDefaultWorkdir
 	}
-	resolved := normalizeCanonicalPath(p.TargetFile, baseCwd)
+	resolved := shellguard.NormalizeCanonicalPath(p.TargetFile, baseCwd)
 	return inspectMutatedFilePath(resolved, baseCwd, "", true)
 }
 

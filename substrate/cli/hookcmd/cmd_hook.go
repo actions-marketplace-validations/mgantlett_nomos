@@ -5,6 +5,7 @@ package hookcmd
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"github.com/mgantlett/nomos/substrate/cli/selfupdate"
 	"github.com/mgantlett/nomos/substrate/cli/tui"
 	"io"
@@ -16,12 +17,6 @@ import (
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/handshake"
 	"github.com/spf13/cobra"
 )
-
-// HookDecision represents the structured JSON response emitted by PreToolUse hooks.
-type HookDecision struct {
-	Decision string `json:"decision"`
-	Reason   string `json:"reason,omitempty"`
-}
 
 // NewHookCmd constructs the canonical 'nomos hook' command group.
 // @intent task_lifecycle_cli_spec.md
@@ -110,7 +105,7 @@ func newHookPreToolCmd(hermeticDir *string, containerSandbox *bool, budgetSec *i
 		RunE: func(cmd *cobra.Command, args []string) error {
 			raw, err := io.ReadAll(cmd.InOrStdin())
 			if err != nil {
-				return writeHookDecision(cmd.OutOrStdout(), HookDecision{Decision: "allow"})
+				return writeHookDecision(cmd.OutOrStdout(), shellguard.HookDecision{Decision: "allow"})
 			}
 			payload := parseHookPayload(raw)
 			ensureSessionBudgetStamp(payload, *hermeticDir, resolveEffectiveBudgetSeconds(*budgetSec))
@@ -153,14 +148,14 @@ func newHookPostToolCmd(hermeticDir *string, containerSandbox *bool, budgetSec *
 	}
 }
 
-func dispatchPreToolHook(payload *HookPayload, hermeticDir string, containerSandbox bool, profile HookAdvisoryProfile) HookDecision {
+func dispatchPreToolHook(payload *shellguard.HookPayload, hermeticDir string, containerSandbox bool, profile HookAdvisoryProfile) shellguard.HookDecision {
 	if containerSandbox && hermeticDir == "" {
 		return EvaluateContainerPreToolHookWithProfile(payload, profile)
 	}
 	return EvaluatePreToolHookWithProfile(payload, hermeticDir, profile)
 }
 
-func dispatchPostToolHook(payload *HookPayload, hermeticDir string, containerSandbox bool, budgetSec int, profile HookAdvisoryProfile) string {
+func dispatchPostToolHook(payload *shellguard.HookPayload, hermeticDir string, containerSandbox bool, budgetSec int, profile HookAdvisoryProfile) string {
 	recordPostToolSessionTrace(payload, hermeticDir)
 	budgetMsg := evaluateSessionBudgetRadarWithProfile(payload, hermeticDir, budgetSec, profile)
 	churnMsg := evaluateWorktreeChurnAdvisory(payload, hermeticDir, profile.AdvisoryStyle)
@@ -181,7 +176,7 @@ func writeEmptyJSON(w io.Writer) error {
 	return err
 }
 
-func writePreToolResponse(w io.Writer, payload *HookPayload, dec HookDecision) error {
+func writePreToolResponse(w io.Writer, payload *shellguard.HookPayload, dec shellguard.HookDecision) error {
 	if payload != nil && payload.IsCursorEvent {
 		return writeCursorPreToolResponse(w, dec)
 	}
@@ -206,7 +201,7 @@ func writePreToolResponse(w io.Writer, payload *HookPayload, dec HookDecision) e
 	return writeHookDecision(w, dec)
 }
 
-func writeHookDecision(w io.Writer, dec HookDecision) error {
+func writeHookDecision(w io.Writer, dec shellguard.HookDecision) error {
 	data, err := json.Marshal(dec)
 	if err != nil {
 		_, wErr := fmt.Fprintln(w, `{"decision":"allow"}`)
@@ -234,7 +229,7 @@ func writeSessionStartInjection(w io.Writer, msg string) error {
 	return wErr
 }
 
-func writePostToolAdvisory(w io.Writer, payload *HookPayload, msg string) error {
+func writePostToolAdvisory(w io.Writer, payload *shellguard.HookPayload, msg string) error {
 	if payload != nil && payload.IsCursorEvent {
 		return writeCursorPostToolResponse(w, msg)
 	}

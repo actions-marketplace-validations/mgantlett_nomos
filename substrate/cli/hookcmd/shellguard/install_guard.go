@@ -1,13 +1,11 @@
-// Package hookcmd implements Tier 1 agent adapters, software physics telemetry,
-// release readiness, upgrades, and CLI command dispatch contracts.
-package hookcmd
+package shellguard
 
 import (
-	"github.com/mgantlett/nomos/substrate/cli/tui"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/mgantlett/nomos/substrate/cli/tui"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/config"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/storage"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
@@ -16,9 +14,9 @@ import (
 
 const maxShellGuardRecursionDepth = 4
 
-// isForbiddenNomosGoInstall evaluates whether a shell command line attempts an unauthorized
-// 'go install' of a Nomos binary or plugin outside a clean IDLE primary 'main' trunk.
-func isForbiddenNomosGoInstall(cmdLine, baseCwd, hermeticDir string) bool {
+// IsForbiddenNomosGoInstall reports whether cmdLine attempts an unauthorized 'go install'
+// of a Nomos binary or plugin outside a clean IDLE primary 'main' trunk.
+func IsForbiddenNomosGoInstall(cmdLine, baseCwd, hermeticDir string) bool {
 	return isForbiddenNomosGoInstallAtDepth(cmdLine, baseCwd, hermeticDir, 0)
 }
 
@@ -27,7 +25,7 @@ func isForbiddenNomosGoInstallAtDepth(cmdLine, baseCwd, hermeticDir string, dept
 		return false
 	}
 	segments, subs := tui.ParseShellCommandSegments(cmdLine)
-	cwd := resolveInitialEvalDir(baseCwd)
+	cwd := ResolveInitialEvalDir(baseCwd)
 
 	for _, seg := range segments {
 		if nextCwd, ok := tui.MatchCdCommand(seg, cwd); ok {
@@ -57,7 +55,8 @@ func isForbiddenNomosGoInstallAtDepth(cmdLine, baseCwd, hermeticDir string, dept
 	return false
 }
 
-func resolveInitialEvalDir(baseCwd string) string {
+// ResolveInitialEvalDir returns baseCwd if non-empty, falling back to os.Getwd() or ".".
+func ResolveInitialEvalDir(baseCwd string) string {
 	if strings.TrimSpace(baseCwd) != "" {
 		return baseCwd
 	}
@@ -67,8 +66,6 @@ func resolveInitialEvalDir(baseCwd string) string {
 	return "."
 }
 
-// targetsNomosPackage checks whether the 'go install' package arguments or target Go module
-// resolve to a Nomos binary or plugin ('nomos' or 'nomos-*').
 func targetsNomosPackage(pkgArgs []string, cwd string) bool {
 	pkgs := pkgArgs
 	if len(pkgs) == 0 {
@@ -101,7 +98,7 @@ func hasNomosSubcommandDir(evalDir, pkg string) bool {
 	if strings.HasSuffix(rawPkg, "/...") {
 		relDir = strings.TrimSuffix(rawPkg, "/...")
 	}
-	dir := normalizeCanonicalPath(relDir, evalDir)
+	dir := NormalizeCanonicalPath(relDir, evalDir)
 	base := strings.ToLower(filepath.Base(dir))
 	if base == "nomos" || strings.HasPrefix(base, "nomos-") || dirContainsNomosEntry(dir) {
 		return true
@@ -130,7 +127,7 @@ func dirContainsNomosEntry(dir string) bool {
 }
 
 func readGoModulePath(startDir string) string {
-	cur := normalizeCanonicalPath(".", startDir)
+	cur := NormalizeCanonicalPath(".", startDir)
 	for i := 0; i < 8 && cur != "" && cur != "/"; i++ {
 		data, err := os.ReadFile(filepath.Join(cur, "go.mod"))
 		if err == nil {
@@ -158,13 +155,11 @@ func extractModuleDirective(content string) string {
 	return ""
 }
 
-// isPermittedCleanMainGoInstall fails closed unless the install runs outside hermetic containers
-// and worktrees, uses strictly local relative package directories, and sits on a clean IDLE 'main' trunk.
 func isPermittedCleanMainGoInstall(inv tui.GoInstallInvocation, cwd, hermeticDir string) bool {
 	if hermeticDir != "" || inv.HasUnsafeFlag || strings.TrimSpace(cwd) == "" {
 		return false
 	}
-	canonEvalDir := normalizeCanonicalPath(cwd, "/")
+	canonEvalDir := NormalizeCanonicalPath(cwd, "/")
 	if strings.Contains(canonEvalDir+"/", "/worktrees/") {
 		return false
 	}
@@ -199,7 +194,7 @@ func isSingleLocalExistingSubdir(pkg, canonEvalDir string) bool {
 	if pkg != "." && pkg != "./..." {
 		relDir = strings.TrimSuffix(pkg, "/...")
 	}
-	pkgDir := normalizeCanonicalPath(relDir, canonEvalDir)
+	pkgDir := NormalizeCanonicalPath(relDir, canonEvalDir)
 	if pkgDir != canonEvalDir && !strings.HasPrefix(pkgDir, canonEvalDir+"/") {
 		return false
 	}
@@ -222,7 +217,7 @@ func isCleanIdlePrimaryMainTrunk(canonEvalDir string) bool {
 	if err != nil {
 		return false
 	}
-	topLevel := normalizeCanonicalPath(strings.TrimSpace(string(topOut)), "/")
+	topLevel := NormalizeCanonicalPath(strings.TrimSpace(string(topOut)), "/")
 	if topLevel == "" || strings.Contains(topLevel+"/", "/worktrees/") {
 		return false
 	}

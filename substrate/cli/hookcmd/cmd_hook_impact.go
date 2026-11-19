@@ -5,6 +5,7 @@ package hookcmd
 import (
 	"bytes"
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -20,21 +21,21 @@ var (
 	siblingEscapeSegRe = regexp.MustCompile(`(?i)(?:^|/)(?:verifier|solution_cache|secrets)(?:/|$)`)
 )
 
-func evaluateShellAliasAndRedirectGuard(cmdLine, baseCwd, hermeticDir string) HookDecision {
+func evaluateShellAliasAndRedirectGuard(cmdLine, baseCwd, hermeticDir string) shellguard.HookDecision {
 	if symlinkCreateCmdRe.MatchString(cmdLine) {
-		return HookDecision{
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason:   "❌ [NOMOS INTERCEPT] Filesystem Alias Violation (Law 6 ZeroFilesystemAliasGate): Creating symlinks ('ln -s') is prohibited; materialize explicit canonical files instead.",
 		}
 	}
 	if envSecretDumpCmdRe.MatchString(cmdLine) {
-		return HookDecision{
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason:   "❌ [NOMOS INTERCEPT] Environment Secret Airlock (Law 7): Dumping secret or token environment variables via shell is strictly prohibited.",
 		}
 	}
 	if siblingEscapeSegRe.MatchString(cmdLine) && strings.Contains(cmdLine, "..") {
-		return HookDecision{
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason:   "❌ [NOMOS INTERCEPT] Hermetic Verifier/Cache Isolation (Law 2 & Law 3): Accessing parent '../verifier', '../solution_cache', or '../secrets' paths is strictly prohibited.",
 		}
@@ -42,30 +43,30 @@ func evaluateShellAliasAndRedirectGuard(cmdLine, baseCwd, hermeticDir string) Ho
 	return evaluateTrunkShellRedirectGuard(cmdLine, baseCwd, hermeticDir)
 }
 
-func evaluateReadToolBoundaryAndBinary(p *HookPayload, hermeticDir string) HookDecision {
-	if dec := evaluateBinaryReadGuard(p, hermeticDir != ""); dec.Decision == hookDecisionDeny {
+func evaluateReadToolBoundaryAndBinary(p *shellguard.HookPayload, hermeticDir string) shellguard.HookDecision {
+	if dec := shellguard.EvaluateBinaryReadGuard(p, hermeticDir != ""); dec.Decision == hookDecisionDeny {
 		return dec
 	}
 	if p == nil || p.TargetFile == "" {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
 	}
 	if strings.Contains(p.TargetFile, "..") && siblingEscapeSegRe.MatchString(filepath.ToSlash(p.TargetFile)) {
-		return HookDecision{
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason:   fmt.Sprintf("❌ [NOMOS INTERCEPT] Hermetic Verifier/Cache Isolation (Law 2 & Law 3): Reading '%s' outside the workspace boundary is strictly prohibited.", p.TargetFile),
 		}
 	}
 	if hermeticDir == "" {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
 	}
 	baseCwd := resolveHookWorkspaceDir(p, hermeticDir)
-	resolved := normalizeCanonicalPath(p.TargetFile, baseCwd)
+	resolved := shellguard.NormalizeCanonicalPath(p.TargetFile, baseCwd)
 	return evaluateHermeticDirBoundary(p.TargetFile, resolved, hermeticDir)
 }
 
 // evaluateFirstEditImpactAdvisory emits a 1-line 1-hop AST impact and Go interface peer
 // hint at most once per mutated source file in a worktree session.
-func evaluateFirstEditImpactAdvisory(p *HookPayload, hermeticDir string) string {
+func evaluateFirstEditImpactAdvisory(p *shellguard.HookPayload, hermeticDir string) string {
 	wtRoot := resolveWorktreeTraceRoot(p, hermeticDir)
 	if wtRoot == "" {
 		return ""
@@ -74,7 +75,7 @@ func evaluateFirstEditImpactAdvisory(p *HookPayload, hermeticDir string) string 
 	if tracePath == "" {
 		return ""
 	}
-	canonWt := normalizeCanonicalPath(wtRoot, "/")
+	canonWt := shellguard.NormalizeCanonicalPath(wtRoot, "/")
 	baseCwd := resolveHookWorkspaceDir(p, hermeticDir)
 	tr := loadOrInitHookSessionTrace(tracePath, wtRoot)
 	relFiles, dirty := collectUnseenImpactedFiles(p, &tr, canonWt, baseCwd)
@@ -90,7 +91,7 @@ func evaluateFirstEditImpactAdvisory(p *HookPayload, hermeticDir string) string 
 	return strings.Join(lines, "\n")
 }
 
-func collectUnseenImpactedFiles(p *HookPayload, tr *HookSessionTrace, canonWt, baseCwd string) ([]string, bool) {
+func collectUnseenImpactedFiles(p *shellguard.HookPayload, tr *HookSessionTrace, canonWt, baseCwd string) ([]string, bool) {
 	targets := p.TargetFiles
 	if len(targets) == 0 && p.TargetFile != "" {
 		targets = []string{p.TargetFile}
@@ -98,7 +99,7 @@ func collectUnseenImpactedFiles(p *HookPayload, tr *HookSessionTrace, canonWt, b
 	var unseen []string
 	dirty := false
 	for _, raw := range targets {
-		resolved := normalizeCanonicalPath(raw, baseCwd)
+		resolved := shellguard.NormalizeCanonicalPath(raw, baseCwd)
 		if !strings.HasPrefix(resolved, canonWt+"/") {
 			continue
 		}
@@ -118,7 +119,7 @@ const hotspotReadCeilingLOC = 500
 // evaluateFirstHotspotReadHint emits a one-time orientation advisory when an agent inside an
 // active worktree reads a >=500-LOC brownfield hotspot file, surfacing sibling-file extraction
 // guidance and 1-hop AST/interface peers before the first edit is attempted.
-func evaluateFirstHotspotReadHint(p *HookPayload, tr *HookSessionTrace, wtRoot string) string {
+func evaluateFirstHotspotReadHint(p *shellguard.HookPayload, tr *HookSessionTrace, wtRoot string) string {
 	resolved, rel, canonWt, ok := resolveUnseenHotspotReadTarget(p, tr, wtRoot)
 	if !ok {
 		return ""
@@ -139,12 +140,12 @@ func evaluateFirstHotspotReadHint(p *HookPayload, tr *HookSessionTrace, wtRoot s
 	return msg
 }
 
-func resolveUnseenHotspotReadTarget(p *HookPayload, tr *HookSessionTrace, wtRoot string) (string, string, string, bool) {
+func resolveUnseenHotspotReadTarget(p *shellguard.HookPayload, tr *HookSessionTrace, wtRoot string) (string, string, string, bool) {
 	if p == nil || tr == nil || wtRoot == "" || p.CommandLine != "" || p.TargetFile == "" {
 		return "", "", "", false
 	}
-	canonWt := normalizeCanonicalPath(wtRoot, "/")
-	resolved := normalizeCanonicalPath(p.TargetFile, resolveHookWorkspaceDir(p, ""))
+	canonWt := shellguard.NormalizeCanonicalPath(wtRoot, "/")
+	resolved := shellguard.NormalizeCanonicalPath(p.TargetFile, resolveHookWorkspaceDir(p, ""))
 	if !strings.HasPrefix(resolved, canonWt+"/") {
 		return "", "", "", false
 	}

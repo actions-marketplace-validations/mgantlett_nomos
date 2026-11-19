@@ -7,38 +7,12 @@ import (
 	"encoding/json"
 	"os"
 	"strings"
+
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 )
 
-// HookPayload normalizes incoming JSON hook events across Claude Code, Gemini CLI, Cursor, and Antigravity.
-type HookPayload struct {
-	SessionID          string
-	ToolName           string
-	TargetFile         string
-	TargetFiles        []string
-	TargetURL          string
-	WrittenContent     string
-	CommandLine        string
-	ArgsDigest         string
-	ToolResponseText   string
-	TerminationReason  string
-	Cwd                string
-	WorkspacePaths     []string
-	HasToolInput       bool
-	StopHookActive     bool
-	IsClaudeEvent      bool
-	IsGeminiEvent      bool
-	IsCursorEvent      bool
-	IsAntigravityEvent bool
-	IsPostInvoke       bool
-}
-
 var (
-	readOnlyTools = map[string]bool{
-		"read": true, "read_file": true, "view_file_outline": true, "view_code_item": true,
-		"grep_search": true, "find_by_name": true, "list_dir": true, "list_directory": true, "list": true,
-		"glob": true, "grep": true, "search_file_content": true, "lsp": true,
-		"bash": true, "run_command": true, "execute_command": true, "run_shell_command": true,
-	}
+	readOnlyTools       = shellguard.ReadOnlyTools
 	geminiSpecificTools = map[string]bool{
 		"run_shell_command": true, "write_file": true, "replace": true,
 		"list_directory": true, "search_file_content": true, "google_web_search": true,
@@ -55,12 +29,12 @@ var (
 
 // ParseHookPayload decodes an incoming JSON hook payload from stdin bytes.
 // @intent task_lifecycle_cli_spec.md
-func ParseHookPayload(raw []byte) *HookPayload {
+func ParseHookPayload(raw []byte) *shellguard.HookPayload {
 	return parseHookPayload(raw)
 }
 
-func parseHookPayload(raw []byte) *HookPayload {
-	p := &HookPayload{}
+func parseHookPayload(raw []byte) *shellguard.HookPayload {
+	p := &shellguard.HookPayload{}
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 {
 		return p
@@ -292,7 +266,7 @@ func firstNonEmpty(vals ...string) string {
 	return ""
 }
 
-func resolveHookWorkspaceDir(p *HookPayload, hermeticDir string) string {
+func resolveHookWorkspaceDir(p *shellguard.HookPayload, hermeticDir string) string {
 	if hermeticDir != "" {
 		return hermeticDir
 	}

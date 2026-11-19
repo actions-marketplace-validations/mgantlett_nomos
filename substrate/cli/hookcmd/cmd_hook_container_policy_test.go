@@ -3,6 +3,8 @@ package hookcmd
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/containerguard"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,7 +18,7 @@ func isolatedCacheEnv(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", tmp)
 }
 
-func writePolicyFixture(t *testing.T, pol containerSandboxPolicy) {
+func writePolicyFixture(t *testing.T, pol containerguard.SandboxPolicy) {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "policy.json")
 	raw, err := json.Marshal(pol)
@@ -26,14 +28,14 @@ func writePolicyFixture(t *testing.T, pol containerSandboxPolicy) {
 	if err := os.WriteFile(p, raw, 0600); err != nil {
 		t.Fatalf("write policy: %v", err)
 	}
-	t.Setenv(envContainerPolicyFile, p)
+	t.Setenv(containerguard.EnvContainerPolicyFile, p)
 }
 
 func TestLoopBreaker_TokenAwarePythonDetectionDoesNotFalsePositiveOnProse(t *testing.T) {
 	isolatedCacheEnv(t)
 	wsDir := t.TempDir()
 	for i := 0; i < 4; i++ {
-		dec := EvaluatePreToolHook(&HookPayload{
+		dec := EvaluatePreToolHook(&shellguard.HookPayload{
 			Cwd:         wsDir,
 			ToolName:    "Bash",
 			CommandLine: fmt.Sprintf(`git commit -m "record %d noting python-test and test_helper wording"`, i),
@@ -54,35 +56,35 @@ func TestContainerPolicy_ReadOnlyAndCommandListsAcrossWrappers(t *testing.T) {
 	isolatedCacheEnv(t)
 	wsDir := t.TempDir()
 
-	writePolicyFixture(t, containerSandboxPolicy{
+	writePolicyFixture(t, containerguard.SandboxPolicy{
 		ReadOnly:                         true,
 		DisableAutonomousSideEffectGuard: true,
 	})
-	if dec := EvaluateContainerPreToolHook(&HookPayload{Cwd: wsDir, ToolName: "Write", TargetFile: "app.py"}); dec.Decision != hookDecisionDeny {
+	if dec := EvaluateContainerPreToolHook(&shellguard.HookPayload{Cwd: wsDir, ToolName: "Write", TargetFile: "app.py"}); dec.Decision != hookDecisionDeny {
 		t.Fatalf("expected Write blocked in read-only mode")
 	}
-	if dec := EvaluateContainerPreToolHook(&HookPayload{Cwd: wsDir, ToolName: "Bash", CommandLine: "sqlite3 -readonly data.db 'SELECT count(*) FROM items;'"}); dec.Decision != hookDecisionAllow {
+	if dec := EvaluateContainerPreToolHook(&shellguard.HookPayload{Cwd: wsDir, ToolName: "Bash", CommandLine: "sqlite3 -readonly data.db 'SELECT count(*) FROM items;'"}); dec.Decision != hookDecisionAllow {
 		t.Fatalf("expected read-only SELECT inspection allowed, got %s", dec.Reason)
 	}
-	if dec := EvaluateContainerPreToolHook(&HookPayload{Cwd: wsDir, ToolName: "Bash", CommandLine: "go run ./cmd/writer"}); dec.Decision != hookDecisionDeny {
+	if dec := EvaluateContainerPreToolHook(&shellguard.HookPayload{Cwd: wsDir, ToolName: "Bash", CommandLine: "go run ./cmd/writer"}); dec.Decision != hookDecisionDeny {
 		t.Fatalf("expected mutating runner blocked in read-only mode")
 	}
 
-	writePolicyFixture(t, containerSandboxPolicy{
+	writePolicyFixture(t, containerguard.SandboxPolicy{
 		AllowedCommandPrefixes:           []string{"python3", "git"},
 		DeniedCommandPrefixes:            []string{"tblctl drop"},
 		DisableAutonomousSideEffectGuard: true,
 	})
-	if dec := EvaluateContainerPreToolHook(&HookPayload{Cwd: wsDir, ToolName: "Bash", CommandLine: `sh -c "tblctl drop --table cache"`}); dec.Decision != hookDecisionDeny {
+	if dec := EvaluateContainerPreToolHook(&shellguard.HookPayload{Cwd: wsDir, ToolName: "Bash", CommandLine: `sh -c "tblctl drop --table cache"`}); dec.Decision != hookDecisionDeny {
 		t.Fatalf("expected wrapper-unwrapped denied prefix blocked")
 	}
-	if dec := EvaluateContainerPreToolHook(&HookPayload{Cwd: wsDir, ToolName: "Bash", CommandLine: `sqlite3 cache.sqlite3 "DROP TABLE staging;"`}); dec.Decision != hookDecisionDeny {
+	if dec := EvaluateContainerPreToolHook(&shellguard.HookPayload{Cwd: wsDir, ToolName: "Bash", CommandLine: `sqlite3 cache.sqlite3 "DROP TABLE staging;"`}); dec.Decision != hookDecisionDeny {
 		t.Fatalf("expected SQL DROP TABLE equivalent blocked under drop denylist")
 	}
-	if dec := EvaluateContainerPreToolHook(&HookPayload{Cwd: wsDir, ToolName: "Bash", CommandLine: `python3 -m unittest discover`}); dec.Decision != hookDecisionAllow {
+	if dec := EvaluateContainerPreToolHook(&shellguard.HookPayload{Cwd: wsDir, ToolName: "Bash", CommandLine: `python3 -m unittest discover`}); dec.Decision != hookDecisionAllow {
 		t.Fatalf("expected allowlisted python3 allowed, got %s", dec.Reason)
 	}
-	if dec := EvaluateContainerPreToolHook(&HookPayload{Cwd: wsDir, ToolName: "Bash", CommandLine: `extrahelper run`}); dec.Decision != hookDecisionDeny {
+	if dec := EvaluateContainerPreToolHook(&shellguard.HookPayload{Cwd: wsDir, ToolName: "Bash", CommandLine: `extrahelper run`}); dec.Decision != hookDecisionDeny {
 		t.Fatalf("expected non-allowlisted command blocked")
 	}
 }
@@ -111,20 +113,20 @@ func TestContainerPolicy_ProtectedPathsSymlinksAndHookConfigLock(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	writePolicyFixture(t, containerSandboxPolicy{
+	writePolicyFixture(t, containerguard.SandboxPolicy{
 		ProtectedPaths:                   []string{protDir},
 		DisableAutonomousSideEffectGuard: true,
 	})
-	if dec := EvaluateContainerPreToolHook(&HookPayload{Cwd: wsDir, ToolName: "Read", TargetFile: aliasLink}); dec.Decision != hookDecisionDeny {
+	if dec := EvaluateContainerPreToolHook(&shellguard.HookPayload{Cwd: wsDir, ToolName: "Read", TargetFile: aliasLink}); dec.Decision != hookDecisionDeny {
 		t.Fatalf("expected symlink read into protected dir denied")
 	}
-	if dec := EvaluateContainerPreToolHook(&HookPayload{Cwd: wsDir, ToolName: "Bash", CommandLine: customTool + " inspect"}); dec.Decision != hookDecisionDeny {
+	if dec := EvaluateContainerPreToolHook(&shellguard.HookPayload{Cwd: wsDir, ToolName: "Bash", CommandLine: customTool + " inspect"}); dec.Decision != hookDecisionDeny {
 		t.Fatalf("expected custom executable referencing escaping symlink denied")
 	}
-	if dec := EvaluateContainerPreToolHook(&HookPayload{Cwd: wsDir, ToolName: "Write", TargetFile: "/root/.claude/settings.json"}); dec.Decision != hookDecisionDeny {
+	if dec := EvaluateContainerPreToolHook(&shellguard.HookPayload{Cwd: wsDir, ToolName: "Write", TargetFile: "/root/.claude/settings.json"}); dec.Decision != hookDecisionDeny {
 		t.Fatalf("expected .claude/settings.json protected from container tampering")
 	}
-	if dec := EvaluateContainerPreToolHook(&HookPayload{Cwd: wsDir, ToolName: "Read", TargetFile: "/root/.nomos-bin/policy.json"}); dec.Decision != hookDecisionDeny {
+	if dec := EvaluateContainerPreToolHook(&shellguard.HookPayload{Cwd: wsDir, ToolName: "Read", TargetFile: "/root/.nomos-bin/policy.json"}); dec.Decision != hookDecisionDeny {
 		t.Fatalf("expected .nomos-bin policy file protected from container reads")
 	}
 }
@@ -133,7 +135,7 @@ func TestContainerSafety_MCPEgressIFCMutationAndCarrierAdvisory(t *testing.T) {
 	isolatedCacheEnv(t)
 	wsDir := t.TempDir()
 
-	writePolicyFixture(t, containerSandboxPolicy{
+	writePolicyFixture(t, containerguard.SandboxPolicy{
 		AllowedMCPTools:      []string{"docs_search"},
 		DeniedMCPTools:       []string{"admin_exec"},
 		EgressMode:           "allowlist",
@@ -142,24 +144,24 @@ func TestContainerSafety_MCPEgressIFCMutationAndCarrierAdvisory(t *testing.T) {
 		UntrustedProject:     true,
 		AllowedMCPServers:    []string{"docs"},
 	})
-	if dec := EvaluateContainerPreToolHook(&HookPayload{Cwd: wsDir, ToolName: "mcp__docs__admin_exec"}); dec.Decision != hookDecisionDeny {
+	if dec := EvaluateContainerPreToolHook(&shellguard.HookPayload{Cwd: wsDir, ToolName: "mcp__docs__admin_exec"}); dec.Decision != hookDecisionDeny {
 		t.Fatalf("expected denied MCP tool blocked")
 	}
-	if dec := EvaluateContainerPreToolHook(&HookPayload{Cwd: wsDir, ToolName: "mcp__local__helper"}); dec.Decision != hookDecisionDeny {
+	if dec := EvaluateContainerPreToolHook(&shellguard.HookPayload{Cwd: wsDir, ToolName: "mcp__local__helper"}); dec.Decision != hookDecisionDeny {
 		t.Fatalf("expected untrusted workspace MCP server blocked")
 	}
-	if dec := EvaluateContainerPreToolHook(&HookPayload{Cwd: wsDir, ToolName: "Bash", CommandLine: "npm install --registry http://registry.example pkg@1.0.0"}); dec.Decision != hookDecisionDeny {
+	if dec := EvaluateContainerPreToolHook(&shellguard.HookPayload{Cwd: wsDir, ToolName: "Bash", CommandLine: "npm install --registry http://registry.example pkg@1.0.0"}); dec.Decision != hookDecisionDeny {
 		t.Fatalf("expected npm install without --ignore-scripts blocked")
 	}
-	if dec := EvaluateContainerPreToolHook(&HookPayload{Cwd: wsDir, ToolName: "Bash", CommandLine: "npm install --ignore-scripts --registry http://registry.example pkg@1.0.0"}); dec.Decision != hookDecisionAllow {
+	if dec := EvaluateContainerPreToolHook(&shellguard.HookPayload{Cwd: wsDir, ToolName: "Bash", CommandLine: "npm install --ignore-scripts --registry http://registry.example pkg@1.0.0"}); dec.Decision != hookDecisionAllow {
 		t.Fatalf("expected npm install --ignore-scripts allowed, got %s", dec.Reason)
 	}
 
-	writePolicyFixture(t, containerSandboxPolicy{})
-	if dec := EvaluateContainerPreToolHook(&HookPayload{Cwd: wsDir, ToolName: "mcp__catalog__lookup_entry"}); dec.Decision != hookDecisionAllow {
+	writePolicyFixture(t, containerguard.SandboxPolicy{})
+	if dec := EvaluateContainerPreToolHook(&shellguard.HookPayload{Cwd: wsDir, ToolName: "mcp__catalog__lookup_entry"}); dec.Decision != hookDecisionAllow {
 		t.Fatalf("expected read MCP lookup allowed while recording ingress taint, got %s", dec.Reason)
 	}
-	if dec := EvaluateContainerPreToolHook(&HookPayload{Cwd: wsDir, ToolName: "Bash", CommandLine: "ctlcli status"}); dec.Decision != hookDecisionAllow {
+	if dec := EvaluateContainerPreToolHook(&shellguard.HookPayload{Cwd: wsDir, ToolName: "Bash", CommandLine: "ctlcli status"}); dec.Decision != hookDecisionAllow {
 		t.Fatalf("expected read-only CLI inspection allowed even after MCP ingress taint, got %s", dec.Reason)
 	}
 	for _, cmd := range []string{
@@ -169,11 +171,11 @@ func TestContainerSafety_MCPEgressIFCMutationAndCarrierAdvisory(t *testing.T) {
 		"python3 /app/.hiddenhelper/check.py --verify",
 		"ctlcli submit --destination partner",
 	} {
-		if dec := EvaluateContainerPreToolHook(&HookPayload{Cwd: wsDir, ToolName: "Bash", CommandLine: cmd}); dec.Decision != hookDecisionDeny {
+		if dec := EvaluateContainerPreToolHook(&shellguard.HookPayload{Cwd: wsDir, ToolName: "Bash", CommandLine: cmd}); dec.Decision != hookDecisionDeny {
 			t.Fatalf("expected hazardous autonomous command %q blocked", cmd)
 		}
 	}
-	adv := EvaluateContainerPostToolHook(&HookPayload{
+	adv := EvaluateContainerPostToolHook(&shellguard.HookPayload{
 		Cwd:              wsDir,
 		ToolName:         "Read",
 		TargetFile:       "RUNBOOK.md",

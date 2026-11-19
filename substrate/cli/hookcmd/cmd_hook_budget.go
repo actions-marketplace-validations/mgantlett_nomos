@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -39,7 +40,7 @@ func resolveEffectiveBudgetSeconds(flagSec int) int {
 	return parsed
 }
 
-func ensureSessionBudgetStamp(p *HookPayload, hermeticDir string, budgetSec int) {
+func ensureSessionBudgetStamp(p *shellguard.HookPayload, hermeticDir string, budgetSec int) {
 	if p == nil || budgetSec <= 0 {
 		return
 	}
@@ -57,13 +58,13 @@ func ensureSessionBudgetStamp(p *HookPayload, hermeticDir string, budgetSec int)
 }
 
 // evaluateSessionBudgetRadar evaluates wall-clock session budget checkpoints using the active advisory profile.
-func evaluateSessionBudgetRadar(p *HookPayload, hermeticDir string, budgetSec int) string {
+func evaluateSessionBudgetRadar(p *shellguard.HookPayload, hermeticDir string, budgetSec int) string {
 	return evaluateSessionBudgetRadarWithProfile(p, hermeticDir, budgetSec, resolveHookAdvisoryProfile(0, 0, 0, ""))
 }
 
 // evaluateSessionBudgetRadarWithProfile emits deduplicated warn and critical budget advisories
 // according to the clamped HookAdvisoryProfile thresholds and verbosity style.
-func evaluateSessionBudgetRadarWithProfile(p *HookPayload, hermeticDir string, budgetSec int, profile HookAdvisoryProfile) string {
+func evaluateSessionBudgetRadarWithProfile(p *shellguard.HookPayload, hermeticDir string, budgetSec int, profile HookAdvisoryProfile) string {
 	if p == nil || p.IsPostInvoke || budgetSec <= 0 {
 		return ""
 	}
@@ -119,7 +120,7 @@ func evaluateBudgetThresholdCheckpoint(st *sessionBudgetState, elapsed, budgetSe
 	return ""
 }
 
-func evaluateSlowStepBurn(st *sessionBudgetState, p *HookPayload, nowUnix int64, elapsed, budgetSec int, style string, dirty *bool) string {
+func evaluateSlowStepBurn(st *sessionBudgetState, p *shellguard.HookPayload, nowUnix int64, elapsed, budgetSec int, style string, dirty *bool) string {
 	if st.WarnedSlowStep || st.LastPreToolUnix <= 0 || strings.TrimSpace(p.CommandLine) == "" {
 		return ""
 	}
@@ -145,7 +146,7 @@ func evaluateSlowStepBurn(st *sessionBudgetState, p *HookPayload, nowUnix int64,
 
 func commandUsesExplicitTimeout(cmdLine string) bool {
 	fields := strings.Fields(strings.ToLower(strings.TrimSpace(cmdLine)))
-	idx := skipCommandPrefixes(fields)
+	idx := shellguard.SkipCommandPrefixes(fields)
 	if idx >= len(fields) {
 		return false
 	}
@@ -153,7 +154,7 @@ func commandUsesExplicitTimeout(cmdLine string) bool {
 	return exe == "timeout" || exe == "gtimeout"
 }
 
-func resolveBudgetStateFilePath(p *HookPayload, hermeticDir string) string {
+func resolveBudgetStateFilePath(p *shellguard.HookPayload, hermeticDir string) string {
 	keySeed := strings.TrimSpace(p.SessionID)
 	if keySeed == "" {
 		keySeed = filepath.Clean(resolveLoopTrackingDir(p, hermeticDir))
@@ -232,13 +233,13 @@ func joinHookAdvisories(a, b string) string {
 
 // evaluateVerifiedHostHealth inspects PostToolUse error outputs for verified environmental faults
 // and emits a single deduplicated host-state advisory per fault class in the session.
-func evaluateVerifiedHostHealth(p *HookPayload, hermeticDir string) string {
+func evaluateVerifiedHostHealth(p *shellguard.HookPayload, hermeticDir string) string {
 	return evaluateVerifiedHostHealthWithStyle(p, hermeticDir, resolveHookAdvisoryProfile(0, 0, 0, "").AdvisoryStyle)
 }
 
 // evaluateVerifiedHostHealthWithStyle records verified environmental faults once per session
 // and formats the single-turn host-state advisory using the active advisory style.
-func evaluateVerifiedHostHealthWithStyle(p *HookPayload, hermeticDir, style string) string {
+func evaluateVerifiedHostHealthWithStyle(p *shellguard.HookPayload, hermeticDir, style string) string {
 	if p == nil || p.IsPostInvoke || strings.TrimSpace(p.ToolResponseText) == "" {
 		return ""
 	}
@@ -308,7 +309,7 @@ func hasAnySubstring(haystack string, needles ...string) bool {
 
 func extractPrimaryCommandToken(cmdLine string) string {
 	fields := strings.Fields(strings.TrimSpace(cmdLine))
-	idx := skipCommandPrefixes(fields)
+	idx := shellguard.SkipCommandPrefixes(fields)
 	if idx >= len(fields) {
 		return "command"
 	}
@@ -318,4 +319,3 @@ func extractPrimaryCommandToken(cmdLine string) string {
 	}
 	return base
 }
-

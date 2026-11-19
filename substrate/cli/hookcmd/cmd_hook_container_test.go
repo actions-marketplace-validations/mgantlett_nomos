@@ -2,12 +2,11 @@ package hookcmd_test
 
 import (
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
 )
 
 func TestHookContainerSandbox_AntiRewardHackingAndSysadminParity(t *testing.T) {
@@ -261,7 +260,7 @@ func TestHookContainerSandbox_GeminiCliBeforeAndAfterToolParity(t *testing.T) {
 	}
 }
 
-func runLoopTestStep(t *testing.T, sandbox, srcPath, content, cmd string) hookcmd.HookDecision {
+func runLoopTestStep(t *testing.T, sandbox, srcPath, content, cmd string) shellguard.HookDecision {
 	t.Helper()
 	if writeErr := os.WriteFile(srcPath, []byte(content), 0600); writeErr != nil {
 		t.Fatal(writeErr)

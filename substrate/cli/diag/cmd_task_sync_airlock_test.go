@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
 )
 
 // @verifies TC-SYNC-021 TC-SYNC-023

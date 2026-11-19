@@ -4,6 +4,7 @@ package hookcmd
 
 import (
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"github.com/mgantlett/nomos/substrate/cli/tui"
 	"io"
 	"io/fs"
@@ -52,7 +53,7 @@ func newHookStopCmd(hermeticDir *string, containerSandbox *bool) *cobra.Command 
 				return writeEmptyJSON(cmd.OutOrStdout())
 			}
 			if payload != nil && payload.IsAntigravityEvent {
-				return writeHookDecision(cmd.OutOrStdout(), HookDecision{
+				return writeHookDecision(cmd.OutOrStdout(), shellguard.HookDecision{
 					Decision: hookDecisionContinue,
 					Reason:   dec.Reason,
 				})
@@ -68,12 +69,12 @@ func newHookStopCmd(hermeticDir *string, containerSandbox *bool) *cobra.Command 
 // EvaluateStopHook blocks premature agent turn exits when an active worktree holds
 // unverified file modifications or when container-sandbox files fail syntax/snooping checks
 // (@intent nomos_hermetic_worktree_spec.md).
-func EvaluateStopHook(p *HookPayload, hermeticDir string, containerSandbox bool) HookDecision {
+func EvaluateStopHook(p *shellguard.HookPayload, hermeticDir string, containerSandbox bool) shellguard.HookDecision {
 	if p == nil || (!containerSandbox && p.StopHookActive) {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
 	}
 	if p.TerminationReason != "" && p.TerminationReason != agyNormalStopReason {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
 	}
 	if containerSandbox && hermeticDir == "" && !p.StopHookActive {
 		if dec := evaluateContainerStopHook(p); dec.Decision == hookDecisionBlock {
@@ -83,23 +84,23 @@ func EvaluateStopHook(p *HookPayload, hermeticDir string, containerSandbox bool)
 	return evaluateTracedStopHook(p, hermeticDir, containerSandbox)
 }
 
-func evaluateTracedStopHook(p *HookPayload, hermeticDir string, containerSandbox bool) HookDecision {
+func evaluateTracedStopHook(p *shellguard.HookPayload, hermeticDir string, containerSandbox bool) shellguard.HookDecision {
 	traceKey, wsRoot, branchLabel := resolveTraceScopeAndWorkspace(p, hermeticDir)
 	if traceKey == "" {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
 	}
 	tr := loadOrSyncStopTrace(traceKey, wsRoot)
 	if tr == nil || len(tr.MutatedFiles) == 0 {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
 	}
 	needsVerify := tr.DirtyUnverifiedEdits
 	needsBehavior := tr.DirtyBehavioralEdits && !hasWorkspaceAutomatedTests(wsRoot)
 	if !needsVerify && !needsBehavior {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
 	}
 	maxBlocks := resolveContainerStopLimit(wsRoot, containerSandbox)
 	if p.StopHookActive && tr.StopBlockStrikes >= maxBlocks {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
 	}
 	tr.StopBlockStrikes++
 	if path := resolveTraceStateFilePath(traceKey); path != "" {
@@ -119,12 +120,12 @@ func resolveContainerStopLimit(wsRoot string, containerSandbox bool) int {
 	return maxContainerStopBlocks
 }
 
-func buildBehavioralStopDecision(wsRoot string, fileCount, strike, maxBlocks int, containerSandbox bool) HookDecision {
+func buildBehavioralStopDecision(wsRoot string, fileCount, strike, maxBlocks int, containerSandbox bool) shellguard.HookDecision {
 	strikePrefix := "❌ [Nomos Anti-Phantom Gate]"
 	if containerSandbox {
 		strikePrefix = fmt.Sprintf("❌ [Nomos Anti-Phantom Gate (attempt %d/%d)]", strike, maxBlocks)
 	}
-	return HookDecision{
+	return shellguard.HookDecision{
 		Decision: hookDecisionBlock,
 		Reason: fmt.Sprintf(
 			"%s Workspace '%s' modified %d source file(s) with zero automated test suite and no passing post-edit program/test execution. Create stdlib unittest.TestCase tests in '.tmp/tests/test_<module>.py' covering boundary, multi-item, and error cases and run 'nomos verify', or execute a behavioral smoke test after your final edit before ending your turn (Law 2).",
@@ -133,7 +134,7 @@ func buildBehavioralStopDecision(wsRoot string, fileCount, strike, maxBlocks int
 	}
 }
 
-func buildUnverifiedStopDecision(wsRoot, branchLabel string, fileCount, strike, maxBlocks int, containerSandbox bool, radarNote string) HookDecision {
+func buildUnverifiedStopDecision(wsRoot, branchLabel string, fileCount, strike, maxBlocks int, containerSandbox bool, radarNote string) shellguard.HookDecision {
 	strikePrefix := "❌ [Nomos Anti-Phantom Gate]"
 	if containerSandbox {
 		strikePrefix = fmt.Sprintf("❌ [Nomos Anti-Phantom Gate (attempt %d/%d)]", strike, maxBlocks)
@@ -154,17 +155,17 @@ func buildUnverifiedStopDecision(wsRoot, branchLabel string, fileCount, strike, 
 	if radarNote != "" {
 		reason += "\n" + radarNote
 	}
-	return HookDecision{Decision: hookDecisionBlock, Reason: reason}
+	return shellguard.HookDecision{Decision: hookDecisionBlock, Reason: reason}
 }
 
-func evaluateContainerStopHook(p *HookPayload) HookDecision {
+func evaluateContainerStopHook(p *shellguard.HookPayload) shellguard.HookDecision {
 	baseCwd := firstNonEmpty(p.Cwd, resolveHookWorkspaceDir(p, ""))
 	if baseCwd == "" || baseCwd == "." {
 		baseCwd = containerAppWorkdir
 	}
 	cleanRoot := filepath.Clean(baseCwd)
 	if isProtectedContainerVerifierPath(filepath.ToSlash(cleanRoot)) {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
 	}
 	scanned := 0
 	var fault string
@@ -192,15 +193,15 @@ func evaluateContainerStopHook(p *HookPayload) HookDecision {
 		return nil
 	})
 	if walkErr != nil && fault == "" {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
 	}
 	if fault != "" {
-		return HookDecision{
+		return shellguard.HookDecision{
 			Decision: hookDecisionBlock,
 			Reason:   fmt.Sprintf("❌ [Nomos Anti-Phantom Gate] Cannot complete turn with broken or non-compliant workspace artifact: %s", fault),
 		}
 	}
-	return HookDecision{Decision: hookDecisionAllow}
+	return shellguard.HookDecision{Decision: hookDecisionAllow}
 }
 
 func isStopAuditableFile(path string) bool {

@@ -3,6 +3,7 @@ package hookcmd
 
 import (
 	"fmt"
+	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"os"
 	"path/filepath"
 	"strings"
@@ -183,9 +184,9 @@ func isProtectedGovernanceTarget(resolved, repoRoot string) bool {
 	return strings.HasPrefix(rel, ".git/hooks/")
 }
 
-func evaluateBranchGuardMutation(rawTarget, resolved, repoRoot, branch string, cfg *config.EcosystemConfig) HookDecision {
+func evaluateBranchGuardMutation(rawTarget, resolved, repoRoot, branch string, cfg *config.EcosystemConfig) shellguard.HookDecision {
 	if isProtectedGovernanceTarget(resolved, repoRoot) {
-		return HookDecision{
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason: fmt.Sprintf(
 				"Governance Tamper Guard (Law 7): Direct agent mutation of '%s' (resolved: '%s') is prohibited in Branch Guard mode.",
@@ -194,14 +195,14 @@ func evaluateBranchGuardMutation(rawTarget, resolved, repoRoot, branch string, c
 		}
 	}
 	if !strings.HasPrefix(resolved, repoRoot+"/") {
-		return HookDecision{Decision: hookDecisionAllow}
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
 	}
 	if IsProtectedTrunkForConfig(branch, cfg) {
 		label := branch
 		if label == "" {
 			label = "main"
 		}
-		return HookDecision{
+		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason: fmt.Sprintf(
 				"Branch Guard Violation (Law 3): Direct mutation of '%s' on protected branch '%s' is prohibited. Create or switch to a feature branch via 'git switch -c feat/<slug>' (or 'fix/<slug>'), then edit files normally.",
@@ -209,10 +210,10 @@ func evaluateBranchGuardMutation(rawTarget, resolved, repoRoot, branch string, c
 			),
 		}
 	}
-	return HookDecision{Decision: hookDecisionAllow}
+	return shellguard.HookDecision{Decision: hookDecisionAllow}
 }
 
-func resolveBranchGuardScopeFromPayload(p *HookPayload, hermeticDir string) (string, string, string) {
+func resolveBranchGuardScopeFromPayload(p *shellguard.HookPayload, hermeticDir string) (string, string, string) {
 	if p == nil || hermeticDir != "" {
 		return "", "", ""
 	}
@@ -224,7 +225,7 @@ func resolveBranchGuardScopeFromPayload(p *HookPayload, hermeticDir string) (str
 		if strings.TrimSpace(raw) == "" {
 			continue
 		}
-		norm := normalizeCanonicalPath(raw, baseCwd)
+		norm := shellguard.NormalizeCanonicalPath(raw, baseCwd)
 		if seen[norm] {
 			continue
 		}

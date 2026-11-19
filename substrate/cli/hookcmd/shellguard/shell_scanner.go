@@ -1,5 +1,4 @@
-// Package hookcmd provides shell segment extraction, heredoc stripping, and hidden script filtering for container PreToolUse checks.
-package hookcmd
+package shellguard
 
 import (
 	"path/filepath"
@@ -9,7 +8,8 @@ import (
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/capbac"
 )
 
-type shellCommandInvocation struct {
+// ShellCommandInvocation captures a parsed shell command executable, raw token, segment, and arguments.
+type ShellCommandInvocation struct {
 	Exe    string
 	RawExe string
 	Raw    string
@@ -17,26 +17,32 @@ type shellCommandInvocation struct {
 }
 
 var (
-	inlineShellSubCmdRe  = regexp.MustCompile(`(?:^|\s)-(?:c|lc)\s+["']([^"']+)["']`)
 	subshellCmdSubstRe   = regexp.MustCompile(`\$\(([^)]+)\)`)
 	subshellBacktickRe   = regexp.MustCompile("`([^`]+)`")
 	pythonSubprocessHint = regexp.MustCompile(`(?i)\b(?:subprocess|os\.system|os\.popen|pty\.spawn|popen)\b`)
 	nodeSubprocessHint   = regexp.MustCompile(`(?i)\b(?:child_process|execsync|spawnsync|exec\(|spawn\()`)
+	heredocHeaderDelimRe = regexp.MustCompile(`(?:^|[^<])<<-?\s*['"]?([A-Za-z_][A-Za-z0-9_]*)['"]?`)
+	heredocPipeExecRe    = regexp.MustCompile(`(?i)\|\s*(?:sqlite3|psql|mysql|mariadb|duckdb|sqlcmd|mongosh|redis-cli|sh|bash|dash|zsh|ksh|python3?|ruby|node)\b`)
+	hiddenDotScriptRe    = regexp.MustCompile(`(?i)(?:^|[\s"'=/])(\.[A-Za-z0-9_-]+)/([^\s"'` + "`" + `]+\.(?:py|sh|rb|pl|js))\b`)
+
+	allowedHiddenDotDirs = map[string]bool{
+		".venv": true, ".tox": true, ".pytest_cache": true, ".nomos-bin": true, ".pyenv": true,
+	}
 )
 
-// splitUnquotedShellSegments delegates POSIX unquoted segment splitting to shared capbac shell lexing.
-func splitUnquotedShellSegments(cmdLine string) []string {
+// SplitUnquotedShellSegments delegates POSIX unquoted segment splitting to shared capbac shell lexing.
+func SplitUnquotedShellSegments(cmdLine string) []string {
 	return capbac.SplitUnquotedShellSegments(cmdLine)
 }
 
-// tokenizeQuotedShellWords delegates quoted shell word tokenization to shared capbac shell lexing.
-func tokenizeQuotedShellWords(seg string) []string {
+// TokenizeQuotedShellWords delegates quoted shell word tokenization to shared capbac shell lexing.
+func TokenizeQuotedShellWords(seg string) []string {
 	return capbac.TokenizeQuotedShellWords(seg)
 }
 
-// extractLeadingExeAndArgs strips env assignments and wrapper prefixes to isolate the target command and arguments.
-func extractLeadingExeAndArgs(seg string) (string, string, []string) {
-	fields := tokenizeQuotedShellWords(seg)
+// ExtractLeadingExeAndArgs strips env assignments and wrapper prefixes to isolate the target command and arguments.
+func ExtractLeadingExeAndArgs(seg string) (string, string, []string) {
+	fields := TokenizeQuotedShellWords(seg)
 	idx := 0
 	for idx < len(fields) && isShellEnvAssignmentToken(fields[idx]) {
 		idx++
@@ -60,30 +66,28 @@ func extractLeadingExeAndArgs(seg string) (string, string, []string) {
 	return "", "", nil
 }
 
-// isShellEnvAssignmentToken reports whether tok sets an environment variable ahead of an executable.
 func isShellEnvAssignmentToken(tok string) bool {
 	eq := strings.IndexByte(tok, '=')
 	return eq > 0 && !strings.HasPrefix(tok, "-") && !strings.Contains(tok[:eq], "/")
 }
 
-// extractAllContainerCommandInvocations recursively expands nested shell wrappers and command substitutions.
-func extractAllContainerCommandInvocations(cmdLine string) []shellCommandInvocation {
-	var out []shellCommandInvocation
+// ExtractAllContainerCommandInvocations recursively expands nested shell wrappers and command substitutions.
+func ExtractAllContainerCommandInvocations(cmdLine string) []ShellCommandInvocation {
+	var out []ShellCommandInvocation
 	collectNestedCommandInvocations(cmdLine, 0, &out)
 	return out
 }
 
-// collectNestedCommandInvocations traverses compound segments, -c scripts, $() substitutions, and backticks.
-func collectNestedCommandInvocations(cmdLine string, depth int, out *[]shellCommandInvocation) {
+func collectNestedCommandInvocations(cmdLine string, depth int, out *[]ShellCommandInvocation) {
 	if depth > 4 || strings.TrimSpace(cmdLine) == "" {
 		return
 	}
-	for _, seg := range splitUnquotedShellSegments(cmdLine) {
-		exe, rawExe, args := extractLeadingExeAndArgs(seg)
+	for _, seg := range SplitUnquotedShellSegments(cmdLine) {
+		exe, rawExe, args := ExtractLeadingExeAndArgs(seg)
 		if exe == "" {
 			continue
 		}
-		*out = append(*out, shellCommandInvocation{Exe: exe, RawExe: rawExe, Raw: seg, Args: args})
+		*out = append(*out, ShellCommandInvocation{Exe: exe, RawExe: rawExe, Raw: seg, Args: args})
 		if isShellWrapperExe(exe) {
 			if sub := extractInlineFlagScript(args); sub != "" {
 				collectNestedCommandInvocations(sub, depth+1, out)
@@ -99,12 +103,10 @@ func collectNestedCommandInvocations(cmdLine string, depth int, out *[]shellComm
 	}
 }
 
-// isShellWrapperExe reports whether exe evaluates inline command strings via wrapper flags.
 func isShellWrapperExe(exe string) bool {
 	return exe == "sh" || exe == "bash" || exe == "zsh" || exe == "dash" || exe == "ksh" || exe == "eval"
 }
 
-// extractInlineFlagScript extracts the inline command argument following -c, -lc, or -ic.
 func extractInlineFlagScript(args []string) string {
 	for i := 0; i < len(args)-1; i++ {
 		if args[i] == "-c" || args[i] == "-lc" || args[i] == "-ic" {
@@ -114,17 +116,17 @@ func extractInlineFlagScript(args []string) string {
 	return ""
 }
 
-// hasInterpreterSubprocessEscape detects inline Python or Node child-process execution calls.
-func hasInterpreterSubprocessEscape(inv shellCommandInvocation) bool {
+// HasInterpreterSubprocessEscape detects inline Python or Node child-process execution calls.
+func HasInterpreterSubprocessEscape(inv ShellCommandInvocation) bool {
 	lowerRaw := strings.ToLower(inv.Raw)
-	if isPythonExe(inv.Exe) && pythonSubprocessHint.MatchString(lowerRaw) {
+	if IsPythonExe(inv.Exe) && pythonSubprocessHint.MatchString(lowerRaw) {
 		return true
 	}
 	return inv.Exe == "node" && nodeSubprocessHint.MatchString(lowerRaw)
 }
 
-// hasDisallowedHiddenDotScript blocks hidden dot-directory scripts except trusted project .tmp test suites.
-func hasDisallowedHiddenDotScript(raw string, untrustedProject bool) bool {
+// HasDisallowedHiddenDotScript blocks hidden dot-directory scripts except trusted project .tmp test suites.
+func HasDisallowedHiddenDotScript(raw string, untrustedProject bool) bool {
 	for _, m := range hiddenDotScriptRe.FindAllStringSubmatch(raw, -1) {
 		if len(m) < 3 {
 			continue
@@ -141,7 +143,6 @@ func hasDisallowedHiddenDotScript(raw string, untrustedProject bool) bool {
 	return false
 }
 
-// isAllowedScratchTmpTestScript allows non-shell scratch test scripts strictly under .tmp/tests/ or .tmp/test_*.
 func isAllowedScratchTmpTestScript(subPath string) bool {
 	if strings.Contains(subPath, "..") || strings.HasSuffix(subPath, ".sh") || strings.HasSuffix(subPath, ".pl") {
 		return false
@@ -149,8 +150,8 @@ func isAllowedScratchTmpTestScript(subPath string) bool {
 	return strings.HasPrefix(subPath, "tests/") || strings.HasPrefix(subPath, "test_")
 }
 
-// stripSafeFileWriteHeredocBodies removes inert source-write heredoc contents before downstream regex checks.
-func stripSafeFileWriteHeredocBodies(cmdLine string) string {
+// StripSafeFileWriteHeredocBodies removes inert source-write heredoc contents before downstream regex checks.
+func StripSafeFileWriteHeredocBodies(cmdLine string) string {
 	lines := strings.Split(cmdLine, "\n")
 	out := make([]string, 0, len(lines))
 	delim, skipBody := "", false
@@ -175,7 +176,6 @@ func stripSafeFileWriteHeredocBodies(cmdLine string) string {
 	return strings.Join(out, "\n")
 }
 
-// extractSafeHeredocDelim returns the heredoc delimiter token on a shell header line, if present.
 func extractSafeHeredocDelim(line string) string {
 	if m := heredocHeaderDelimRe.FindStringSubmatch(strings.TrimSpace(line)); len(m) == 2 {
 		return m[1]
@@ -183,12 +183,11 @@ func extractSafeHeredocDelim(line string) string {
 	return ""
 }
 
-// isSafeSourceHeredocHeader verifies that a heredoc segment writes source text via cat/tee without pipe execution.
 func isSafeSourceHeredocHeader(line string) bool {
 	if heredocPipeExecRe.MatchString(line) {
 		return false
 	}
-	for _, seg := range splitUnquotedShellSegments(line) {
+	for _, seg := range SplitUnquotedShellSegments(line) {
 		if extractSafeHeredocDelim(seg) == "" {
 			continue
 		}
@@ -204,9 +203,8 @@ func isSafeSourceHeredocHeader(line string) bool {
 	return false
 }
 
-// extractHeredocHeaderExe resolves the leading non-wrapper command executable of a heredoc header segment.
 func extractHeredocHeaderExe(line string) string {
-	for _, tok := range tokenizeQuotedShellWords(line) {
+	for _, tok := range TokenizeQuotedShellWords(line) {
 		if isShellEnvAssignmentToken(tok) {
 			continue
 		}

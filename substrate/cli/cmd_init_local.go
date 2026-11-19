@@ -200,3 +200,58 @@ func clearLocalStealthExcludes(absDir string) error {
 	}
 	return nil
 }
+
+func collectGovernanceStagePaths(absDir string) []string {
+	candidates := []string{
+		".gitignore",
+		constants.FileNomosYAML,
+		constants.FileNomosBaselineJSON,
+		"AGENTS.md",
+		"CLAUDE.md",
+		hookcmd.AgentsDirToken,
+		filepath.Join(claudeDirToken, settingsFileName),
+		filepath.Join(geminiDirToken, settingsFileName),
+		filepath.Join(hookcmd.CursorDirToken, hookcmd.HooksFileName),
+		filepath.Join(openCodeDirToken, "plugins", "nomos.ts"),
+	}
+	existing := make([]string, 0, len(candidates))
+	for _, rel := range candidates {
+		if _, err := os.Stat(filepath.Join(absDir, rel)); err == nil {
+			existing = append(existing, rel)
+		}
+	}
+	return existing
+}
+
+func hasExistingReleaseProvenance(absDir string) bool {
+	return workspace.SafeGitCommand(absDir, "notes", "--ref=nomos/releases", "show", "HEAD").Run() == nil
+}
+
+func isProtectedToolchainTarget(absDir string) bool {
+	return os.Getenv("NOMOS_IN_TOOLCHAIN_GATE") == "1" && hasExistingReleaseProvenance(absDir)
+}
+
+func stageAndCommitGovernanceOnly(absDir string) (bool, error) {
+	if hasExistingReleaseProvenance(absDir) {
+		return false, nil
+	}
+	govPaths := collectGovernanceStagePaths(absDir)
+	if len(govPaths) == 0 {
+		return false, nil
+	}
+	addArgs := append([]string{"add", "--"}, govPaths...)
+	if err := workspace.SafeGitCommand(absDir, addArgs...).Run(); err != nil {
+		return false, err
+	}
+	diffArgs := append([]string{"diff", "--cached", "--quiet", "--"}, govPaths...)
+	if err := workspace.SafeGitCommand(absDir, diffArgs...).Run(); err == nil {
+		return false, nil
+	}
+	commitArgs := append([]string{"commit", "--only", "-m", "chore: initialize Nomos deterministic governance", "--"}, govPaths...)
+	commitCmd := workspace.SafeGitCommand(absDir, commitArgs...)
+	commitCmd.Env = append(commitCmd.Env, "NOMOS_INIT_IN_PROGRESS=1")
+	if err := commitCmd.Run(); err != nil {
+		return false, err
+	}
+	return true, nil
+}
