@@ -313,7 +313,7 @@ type UpdateCheckCache struct {
 
 ### 4.12 `nomos update`
 * **Syntax**: `nomos update [--check] [--version <TAG>] [--sync-workspace] [--dir <PATH>] [--json]`
-* **Semantics**: Evaluates binary install provenance (`standalone`, `homebrew`, `aur`, `nix`, or `system`) and resolves release tags via HTTP redirect or API fallback. Verifies `checksums.txt` SHA-256 digests and atomically replaces standalone binaries, staging `.old` aside on Windows. Rejects in-place overwrites of package-manager binaries with platform-accurate upgrade remedies. Refreshes managed `AGENTS.md`, `CLAUDE.md`, ambient lifecycle hooks, and `nomos.yaml` schema tags under `--sync-workspace`. Caches release checks for 24 hours under `NOMOS_HOME` for `handshake` and `version` notices (`NOMOS_NO_UPDATE_CHECK=1` opts out).
+* **Semantics**: Evaluates binary install provenance (`standalone`, `homebrew`, `aur`, `nix`, or `system`) and resolves release tags via HTTP redirect or API fallback. Verifies `checksums.txt` SHA-256 digests and atomically replaces standalone binaries, staging `.old` aside on Windows. Rejects in-place overwrites of package-manager binaries with platform-accurate upgrade remedies. Detects contract drift across `AGENTS.md`, `CLAUDE.md`, `nomos.yaml` schema tags, and present agent hook adapters (`.agents`, `.claude`, `.cursor`, `.gemini`, `.opencode`). Refreshes only present repo adapters and preserves `.git/info/exclude` stealth blocks under `--sync-workspace`. Caches release checks for 24 hours under `NOMOS_HOME` for `handshake` and `version` notices (`NOMOS_NO_UPDATE_CHECK=1` opts out).
 
 ### 4.13 Pre-Tag GoReleaser, Semver Parity & Changelog Airlock
 * **Gate Coordinate**: `Cell 3.3 (release_receipt)` (`ReleaseReceiptGate`) and 2PC release readiness checks.
@@ -403,6 +403,7 @@ type UpdateCheckCache struct {
 | `TC-UPD-004` | Law 1 (24h Cached Update Notice) | `nomos handshake` / `nomos version` cached check | Emits 24h cached update notice; honors `NOMOS_NO_UPDATE_CHECK=1` |
 | `TC-UPD-005` | Law 4 (Workspace Contract Refresh) | `nomos update --sync-workspace` on drifted workspace | Detects managed template drift and refreshes contracts idempotently |
 | `TC-UPD-006` | Law 5 & Law 7 (Windows Swap & Linux Provenance) | `AtomicReplaceBinary` over active binary and non-Arch `/usr/bin/nomos` | Stages `.old` backup cleanly on Windows and classifies non-Arch `/usr/bin` as `system` |
+| `TC-UPD-007` | Law 3 & Law 6 (Selective Adapter & Stealth Sync) | `nomos update --check` and `--sync-workspace` on `--agents` or `--local` repo | Detects and refreshes present adapters; preserves `.git/info/exclude` stealth blocks |
 | `TC-INIT-01` | Law 4 & Law 7 (Day-0 Boundary & Mneme Seed) | `nomos init` on layered brownfield repo | Scaffolds zero-violation `architecture_boundaries` and seeds `mneme.db` idempotently |
 | `TC-INIT-02` | Law 1 (Cold-Start Recall & Lean Steering) | `nomos handshake` with `intent_twin_mode: off` and zero `pattern` records | Recalls Day-0 `architecture` memory and steers `IDLE` to `chore` |
 | `TC-INIT-03` | Law 4 & Law 7 (Auto-Calibrated Baseline Lock) | `nomos init --baseline` on legacy repository with pre-existing debt | Writes `nomos.baseline.json`, sets `strict_mode: false`, and freezes observed `BaselineEnvelope` |
