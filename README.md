@@ -136,7 +136,7 @@ nomos init --worktrees
 # Enforce zero-trust PR mutation proofs in GitHub Actions:
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }
-- uses: mgantlett/nomos@v4.26.0
+- uses: mgantlett/nomos@v4.27.0
   with: { base-ref: origin/main, mutate-diff: 'true' }
 ```
 
