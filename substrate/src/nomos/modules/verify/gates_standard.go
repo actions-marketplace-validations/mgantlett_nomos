@@ -59,8 +59,10 @@ func isPolyglotTargetFile(path string) bool {
 // CognitiveDebtGate verifies workspace cognitive debt scores.
 type CognitiveDebtGate struct{}
 
+// Name returns the canonical display name.
 func (g *CognitiveDebtGate) Name() string { return "Cognitive Debt Score Invariant" }
 
+// Evaluate scans modified or repository files for cognitive debt and clone bounds.
 func (g *CognitiveDebtGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
 	root := ctx.WorktreePath
 	if root == "" {
@@ -168,8 +170,10 @@ func (s corpusCloneWalkSpec) visitPath(path string, info os.FileInfo, walkErr er
 // MaxFileLOCGate verifies that no file exceeds the line length limit.
 type MaxFileLOCGate struct{}
 
+// Name returns the canonical display name.
 func (g *MaxFileLOCGate) Name() string { return "Max File LOC Invariant" }
 
+// Evaluate verifies target file LOC and package fan-out bounds.
 func (g *MaxFileLOCGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
 	root := ctx.WorktreePath
 	if root == "" {
@@ -218,8 +222,10 @@ func countFileLines(path string) int {
 // ComplexityGate verifies cyclomatic complexity and function LOC bounds.
 type ComplexityGate struct{}
 
+// Name returns the canonical display name.
 func (g *ComplexityGate) Name() string { return "Cognitive Complexity Invariant" }
 
+// Evaluate verifies function cyclomatic complexity, LOC, and arity bounds.
 func (g *ComplexityGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
 	root := ctx.WorktreePath
 	if root == "" {
@@ -294,8 +300,10 @@ func collectFunctionMetrics(node *ast.File, fset *token.FileSet, relPath string,
 // HermeticWorktreeGate verifies worktree boundaries.
 type HermeticWorktreeGate struct{}
 
+// Name returns the canonical display name.
 func (g *HermeticWorktreeGate) Name() string { return "Hermetic Worktree Invariant" }
 
+// Evaluate verifies isolated worktree task boundary invariants.
 func (g *HermeticWorktreeGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
 	if ctx.WorktreePath == "" {
 		return &vscope.GateResult{GateName: g.Name(), Passed: true, Message: "no worktree path specified"}, nil
@@ -321,8 +329,10 @@ func (g *HermeticWorktreeGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.Gate
 // PhaseDisciplineGate verifies lifecycle phase state.
 type PhaseDisciplineGate struct{}
 
+// Name returns the canonical display name.
 func (g *PhaseDisciplineGate) Name() string { return "Phase Discipline Invariant" }
 
+// Evaluate verifies active lifecycle phase state validity.
 func (g *PhaseDisciplineGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
 	if ctx == nil || ctx.Phase == "" {
 		return &vscope.GateResult{GateName: g.Name(), Passed: true, Message: "no active phase enforced"}, nil
@@ -340,8 +350,10 @@ func (g *PhaseDisciplineGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateR
 // CanonicalSingularityGate verifies task key formatting.
 type CanonicalSingularityGate struct{}
 
+// Name returns the canonical display name.
 func (g *CanonicalSingularityGate) Name() string { return "Canonical Singularity Invariant" }
 
+// Evaluate verifies task key prefixes match canonical INT-<N> or SUB-<N> format.
 func (g *CanonicalSingularityGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
 	if ctx.TaskID == "" {
 		return &vscope.GateResult{GateName: g.Name(), Passed: true, Message: "no task id specified"}, nil

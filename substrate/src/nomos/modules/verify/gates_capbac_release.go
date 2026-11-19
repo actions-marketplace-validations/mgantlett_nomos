@@ -272,8 +272,10 @@ func countPolyglotFiles(root string, dirs []string) (int, error) {
 // ZeroFilesystemAliasGate strictly enforces Law 6 by rejecting filesystem symlinks.
 type ZeroFilesystemAliasGate struct{}
 
+// Name returns the canonical display name.
 func (g *ZeroFilesystemAliasGate) Name() string { return "Zero Filesystem Alias Invariant" }
 
+// Evaluate rejects filesystem symlinks across target workspace paths.
 func (g *ZeroFilesystemAliasGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
 	root := ctx.WorktreePath
 	if root == "" {
@@ -312,8 +314,10 @@ func (g *ZeroFilesystemAliasGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.G
 // PlaneSeparationGate enforces Law 7 by rejecting cross-plane mutations (SUB mutating intent, INT mutating substrate).
 type PlaneSeparationGate struct{}
 
+// Name returns the canonical display name.
 func (g *PlaneSeparationGate) Name() string { return "Plane Separation Invariant" }
 
+// Evaluate rejects cross-plane mutations between Intent and Substrate roots.
 func (g *PlaneSeparationGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
 	if ctx.TaskID == "" || ctx.IsBaseline {
 		return &vscope.GateResult{GateName: g.Name(), Passed: true, Message: "plane separation verified (baseline or unassigned task)"}, nil

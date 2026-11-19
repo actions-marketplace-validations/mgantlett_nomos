@@ -20,8 +20,10 @@ import (
 // UncheckedErrorsGate verifies that error return values are checked.
 type UncheckedErrorsGate struct{}
 
+// Name returns the canonical display name.
 func (g *UncheckedErrorsGate) Name() string { return "Unchecked Error Hygiene Invariant" }
 
+// Evaluate checks target source files for discarded error return values.
 func (g *UncheckedErrorsGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
 	root := ctx.WorktreePath
 	if root == "" {
@@ -144,8 +146,10 @@ func evaluatePolyglotUncheckedFile(ctx *vscope.VerifyContext, root, path string)
 // GoToolchainGate asserts clean compilation under the standard Go toolchain.
 type GoToolchainGate struct{}
 
+// Name returns the canonical display name.
 func (g *GoToolchainGate) Name() string { return "Go Toolchain Gate" }
 
+// Evaluate executes Go and polyglot syntax and test toolchains.
 func (g *GoToolchainGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
 	if os.Getenv(polyrun.EnvInToolchainGate) == "1" {
 		return &vscope.GateResult{GateName: g.Name(), Passed: true, Message: "re-entrant toolchain execution bypassed"}, nil
