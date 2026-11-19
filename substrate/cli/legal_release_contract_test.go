@@ -221,6 +221,16 @@ func operationalSurfaceContractCases() []repoContractCase {
 			},
 			forbid: []string{"cockpit"},
 		},
+		{
+			name:    "npm launcher script verifies SHA-256 checksums before execution",
+			relPath: filepath.Join("packaging", "npm", "bin", "nomos-cli.mjs"),
+			mustHave: []string{
+				"#!/usr/bin/env node",
+				"checksums.txt",
+				"createHash('sha256')",
+			},
+			forbid: []string{"cockpit"},
+		},
 	}
 }
 
