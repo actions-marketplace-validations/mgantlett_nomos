@@ -92,6 +92,36 @@ governance:
                   - "substrate/src/nomos/modules/verify/**"
                   - "substrate/src/nomos/modules/session/**"
                   - "substrate/src/nomos/modules/handshake/**"
+            - name: "hookcmd-shellguard-leaf"
+              from: "substrate/cli/hookcmd/shellguard/**"
+              forbid_imports:
+                  - "substrate/cli/hookcmd/containerguard/**"
+                  - "substrate/src/nomos/modules/verify/**"
+                  - "substrate/src/nomos/modules/session/**"
+                  - "substrate/src/nomos/modules/handshake/**"
+            - name: "hookcmd-containerguard-leaf"
+              from: "substrate/cli/hookcmd/containerguard/**"
+              forbid_imports:
+                  - "substrate/src/nomos/modules/**"
+            - name: "verify-ratchet-leaf"
+              from: "substrate/src/nomos/modules/verify/ratchet/**"
+              forbid_imports:
+                  - "substrate/src/nomos/modules/verify/polygate/**"
+                  - "substrate/src/nomos/modules/verify/intentlint/**"
+                  - "substrate/src/nomos/modules/verify/xray/**"
+                  - "substrate/src/nomos/modules/session/**"
+                  - "substrate/src/nomos/modules/handshake/**"
+                  - "substrate/src/nomos/modules/task/**"
+                  - "substrate/src/nomos/modules/mem/**"
+            - name: "verify-polygate-leaf"
+              from: "substrate/src/nomos/modules/verify/polygate/**"
+              forbid_imports:
+                  - "substrate/src/nomos/modules/verify/intentlint/**"
+                  - "substrate/src/nomos/modules/verify/xray/**"
+                  - "substrate/src/nomos/modules/session/**"
+                  - "substrate/src/nomos/modules/handshake/**"
+                  - "substrate/src/nomos/modules/task/**"
+                  - "substrate/src/nomos/modules/mem/**"
         contracts:
             contracts:
                 enabled: true
@@ -115,4 +145,4 @@ governance:
             min_clone_lines: 14
             max_func_params: 7
             max_magic_string_duplication: 8
-            max_package_files: 30
+            max_package_files: 20
