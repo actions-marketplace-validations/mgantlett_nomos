@@ -203,7 +203,7 @@ func (g *CapabilityFlowGraph) evaluateSinkViolation(cmd string) (FlowDecision, b
 				Role:          FlowRoleSinkPrivilegedRelease,
 				ViolatedLabel: TaintUntrustedExternal,
 				Reason: fmt.Sprintf(
-					"❌ [NOMOS CAPABILITY-FLOW INTERCEPT] Privileged release sink blocked (Law 2 & Law 7): session ingested untrusted external input via '%s' (%s). Run 'nomos verify' to sanitize workspace state before pushing or publishing.",
+					"❌ [NOMOS CAPABILITY-FLOW INTERCEPT] Privileged release sink blocked (Law 2 & Law 7): session ingested untrusted external input via '%s' (%s). Run standalone 'nomos verify' first (not chained with '&&') to sanitize workspace state before pushing or publishing.",
 					edge.SourceTool, edge.Resource,
 				),
 			}, true

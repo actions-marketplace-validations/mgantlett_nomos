@@ -83,6 +83,32 @@ func clearTwinRequiredLatch(worktreeDir, taskKey string) {
 	}
 }
 
+// PreviewWorktreeTwinSurfaceWarning returns a non-latching advisory when an untwinned SUB-* worktree expands normative surface (#NormativeSurfaceDelta).
+// @intent nomos_hermetic_worktree_spec.md #NormativeSurfaceDelta
+func PreviewWorktreeTwinSurfaceWarning(worktreeDir, taskKey string) string {
+	cleanDir := strings.TrimSpace(worktreeDir)
+	if cleanDir == "" {
+		return ""
+	}
+	cleanKey := resolveSubTaskKeyForPreflight(cleanDir, taskKey)
+	if !strings.HasPrefix(cleanKey, "SUB-") {
+		return ""
+	}
+	mode := loadEffectiveWorktreeTwinMode(cleanDir)
+	rank, ok := config.IntentTwinModeRank(mode)
+	if !ok || rank == 0 || hasBoundIntentTwinForSubTask(cleanDir, cleanKey) {
+		return ""
+	}
+	delta := InspectWorktreeNormativeSurface(cleanDir)
+	if !delta.HasChanges() {
+		return ""
+	}
+	return fmt.Sprintf(
+		"⚠️  [Nomos Contract Radar] [%s] modifies normative contract surface (%s) without a bound Intent twin (intent_twin_mode=%s). Before running 'nomos verify' or 'nomos task commit' (which arm the anti-evasion latch), either keep internal helpers unexported or %s",
+		cleanKey, delta.Summary(), mode, IntentTwinModeRemedy(cleanKey),
+	)
+}
+
 // EvaluateWorktreeTwinPreflight inspects uncommitted SUB-* worktrees for untwinned normative surface changes (#NormativeSurfaceDelta).
 // @intent nomos_hermetic_worktree_spec.md #NormativeSurfaceDelta
 func EvaluateWorktreeTwinPreflight(worktreeDir, taskKey string) string {

@@ -143,3 +143,32 @@ func bindLedgerPairForTest(t *testing.T, intKey, subKey string) {
 		t.Fatalf("BindTwin: %v", bErr)
 	}
 }
+
+// TestTC_CMT_012_PreLatchPreviewWarningAllowsMidEditUnexport verifies non-latching PostToolUse surface radar previews.
+// @verifies TC-CMT-012
+func TestTC_CMT_012_PreLatchPreviewWarningAllowsMidEditUnexport(t *testing.T) {
+	t.Setenv("NOMOS_HOME", t.TempDir())
+	repo := initSurfaceTestRepo(t)
+	writeSurfaceTestFile(t, filepath.Join(repo, "nomos.yaml"), "project: demo\ndefault_branch: main\ngovernance:\n  quality_gates:\n    intent_twin_mode: feat\n")
+	goFile := filepath.Join(repo, "substrate", "mem", "draft.go")
+	writeSurfaceTestFile(t, goFile, "package mem\n\nfunc seedOnly() bool { return true }\n")
+	runSurfaceGit(t, repo, "add", "-A")
+	runSurfaceGit(t, repo, "commit", "-m", "[INT-42] feat(mem): seed draft\n\nSeed baseline.\n\n___\n\nTask: INT-42")
+	runSurfaceGit(t, repo, "checkout", "-b", "feature/SUB-913")
+
+	writeSurfaceTestFile(t, goFile, "package mem\n\nfunc IsDraftExport() bool { return true }\n")
+	warn := PreviewWorktreeTwinSurfaceWarning(repo, "SUB-913")
+	if !strings.Contains(warn, "[Nomos Contract Radar]") || !strings.Contains(warn, "IsDraftExport") || !strings.Contains(warn, "--twin-of SUB-913") {
+		t.Fatalf("expected non-latching Contract Radar warning with --twin-of SUB-913, got: %s", warn)
+	}
+	if _, statErr := os.Stat(twinLatchFilePath(repo, "SUB-913")); !os.IsNotExist(statErr) {
+		t.Fatalf("expected PreviewWorktreeTwinSurfaceWarning not to create latch file, statErr=%v", statErr)
+	}
+
+	// Unexporting during EDIT (before verify/commit) passes CommitSchemaGate cleanly without false anti-evasion latch.
+	writeSurfaceTestFile(t, goFile, "package mem\n\nfunc isDraftExport() bool { return true }\n")
+	res, err := (&CommitSchemaGate{}).Evaluate(&vscope.VerifyContext{RepoRoot: repo, WorktreePath: repo, TaskID: "SUB-913"})
+	if err != nil || res == nil || !res.Passed {
+		t.Fatalf("expected mid-edit unexport before verify/commit to pass CommitSchemaGate, got res=%+v err=%v", res, err)
+	}
+}

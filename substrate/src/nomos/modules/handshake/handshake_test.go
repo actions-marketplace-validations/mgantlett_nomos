@@ -186,3 +186,30 @@ func TestSynthesizeDynamicHandshake_ColdStartArchitectureAndLeanChore(t *testing
 		}
 	}
 }
+
+// @verifies TC-JIT-05
+func TestSynthesizeDynamicHandshake_ActiveWorktrees(t *testing.T) {
+	t.Setenv("NOMOS_HOME", t.TempDir())
+	repoDir := filepath.Join(t.TempDir(), "multi-wt-repo")
+	for _, wtName := range []string{"multi-wt-repo-SUB-205", "multi-wt-repo-INT-102", "scratch-ignore"} {
+		wtDir := filepath.Join(repoDir, "worktrees", wtName)
+		if err := os.MkdirAll(wtDir, 0755); err != nil {
+			t.Fatalf("mkdir %s: %v", wtName, err)
+		}
+		if wtName != "scratch-ignore" {
+			if err := os.WriteFile(filepath.Join(wtDir, ".git"), []byte("gitdir: ../../.git/worktrees/"+wtName+"\n"), 0644); err != nil {
+				t.Fatalf("write .git: %v", err)
+			}
+		}
+	}
+	if err := os.WriteFile(filepath.Join(repoDir, "nomos.yaml"), []byte("project: multi-wt-repo\ndefault_branch: main\n"), 0644); err != nil {
+		t.Fatalf("write nomos.yaml: %v", err)
+	}
+	ev, err := handshake.SynthesizeDynamicHandshake(repoDir)
+	if err != nil {
+		t.Fatalf("SynthesizeDynamicHandshake: %v", err)
+	}
+	if strings.Join(ev.ActiveWorktrees, ",") != "INT-102,SUB-205" {
+		t.Fatalf("expected sorted ActiveWorktrees [INT-102, SUB-205], got: %v", ev.ActiveWorktrees)
+	}
+}

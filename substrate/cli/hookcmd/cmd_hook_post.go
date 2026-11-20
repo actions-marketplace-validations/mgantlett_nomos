@@ -148,7 +148,10 @@ func EvaluatePostToolHook(p *shellguard.HookPayload, hermeticDir string) string 
 		return joinHookAdvisories(syntaxMsg, pitfallMsg)
 	}
 	radarAndHygiene := joinHookAdvisories(
-		evaluateFastRadarInMemory(resolved, baseCwd),
+		joinHookAdvisories(
+			evaluateFastRadarInMemory(resolved, baseCwd),
+			evaluateTwinSurfaceRadarAdvisory(resolved),
+		),
 		evaluateTestPlacementHygieneAdvisory(resolved, baseCwd),
 	)
 	return joinHookAdvisories(radarAndHygiene, pitfallMsg)
@@ -256,6 +259,14 @@ func evaluateFastRadarInMemory(resolved, baseCwd string) string {
 		lines = append(lines, fmt.Sprintf("⚠️  %s %s: %s", tag, res.File, w))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func evaluateTwinSurfaceRadarAdvisory(resolved string) string {
+	_, wtRoot, taskKey, ok := extractWorktreeContextFromFile(resolved)
+	if !ok || !strings.HasPrefix(taskKey, "SUB-") {
+		return ""
+	}
+	return verify.PreviewWorktreeTwinSurfaceWarning(wtRoot, taskKey)
 }
 
 func evaluateMTPOPostToolAdvisory(resolved string) string {

@@ -8,13 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
-	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
-
-	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
 )
 
 const (
@@ -241,10 +237,6 @@ func maxLoopStrikesWithThreshold(p *shellguard.HookPayload, strikes int) int {
 	return clampAdvisoryInt(strikes, minLoopStrikes, maxLoopStrikesBound)
 }
 
-func resolveLoopTrackingDir(p *shellguard.HookPayload, hermeticDir string) string {
-	return resolveHookWorkspaceDir(p, hermeticDir)
-}
-
 func computeInvocationFingerprint(p *shellguard.HookPayload) string {
 	raw := strings.ToLower(strings.TrimSpace(p.ToolName)) + "|" +
 		strings.TrimSpace(p.TargetFile) + "|" +
@@ -286,83 +278,4 @@ func saveLoopBreakerState(path string, st loopBreakerState) {
 	if wErr := os.WriteFile(path, data, 0600); wErr != nil {
 		return
 	}
-}
-
-func hashWorkspaceFileStamp(path string, info os.FileInfo) string {
-	if info.Size() <= maxDigestFileBytes && info.Mode().IsRegular() {
-		if data, err := os.ReadFile(path); err == nil {
-			sum := sha256.Sum256(data)
-			return fmt.Sprintf("%d:%x", info.Size(), sum[:8])
-		}
-	}
-	return fmt.Sprintf("%d:%d", info.Size(), info.ModTime().UnixNano())
-}
-
-func computeWorkspaceMtimeDigest(rootDir string) string {
-	cleanRoot := filepath.Clean(rootDir)
-	if gitDigest, ok := computeGitWorkspaceDigest(cleanRoot); ok {
-		return gitDigest
-	}
-	var records []string
-	maxFiles := 512
-	walkErr := filepath.WalkDir(cleanRoot, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if d.IsDir() {
-			if skippedStopAuditDirs[d.Name()] || d.Name() == "worktrees" || d.Name() == ".tmp" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if len(records) >= maxFiles {
-			return fs.SkipAll
-		}
-		if info, iErr := d.Info(); iErr == nil {
-			rel, rErr := filepath.Rel(cleanRoot, path)
-			if rErr != nil {
-				rel = path
-			}
-			records = append(records, fmt.Sprintf("%s:%s", filepath.ToSlash(rel), hashWorkspaceFileStamp(path, info)))
-		}
-		return nil
-	})
-	if walkErr != nil {
-		return "walk-err"
-	}
-	sort.Strings(records)
-	sum := sha256.Sum256([]byte(strings.Join(records, "\n")))
-	return hex.EncodeToString(sum[:16])
-}
-
-func computeGitWorkspaceDigest(cleanRoot string) (string, bool) {
-	if _, err := os.Stat(filepath.Join(cleanRoot, ".git")); err != nil {
-		return "", false
-	}
-	out, err := workspace.SafeGitCommand(cleanRoot, "status", "--porcelain", "-uall").Output()
-	if err != nil {
-		return "", false
-	}
-	var records []string
-	if headOut, hErr := workspace.SafeGitCommand(cleanRoot, "rev-parse", "HEAD").Output(); hErr == nil {
-		records = append(records, "HEAD:"+strings.TrimSpace(string(headOut)))
-	}
-	for _, line := range strings.Split(string(out), "\n") {
-		if len(line) < 4 {
-			continue
-		}
-		rel := strings.TrimSpace(line[3:])
-		if idx := strings.Index(rel, " -> "); idx >= 0 {
-			rel = strings.TrimSpace(rel[idx+4:])
-		}
-		full := filepath.Join(cleanRoot, filepath.FromSlash(rel))
-		if info, sErr := os.Stat(full); sErr == nil {
-			records = append(records, fmt.Sprintf("%s:%s", line, hashWorkspaceFileStamp(full, info)))
-		} else {
-			records = append(records, line+":deleted")
-		}
-	}
-	sort.Strings(records)
-	sum := sha256.Sum256([]byte(strings.Join(records, "\n")))
-	return hex.EncodeToString(sum[:16]), true
 }

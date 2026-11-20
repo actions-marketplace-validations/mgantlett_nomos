@@ -121,18 +121,34 @@ func renderHandshakePhaseAndLease(event *handshake.HandshakeEvent) {
 			tui.StyleSemanticBadge(string(event.Phase)),
 			tui.UiMutedStyle.Render("(Trunk baseline)"))
 		fmt.Println(tui.KvLine("Workspace Phase", 17, phaseVal))
+		renderHandshakeActiveWorktrees(event.ActiveWorktrees)
 		return
 	}
 	phaseVal := fmt.Sprintf("%s %s",
 		tui.StyleSemanticBadge(string(event.Phase)),
 		tui.UiMutedStyle.Render("(Task: "+tui.StyleTaskKey(event.ActiveTask)+")"))
 	fmt.Println(tui.KvLine("Workspace Phase", 17, phaseVal))
+	renderHandshakeActiveWorktrees(event.ActiveWorktrees)
 	if event.TokenID != "" {
 		leaseVal := fmt.Sprintf("%s %s",
 			tui.UiCommandStyle.Render(event.TokenID),
 			tui.UiMutedStyle.Render(fmt.Sprintf("[Budget: %d, Used: %d]", event.StepBudget, event.TokensUsed)))
 		fmt.Println(tui.KvLine("CapBAC Lease", 17, leaseVal))
 	}
+}
+
+func renderHandshakeActiveWorktrees(keys []string) {
+	if len(keys) == 0 {
+		return
+	}
+	styled := make([]string, 0, len(keys))
+	for _, k := range keys {
+		styled = append(styled, tui.StyleTaskKey(k))
+	}
+	val := fmt.Sprintf("[%s] %s",
+		strings.Join(styled, ", "),
+		tui.UiMutedStyle.Render("(isolated - safe to run parallel tasks)"))
+	fmt.Println(tui.KvLine("Active Worktrees", 17, val))
 }
 
 func renderHandshakeUpdateAndDriftAdvisories(hookRoot string) {
@@ -209,6 +225,7 @@ func renderBrownfieldHandshakeBanner(event *handshake.HandshakeEvent, bf *handsh
 			tui.UiMutedStyle.Render("(Trunk baseline)"))
 		fmt.Println(tui.KvLine("Workspace Phase", 17, phaseVal))
 	}
+	renderHandshakeActiveWorktrees(event.ActiveWorktrees)
 	govVal := fmt.Sprintf("BROWNFIELD (scope=%s, tdd=%s, cov=%s, %d gates)",
 		hookcmd.EffectiveBriefScope(bf), bf.TDDMode, bf.CoverageMode, event.GateCount)
 	fmt.Println(tui.KvLine("Governance Mode", 17, tui.UiBoldValueStyle.Render(govVal)))

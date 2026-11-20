@@ -332,7 +332,7 @@ func IntentTwinModeRemedy(subjectKey string) string {
 		key = "SUB-<N>"
 	}
 	return fmt.Sprintf(
-		"bind an Intent specification twin via 'nomos task create \"<spec title>\" --plane intent --twin-of %s' (or 'nomos task pair') and re-commit via 'nomos task commit'",
+		"bind an Intent specification twin via 'nomos task create \"<spec title>\" --plane intent --scope \"<spec-path>\" --ac \"<contract>\" --verify \"nomos verify\" --twin-of %s' (or 'nomos task pair \"<title>\" --scope \"<paths>\" --ac \"<deliverable>\" --verify \"nomos verify\"') and re-commit via 'nomos task commit'",
 		key,
 	)
 }
