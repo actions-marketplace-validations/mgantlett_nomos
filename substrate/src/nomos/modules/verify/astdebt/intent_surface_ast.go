@@ -2,8 +2,12 @@
 package astdebt
 
 import (
+	"bytes"
+	"fmt"
 	"go/ast"
+	"go/format"
 	"go/token"
+	"hash/fnv"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -70,7 +74,11 @@ func inspectGenDeclSurface(gd *ast.GenDecl, pkgScope string, fp *GoSurfaceFinger
 				collectCommentGroupIntentRefs(gd.Doc, s.Doc, pkgScope, s.Name.Name, fp.GovTokens)
 			}
 		case *ast.ValueSpec:
-			collectGovernanceValueSpec(s, fp.GovTokens)
+			if gd.Tok == token.CONST && pkgScope != "" {
+				collectConstThresholdSpec(pkgScope, s, fp.GovTokens)
+			} else {
+				collectGovernanceValueSpec(s, fp.GovTokens)
+			}
 		}
 	}
 }
@@ -103,6 +111,63 @@ func collectStructTaggedFields(pkgScope, typeName string, st *ast.StructType, ta
 	}
 }
 
+// collectConstThresholdSpec records exported Go consts and unexported numeric/duration/boolean/iota thresholds while skipping private prose strings.
+func collectConstThresholdSpec(pkgScope string, vs *ast.ValueSpec, out map[string]bool) {
+	if vs == nil {
+		return
+	}
+	for i, nameIdent := range vs.Names {
+		if nameIdent == nil || nameIdent.Name == "_" {
+			continue
+		}
+		valSig := "iota"
+		if i < len(vs.Values) {
+			if !nameIdent.IsExported() && isPlainStringConstExpr(vs.Values[i]) {
+				continue
+			}
+			valSig = formatConstExprCompact(vs.Values[i])
+		}
+		out["gov_const:"+pkgScope+"."+nameIdent.Name+"="+valSig] = true
+	}
+}
+
+// isPlainStringConstExpr reports whether expr is a bare Go string literal rather than a numeric, duration, or boolean threshold.
+func isPlainStringConstExpr(expr ast.Expr) bool {
+	lit, ok := expr.(*ast.BasicLit)
+	return ok && lit.Kind == token.STRING
+}
+
+// formatConstExprCompact renders a deterministic single-line Go AST constant value signature.
+func formatConstExprCompact(expr ast.Expr) string {
+	var buf bytes.Buffer
+	if err := format.Node(&buf, token.NewFileSet(), expr); err != nil {
+		return "?"
+	}
+	compact := strings.Join(strings.Fields(buf.String()), "")
+	if len(compact) > 48 {
+		compact = compact[:48]
+	}
+	return compact
+}
+
+var sqlMutationPrefixRe = regexp.MustCompile(`(?i)^\s*(CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?|ALTER\s+TABLE|DROP\s+TABLE(?:\s+IF\s+EXISTS)?|INSERT(?:\s+OR\s+[A-Z]+)?\s+INTO|UPDATE|DELETE\s+FROM)\s+` + "`?" + `([A-Za-z_][A-Za-z0-9_]*)`)
+
+// extractSQLMutationToken fingerprints SQLite DDL/DML statements so unexported persistence mutations require INT twins.
+func extractSQLMutationToken(pkgScope, literalVal string) string {
+	m := sqlMutationPrefixRe.FindStringSubmatch(literalVal)
+	if len(m) < 3 {
+		return ""
+	}
+	verb := strings.Join(strings.Fields(strings.ToUpper(m[1])), "_")
+	table := strings.ToLower(m[2])
+	h := fnv.New32a()
+	if _, err := h.Write([]byte(strings.Join(strings.Fields(strings.ToLower(literalVal)), " "))); err != nil {
+		return ""
+	}
+	return fmt.Sprintf("sql_dml:%s:%s:%s:%08x", pkgScope, verb, table, h.Sum32())
+}
+
+// collectGovernanceValueSpec extracts compiled commit schema regex literals from package var blocks.
 func collectGovernanceValueSpec(vs *ast.ValueSpec, out map[string]bool) {
 	for i, nameIdent := range vs.Names {
 		if nameIdent.Name != "goldenSubjectSchema" || i >= len(vs.Values) {

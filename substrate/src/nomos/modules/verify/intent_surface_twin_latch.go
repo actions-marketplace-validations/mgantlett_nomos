@@ -87,8 +87,11 @@ func clearTwinRequiredLatch(worktreeDir, taskKey string) {
 // @intent nomos_hermetic_worktree_spec.md #NormativeSurfaceDelta
 func EvaluateWorktreeTwinPreflight(worktreeDir, taskKey string) string {
 	cleanDir := strings.TrimSpace(worktreeDir)
-	cleanKey := strings.ToUpper(strings.TrimSpace(taskKey))
-	if cleanDir == "" || !strings.HasPrefix(cleanKey, "SUB-") {
+	if cleanDir == "" {
+		return ""
+	}
+	cleanKey := resolveSubTaskKeyForPreflight(cleanDir, taskKey)
+	if !strings.HasPrefix(cleanKey, "SUB-") {
 		return ""
 	}
 	mode := loadEffectiveWorktreeTwinMode(cleanDir)
@@ -98,19 +101,41 @@ func EvaluateWorktreeTwinPreflight(worktreeDir, taskKey string) string {
 	}
 	delta := InspectWorktreeNormativeSurface(cleanDir)
 	if delta.HasChanges() {
+		summary := delta.Summary()
+		recordTwinRequiredLatch(cleanDir, cleanKey, summary)
 		return fmt.Sprintf(
-			"Task %s expands normative contract surface (%s) with no bound INT-* twin under intent_twin_mode=%s; %s",
-			cleanKey, delta.Summary(), mode, IntentTwinModeRemedy(cleanKey),
+			"uncommitted SUB worktree [%s] modifies normative contract surface (%s) without a bound 'Twin: INT-<N>' under governance.quality_gates.intent_twin_mode=%s (Law 4 & Law 7)",
+			cleanKey, summary, mode,
 		)
 	}
 	if latched := readTwinRequiredLatch(cleanDir, cleanKey); latched != "" {
 		return fmt.Sprintf(
-			"Task %s has an active normative-surface latch (%s) with no bound INT-* twin; %s",
-			cleanKey, latched, IntentTwinModeRemedy(cleanKey),
+			"uncommitted SUB worktree [%s] previously triggered normative surface expansion (%s); hiding or unexporting symbols to evade 'Twin: INT-<N>' is prohibited (Law 1 & Law 4)",
+			cleanKey, latched,
 		)
 	}
 	if mode == config.IntentTwinModeStrict {
-		return fmt.Sprintf("Task %s has no bound INT-* twin under intent_twin_mode=strict; %s", cleanKey, IntentTwinModeRemedy(cleanKey))
+		return fmt.Sprintf("uncommitted SUB worktree [%s] requires a bound 'Twin: INT-<N>' under governance.quality_gates.intent_twin_mode=strict (Law 7)", cleanKey)
+	}
+	return ""
+}
+
+// resolveSubTaskKeyForPreflight derives the active SUB-* task key from explicit input or feature/SUB-<N> branch naming.
+func resolveSubTaskKeyForPreflight(worktreeDir, taskKey string) string {
+	if clean := strings.ToUpper(strings.TrimSpace(taskKey)); clean != "" {
+		return clean
+	}
+	out, err := workspace.SafeGitCommand(worktreeDir, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	if err != nil {
+		return ""
+	}
+	branch := strings.TrimSpace(string(out))
+	if idx := strings.LastIndex(branch, "/"); idx >= 0 {
+		branch = branch[idx+1:]
+	}
+	upper := strings.ToUpper(branch)
+	if canonicalTaskTrailerValRe.MatchString(upper) {
+		return upper
 	}
 	return ""
 }

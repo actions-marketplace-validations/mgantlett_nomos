@@ -104,11 +104,11 @@ func InspectWorktreeNormativeSurface(worktreeDir string) NormativeSurfaceDelta {
 	}
 }
 
-// pruneSurvivingPackageGovTokens removes false-positive "-gov_rule:..." deltas when a sibling file in the same package still carries the rule token.
+// pruneSurvivingPackageGovTokens removes false-positive "-gov_..." or "-sql_dml:..." deltas when a sibling file in the same package still carries the token.
 func pruneSurvivingPackageGovTokens(worktreeDir string, govSet map[string]bool) {
 	var removedKeys []string
 	for k := range govSet {
-		if strings.HasPrefix(k, "-gov_rule:") {
+		if strings.HasPrefix(k, "-gov_rule:") || strings.HasPrefix(k, "-gov_const:") || strings.HasPrefix(k, "-sql_dml:") {
 			removedKeys = append(removedKeys, k)
 		}
 	}
@@ -129,9 +129,15 @@ func pruneSurvivingPackageGovTokens(worktreeDir string, govSet map[string]bool) 
 }
 
 func resolveGovRuleRelDir(worktreeDir, tok string) string {
-	rest := strings.TrimPrefix(tok, "gov_rule:")
-	parts := strings.SplitN(rest, ":", 3)
-	if len(parts) == 3 && parts[0] != "" {
+	rest := tok
+	for _, pfx := range []string{"gov_rule:", "gov_const:", "sql_dml:"} {
+		if strings.HasPrefix(rest, pfx) {
+			rest = strings.TrimPrefix(rest, pfx)
+			break
+		}
+	}
+	parts := strings.SplitN(rest, ":", 2)
+	if len(parts) == 2 && parts[0] != "" {
 		if info, err := os.Stat(filepath.Join(worktreeDir, filepath.FromSlash(parts[0]))); err == nil && info.IsDir() {
 			return parts[0]
 		}

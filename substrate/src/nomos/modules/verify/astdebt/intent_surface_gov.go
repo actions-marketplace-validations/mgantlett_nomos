@@ -196,10 +196,19 @@ func inspectSurfaceBodyNode(n ast.Node, pkgScope string, govPath bool, fp *GoSur
 	case *ast.CallExpr:
 		inspectSurfaceCallExpr(x, fp)
 	case *ast.BasicLit:
-		if !govPath || x.Kind != token.STRING {
+		if x.Kind != token.STRING {
 			return
 		}
-		if val, ok := extractStringLiteral(x); ok {
+		val, ok := extractStringLiteral(x)
+		if !ok {
+			return
+		}
+		if pkgScope != "" {
+			if sqlTok := extractSQLMutationToken(pkgScope, val); sqlTok != "" {
+				fp.GovTokens[sqlTok] = true
+			}
+		}
+		if govPath {
 			if tok := extractGovRuleToken(pkgScope, val); tok != "" {
 				fp.GovTokens[tok] = true
 			}
