@@ -158,13 +158,12 @@ jobs:
       - name: Set up Node.js for Agent Registry Publishing
         uses: actions/setup-node@v6
         with:
-          node-version: '22'
-          registry-url: 'https://registry.npmjs.org'
+          node-version: '24'
 
       - name: Sync @mgantlett/nomos Launcher to npmjs.org
         env:
           RELEASE_TAG: ${{ needs.verify.outputs.release_tag }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_FALLBACK_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           CLEAN_VER="${RELEASE_TAG#v}"
           LIVE_NPM="$(curl -fsSL https://registry.npmjs.org/@mgantlett%2fnomos 2>/dev/null | jq -r '.["dist-tags"].latest // empty' || true)"
@@ -172,11 +171,20 @@ jobs:
             echo "@mgantlett/nomos@${CLEAN_VER} already published on npmjs.org; skipping."
             exit 0
           fi
-          if [ -z "${NODE_AUTH_TOKEN}" ]; then
-            echo "::notice::NPM_TOKEN secret not configured; skipping CI npm publish."
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] && [ -z "${NPM_FALLBACK_TOKEN:-}" ]; then
+            echo "::notice::Neither GitHub OIDC nor NPM_TOKEN available; skipping CI npm publish."
             exit 0
           fi
+          npm install -g npm@latest
+          if [ -n "${NPM_FALLBACK_TOKEN:-}" ]; then
+            npm config set '//registry.npmjs.org/:_authToken' "${NPM_FALLBACK_TOKEN}"
+          fi
           npm --prefix packaging/npm publish --access public --provenance
+          for i in $(seq 1 24); do
+            SEEN="$(curl -fsSL https://registry.npmjs.org/@mgantlett%2fnomos 2>/dev/null | jq -r --arg v "${CLEAN_VER}" '.versions[$v].version // empty' || true)"
+            [ "${SEEN}" = "${CLEAN_VER}" ] && break
+            sleep 5
+          done
 
       - name: Sync server.json to Official MCP Registry
         env:
