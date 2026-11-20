@@ -22,7 +22,7 @@ async function resolveEffectiveVersion() {
 		const res = await fetch('https://api.github.com/repos/mgantlett/nomos/releases/latest', {
 			headers: {
 				Accept: 'application/vnd.github+json',
-				'User-Agent': 'sophialabs-nomos-npx-launcher'
+				'User-Agent': 'mgantlett-nomos-npx-launcher'
 			},
 			signal: AbortSignal.timeout(2500)
 		});
@@ -82,7 +82,7 @@ function parseExpectedSha256(checksumsText, archiveName) {
 }
 
 async function fetchReleaseBytes(url) {
-	const res = await fetch(url, { headers: { 'User-Agent': 'sophialabs-nomos-npx-launcher' } });
+	const res = await fetch(url, { headers: { 'User-Agent': 'mgantlett-nomos-npx-launcher' } });
 	if (!res.ok) {
 		throw new Error(`Download failed (${res.status}) for ${url}`);
 	}
