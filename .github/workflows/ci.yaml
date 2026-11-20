@@ -155,17 +155,51 @@ jobs:
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ needs.verify.outputs.release_tag }}
 
-      - name: Set up Node.js for Agent Registry Publishing
+  sync_registries:
+    name: Sync Agent Package & MCP Registries
+    needs: [verify, goreleaser]
+    if: >-
+      always() &&
+      needs.verify.result == 'success' &&
+      (needs.goreleaser.result == 'success' || needs.goreleaser.result == 'skipped') &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag || github.sha }}
+
+      - name: Resolve Canonical Package Version and Verify GitHub Release Exists
+        id: pkg_ver
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CLEAN_VER="$(jq -r '.version' server.json)"
+          TAG_VER="v${CLEAN_VER}"
+          echo "clean_ver=${CLEAN_VER}" >> "$GITHUB_OUTPUT"
+          if gh release view "${TAG_VER}" --repo "${GITHUB_REPOSITORY}" --json isDraft -q '.isDraft' 2>/dev/null | grep -qx 'false'; then
+            echo "release_ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::GitHub Release ${TAG_VER} not yet published; skipping downstream launcher/MCP registry sync."
+            echo "release_ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Node.js for npm Publishing
+        if: steps.pkg_ver.outputs.release_ready == 'true'
         uses: actions/setup-node@v6
         with:
           node-version: '24'
 
       - name: Sync @mgantlett/nomos Launcher to npmjs.org
+        if: steps.pkg_ver.outputs.release_ready == 'true'
         env:
-          RELEASE_TAG: ${{ needs.verify.outputs.release_tag }}
+          CLEAN_VER: ${{ steps.pkg_ver.outputs.clean_ver }}
           NPM_FALLBACK_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          CLEAN_VER="${RELEASE_TAG#v}"
           LIVE_NPM="$(curl -fsSL https://registry.npmjs.org/@mgantlett%2fnomos 2>/dev/null | jq -r '.["dist-tags"].latest // empty' || true)"
           if [ "${LIVE_NPM}" = "${CLEAN_VER}" ]; then
             echo "@mgantlett/nomos@${CLEAN_VER} already published on npmjs.org; skipping."
@@ -186,11 +220,53 @@ jobs:
             sleep 5
           done
 
-      - name: Sync server.json to Official MCP Registry
+      - name: Set up Python for PyPI Publishing
+        if: steps.pkg_ver.outputs.release_ready == 'true'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Sync nomos-cli Launcher to PyPI via GitHub OIDC
+        id: pypi_sync
+        if: steps.pkg_ver.outputs.release_ready == 'true'
         env:
-          RELEASE_TAG: ${{ needs.verify.outputs.release_tag }}
+          CLEAN_VER: ${{ steps.pkg_ver.outputs.clean_ver }}
         run: |
-          CLEAN_VER="${RELEASE_TAG#v}"
+          if curl -fsSL "https://pypi.org/pypi/nomos-cli/${CLEAN_VER}/json" >/dev/null 2>&1; then
+            echo "nomos-cli@${CLEAN_VER} already published on PyPI; skipping."
+            echo "pypi_live=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+            echo "::notice::GitHub OIDC token endpoint unavailable; skipping PyPI publish."
+            echo "pypi_live=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          PYPI_OIDC="$(curl -fsSL -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=pypi" | jq -r '.value // empty' || true)"
+          PYPI_TOKEN="$(curl -sS -X POST https://pypi.org/_/oidc/mint-token -H "Content-Type: application/json" -d "{\"token\":\"${PYPI_OIDC}\"}" | jq -r '.token // empty' || true)"
+          if [ -z "${PYPI_TOKEN}" ]; then
+            echo "::notice::PyPI Pending Publisher not yet registered for mgantlett/nomos ci.yaml; skipping PyPI upload."
+            echo "pypi_live=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python3 -m pip install --upgrade build twine
+          python3 -m build packaging/pypi
+          TWINE_USERNAME=__token__ TWINE_PASSWORD="${PYPI_TOKEN}" python3 -m twine upload packaging/pypi/dist/*
+          for i in $(seq 1 24); do
+            if curl -fsSL "https://pypi.org/pypi/nomos-cli/${CLEAN_VER}/json" >/dev/null 2>&1; then
+              echo "pypi_live=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "pypi_live=false" >> "$GITHUB_OUTPUT"
+
+      - name: Sync server.json to Official MCP Registry
+        if: steps.pkg_ver.outputs.release_ready == 'true'
+        env:
+          CLEAN_VER: ${{ steps.pkg_ver.outputs.clean_ver }}
+          PYPI_LIVE: ${{ steps.pypi_sync.outputs.pypi_live }}
+        run: |
           LIVE_MCP="$(curl -fsSL https://registry.modelcontextprotocol.io/v0.1/servers/io.github.mgantlett%2Fnomos/versions/latest 2>/dev/null | jq -r '.server.version // empty' || true)"
           if [ "${LIVE_MCP}" = "${CLEAN_VER}" ]; then
             echo "io.github.mgantlett/nomos@${CLEAN_VER} already published on Official MCP Registry; skipping."
@@ -210,8 +286,14 @@ jobs:
             echo "::notice::Official MCP Registry OIDC exchange unavailable; skipping publish."
             exit 0
           fi
+          PAYLOAD_FILE="server.json"
+          if [ "${PYPI_LIVE}" != "true" ]; then
+            jq '.packages |= map(select(.registryType != "pypi"))' server.json > "$RUNNER_TEMP/server-npm-only.json"
+            PAYLOAD_FILE="$RUNNER_TEMP/server-npm-only.json"
+          fi
           curl -fsSL -X POST https://registry.modelcontextprotocol.io/v0/publish \
             -H "Authorization: Bearer ${REG_TOKEN}" \
             -H "Content-Type: application/json" \
-            --data-binary @server.json
+            --data-binary "@${PAYLOAD_FILE}"
+
 

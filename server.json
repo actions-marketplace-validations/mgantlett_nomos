@@ -29,6 +29,22 @@
       "registryType": "npm",
       "identifier": "@mgantlett/nomos",
       "version": "4.28.0",
+      "runtimeHint": "npx",
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp"
+        }
+      ],
+      "transport": {
+        "type": "stdio"
+      }
+    },
+    {
+      "registryType": "pypi",
+      "identifier": "nomos-cli",
+      "version": "4.28.0",
+      "runtimeHint": "uvx",
       "packageArguments": [
         {
           "type": "positional",
