@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nomos-cli"
+version = "4.28.0"
+description = "Zero-dependency launcher for Nomos: Apache-2.0 static Go AST & Git execution substrate for AI coding agents (nomos xray, nomos init, nomos verify, nomos mcp)."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.9"
+dependencies = []
+authors = [{ name = "Mark Gantlett" }]
+keywords = [
+  "ai-agents",
+  "agent-skills",
+  "ast",
+  "claude-code",
+  "code-quality",
+  "coding-agents",
+  "cursor",
+  "git-hooks",
+  "git-worktree",
+  "guardrails",
+  "mcp",
+  "mcp-server",
+  "model-context-protocol",
+  "sarif",
+]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Topic :: Software Development :: Quality Assurance",
+  "Topic :: Software Development :: Version Control :: Git",
+]
+
+[project.urls]
+Homepage = "https://sophialabs.ca"
+Documentation = "https://sophialabs.ca/docs/introduction"
+Repository = "https://github.com/mgantlett/nomos"
+Issues = "https://github.com/mgantlett/nomos/issues"
+
+[project.scripts]
+nomos-cli = "nomos_cli:main"
+nomos = "nomos_cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

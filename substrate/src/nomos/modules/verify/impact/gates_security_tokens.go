@@ -131,9 +131,35 @@ func ScanLockedDependencyMutations(ctx *vscope.VerifyContext, root string, lockD
 		if base == "package.json" && isPackageJSONMetadataOnlyChange(root, rel) {
 			continue
 		}
+		if base == "pyproject.toml" && IsZeroDepPackagingPyproject(root, rel) {
+			continue
+		}
 		violations = append(violations, rel+" (dependency manifest locked via boundary.lock_dependencies)")
 	}
 	return violations
+}
+
+// IsZeroDepPackagingPyproject validates zero-dependency packaging manifests (@intent task_lifecycle_cli_spec.md).
+func IsZeroDepPackagingPyproject(root, rel string) bool {
+	slashRel := filepath.ToSlash(rel)
+	if !strings.HasPrefix(slashRel, "packaging/") {
+		return false
+	}
+	wtBytes, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(slashRel)))
+	if err != nil {
+		return false
+	}
+	raw := string(wtBytes)
+	if strings.Contains(raw, "optional-dependencies") || strings.Contains(raw, "dependency-groups") {
+		return false
+	}
+	for _, line := range strings.Split(raw, "\n") {
+		trimmed := strings.Join(strings.Fields(strings.TrimSpace(line)), " ")
+		if strings.HasPrefix(trimmed, "dependencies =") {
+			return trimmed == "dependencies = []"
+		}
+	}
+	return false
 }
 
 func isPackageJSONMetadataOnlyChange(root, rel string) bool {

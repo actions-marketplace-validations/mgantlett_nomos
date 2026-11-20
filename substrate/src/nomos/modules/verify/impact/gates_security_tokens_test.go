@@ -80,6 +80,32 @@ func TestScanLockedDependencyMutations_PackageJSONMetadataVsDeps(t *testing.T) {
 	if disabled := ScanLockedDependencyMutations(nil, repoDir, false); disabled != nil {
 		t.Fatalf("expected nil when lockDeps=false, got %v", disabled)
 	}
+
+	// 4. Zero-dependency packaging/pypi/pyproject.toml passes, while non-empty dependencies fail closed.
+	if err := os.WriteFile(pkgPath, []byte(metaUpdated), 0644); err != nil {
+		t.Fatalf("restore clean package.json: %v", err)
+	}
+	pyPath := filepath.Join(repoDir, "packaging", "pypi", "pyproject.toml")
+	if err := os.MkdirAll(filepath.Dir(pyPath), 0755); err != nil {
+		t.Fatalf("mkdir packaging/pypi: %v", err)
+	}
+	zeroDepPy := "[project]\nname = \"nomos-cli\"\nversion = \"4.28.0\"\ndependencies = []\n"
+	if err := os.WriteFile(pyPath, []byte(zeroDepPy), 0644); err != nil {
+		t.Fatalf("write zero-dep pyproject.toml: %v", err)
+	}
+	if out, err := workspace.SafeGitCommand(repoDir, "add", "packaging/pypi/pyproject.toml").CombinedOutput(); err != nil {
+		t.Fatalf("git add pyproject.toml: %v (%s)", err, string(out))
+	}
+	if gotPy := ScanLockedDependencyMutations(nil, repoDir, true); len(gotPy) != 0 {
+		t.Fatalf("expected 0 violations for zero-dep packaging pyproject.toml, got %v", gotPy)
+	}
+	nonEmptyPy := "[project]\nname = \"nomos-cli\"\ndependencies = [\"requests>=2.0\"]\n"
+	if err := os.WriteFile(pyPath, []byte(nonEmptyPy), 0644); err != nil {
+		t.Fatalf("write non-empty pyproject.toml: %v", err)
+	}
+	if gotBadPy := ScanLockedDependencyMutations(nil, repoDir, true); len(gotBadPy) != 1 {
+		t.Fatalf("expected 1 violation for non-empty pyproject.toml dependencies, got %v", gotBadPy)
+	}
 }
 
 func TestIsProhibitedEnvFileName(t *testing.T) {
