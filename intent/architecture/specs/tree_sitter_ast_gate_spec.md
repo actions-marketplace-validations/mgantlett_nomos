@@ -281,7 +281,7 @@ func ExtractExportedSymbols(lang string, content []byte) []string
 ```
 
 ### 4.3 Canonical 7x3 Matrix Sensor Bindings
-The Tree-sitter AST Gate Engine directly underpins six automated sensor probes in `substrate/src/nomos/modules/verify/matrix.go`:
+The Tree-sitter AST Gate Engine directly underpins eight automated sensor probes in `substrate/src/nomos/modules/verify/matrix.go`:
 
 1. **`Cell 2.1 (anti_shim)`**: Detects empty AST blocks, stub bodies, or no-op returns (`return nil`, `{}`) via query `@empty_block`.
 2. **`Cell 2.1 (docstrings)`**: Evaluates docstring adjacency across all exported functions via `@func.doc`.
