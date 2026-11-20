@@ -90,7 +90,10 @@ async function fetchReleaseBytes(url) {
 }
 
 async function ensureCachedBinary(target) {
-	const releaseBase = `https://github.com/mgantlett/nomos/releases/download/v${target.version}`;
+	const releaseBase = String(
+		process.env.NOMOS_RELEASE_BASE_URL ||
+			`https://github.com/mgantlett/nomos/releases/download/v${target.version}`
+	).replace(/\/+$/, '');
 	const cacheRoot = process.env.NOMOS_CACHE_DIR || path.join(os.homedir(), '.cache', 'nomos-launcher');
 	const verDir = path.join(cacheRoot, `v${target.version}-${target.goos}-${target.goarch}`);
 	const binPath = path.join(verDir, target.binName);
