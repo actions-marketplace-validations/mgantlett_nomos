@@ -2,12 +2,15 @@
 package impact
 
 import (
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
+	"bytes"
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/capbac"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
 
 var allowedEnvTemplates = map[string]bool{
@@ -93,6 +96,22 @@ func ScanUnignoredEnvFiles(root string) []string {
 	return leaks
 }
 
+var packageJSONLockedGraphKeys = []string{
+	"bin",
+	"bundleDependencies",
+	"bundledDependencies",
+	"dependencies",
+	"devDependencies",
+	"optionalDependencies",
+	"overrides",
+	"peerDependencies",
+	"peerDependenciesMeta",
+	"pnpm",
+	"resolutions",
+	"scripts",
+	"workspaces",
+}
+
 // ScanLockedDependencyMutations executes deterministic impact verification logic (@intent nomos_intent_traceability_spec.md).
 func ScanLockedDependencyMutations(ctx *vscope.VerifyContext, root string, lockDeps bool) []string {
 	if !lockDeps {
@@ -106,9 +125,46 @@ func ScanLockedDependencyMutations(ctx *vscope.VerifyContext, root string, lockD
 	var violations []string
 	for _, rel := range modified {
 		base := strings.ToLower(filepath.Base(rel))
-		if lockedDependencyManifests[base] {
-			violations = append(violations, rel+" (dependency manifest locked via boundary.lock_dependencies)")
+		if !lockedDependencyManifests[base] {
+			continue
 		}
+		if base == "package.json" && isPackageJSONMetadataOnlyChange(root, rel) {
+			continue
+		}
+		violations = append(violations, rel+" (dependency manifest locked via boundary.lock_dependencies)")
 	}
 	return violations
+}
+
+func isPackageJSONMetadataOnlyChange(root, rel string) bool {
+	slashRel := filepath.ToSlash(rel)
+	headBytes, err := workspace.SafeGitCommand(root, "show", "HEAD:"+slashRel).Output()
+	if err != nil {
+		return false
+	}
+	wtBytes, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(slashRel)))
+	if err != nil {
+		return false
+	}
+	headGraph, okHead := extractPackageJSONLockedGraph(headBytes)
+	wtGraph, okWT := extractPackageJSONLockedGraph(wtBytes)
+	return okHead && okWT && bytes.Equal(headGraph, wtGraph)
+}
+
+func extractPackageJSONLockedGraph(raw []byte) ([]byte, bool) {
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(raw, &parsed); err != nil || parsed == nil {
+		return nil, false
+	}
+	subset := make(map[string]interface{}, len(packageJSONLockedGraphKeys))
+	for _, k := range packageJSONLockedGraphKeys {
+		if val, exists := parsed[k]; exists {
+			subset[k] = val
+		}
+	}
+	encoded, err := json.Marshal(subset)
+	if err != nil {
+		return nil, false
+	}
+	return encoded, true
 }
