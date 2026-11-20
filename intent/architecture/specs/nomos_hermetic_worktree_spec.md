@@ -238,6 +238,9 @@ func ValidateWorktreeIntentTwin(worktreeDir, commitMsg, mode string) string
 
 // EvaluateWorktreeTwinPreflight inspects uncommitted SUB-* worktrees for untwinned normative surface changes (#NormativeSurfaceDelta).
 func EvaluateWorktreeTwinPreflight(worktreeDir, taskKey string) string
+
+// PreviewWorktreeTwinSurfaceWarning returns a non-latching advisory when an untwinned SUB-* worktree expands normative surface (#NormativeSurfaceDelta).
+func PreviewWorktreeTwinSurfaceWarning(worktreeDir, taskKey string) string
 ```
 
 ---
@@ -270,6 +273,8 @@ Session Sentinel (`CHARTER-4-BOUNDARY`) evaluates candidate workspace roots stru
 `ParseGoSurfaceFingerprintForPath` extracts exported Go symbols, `const` thresholds, SQL DDL/DML digests, struct `json` tags, `@intent` bindings, and rule literals into `NormativeSurfaceDelta.GovernanceRules`. `ParseWebSurfaceFingerprintForPath` extracts TypeScript/JavaScript module exports and `.svelte` component boundaries into `NormativeSurfaceDelta.GovernanceRules` while canceling intra-directory splits. `InspectWorktreeNormativeSurface` cancels balanced intra-package moves so file splits pass untwinned while net-new rules require `Twin: INT-<N>`. `ValidateWorktreeIntentTwin` records a sticky `.tmp/twin_required_<KEY>.json` latch on untwinned surface rejections, blocking subsequent export-hiding evasion without `Twin: INT-<N>`.
 
 `CommitSchemaGate` runs `EvaluateWorktreeTwinPreflight` during `nomos verify`, failing closed and arming `.tmp/twin_required_<KEY>.json` whenever an untwinned `SUB-*` worktree expands `NormativeSurfaceDelta`. `nomos hook post-tool` and `nomos hook stop` track `<size>:<sha256_8>` `Bash` digests and evaluate `DirtyUnverifiedEdits` without penalizing post-verify reads. Under `--container-sandbox`, `nomos hook stop` enforces four-strike retries (`StopBlockStrikes`) with inline `FastFileRadar` diagnostics until `nomos verify` passes. `FormatPlainHandshakeBannerWithRoot` appends `Manifest Deps` and `Workspace Modules` summaries during `SessionStart`.
+
+During `EDIT`, `nomos hook post-tool` invokes `PreviewWorktreeTwinSurfaceWarning` to emit a non-latching `[Nomos Contract Radar]` advisory naming `--twin-of SUB-<N>` before commit or verify latches engage. `EvaluateLoopCircuitBreaker` resolves leading `cd <dir>` worktree roots and hashes active `worktrees/` status so worktree mutations reset runner digests. `CapabilityFlowGraph` instructs operators to run standalone `nomos verify` without `&&` shell chaining before release sinks.
 
 `HookSessionTrace` sets `DirtyBehavioralEdits` when source mutations occur inside a workspace lacking discovered unit suites. `nomos hook stop` blocks exit until unit suites pass under `nomos verify` or post-edit execution succeeds. `FormatPlainHandshakeBannerWithRoot` emits `.tmp/tests/` regression-suite guidance when executable sources lack committed suites or under `--container-sandbox`.
 
@@ -334,14 +339,16 @@ When a container or hermetic workspace starts with zero tracked baseline unit su
 | `TC-BG-09` | Post-edit behavioral Stop gate and testless hull guidance | Source edit without tests followed by Stop vs post-edit run | `"Prompts boundary/edge-case unittest.TestCase tests in .tmp/tests/test_<module>.py, blocks un-executed source edits, and clears after behavioral run."` | PASS |
 | `TC-BG-10` | Zero-baseline container scratch suite placement advisory | Creating net-new suite file outside `.tmp/` with empty baseline | `"Emits non-blocking advisory steering scratch suites to .tmp/tests/."` | PASS |
 | `TC-BG-11` | Static heredoc SQL airlock & headless Stop cap | `cat > f.py <<'E'` with `DROP TABLE` and container `stop` | `"Permits static heredoc writes and enforces 6-strike headless refactoring mandate."` | PASS |
+| `TC-CMT-012` | Pre-latch `PostToolUse` Contract Radar preview | `edit_file` adds export in untwinned `SUB-*` worktree | `"Emits non-latching Contract Radar warning with --twin-of command without arming latch."` | PASS |
+| `TC-LOOP-01` | Worktree-aware loop circuit-breaker digest | Subdirectory `cwd` runs `cd worktrees/... && go test` across edits | `"Resolves worktree root and resets no-edit runner count when worktree files change."` | PASS |
 
 ---
 
 ## 7. Cross-Plane Traceability & DoD Verification
 
 1. **Bilateral Plane Lineage:**
-   - **Intent Plane:** `INT-327`, `INT-1951`, `INT-1960`, `INT-1973`, `INT-2193`, and `INT-2194` (Hermetic Worktree, Hook Manifests, Sentinel Authorization, Credential Airlock, and Fail-Closed Surface Ratchet).
-   - **Substrate Plane:** `SUB-327`, `SUB-2209`, `SUB-2239`, `SUB-3386`, and `SUB-3387` (`substrate/src/nomos/core/workspace/`, `substrate/src/nomos/core/capbac/`, `substrate/src/nomos/modules/session/`, and `substrate/cli/`).
+   - **Intent Plane:** `INT-327`, `INT-1951`, `INT-1960`, `INT-1973`, `INT-2193`, `INT-2194`, and `INT-2198` (Hermetic Worktree, Hook Manifests, Sentinel Authorization, Credential Airlock, Fail-Closed Surface Ratchet, and Pre-Latch Contract Radar).
+   - **Substrate Plane:** `SUB-327`, `SUB-2209`, `SUB-2239`, `SUB-3386`, `SUB-3387`, and `SUB-3392` (`substrate/src/nomos/core/workspace/`, `substrate/src/nomos/core/capbac/`, `substrate/src/nomos/modules/session/`, and `substrate/cli/`).
 2. **7x3 Invariant Matrix Coordinates:**
    - `Cell 3.1 (staged_boundaries)` enforces uncommitted and staged worktree boundary isolation.
    - `Cell 3.2 (hermetic_worktree)` and `Cell 3.2 (git_hygiene)` enforce worktree confinement and `SafeGitCommand` subprocess wrapping.

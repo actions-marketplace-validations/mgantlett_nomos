@@ -302,6 +302,7 @@ type HandshakeEvent struct {
 	Plane                string                     `json:"plane,omitempty"`
 	Phase                types.Phase                `json:"phase"`
 	ActiveTask           string                     `json:"active_task,omitempty"`
+	ActiveWorktrees      []string                   `json:"active_worktrees,omitempty"`
 	Assignee             string                     `json:"assignee,omitempty"`
 	TokenID              string                     `json:"token_id,omitempty"`
 	StepBudget           int                        `json:"step_budget,omitempty"`
@@ -345,6 +346,7 @@ The table below defines deterministic verification vectors for `ncte.Engine` and
 | `TC-JIT-02` | `"Emit BrownfieldTopologyBrief with discovered source roots and test runners."` | Procedural | 9 | None (`BrownfieldTopology` populated) | **true** |
 | `TC-JIT-03` | `"Surface active LearnedPitfalls and VerifiedPatterns in HandshakeEvent."` | Procedural | 7 | None (`LearnedPitfalls` attached) | **true** |
 | `TC-JIT-04` | `"Surface StaleObligations when Intent specs change after SUB sync."` | Procedural | 9 | None (`StaleObligations` reported) | **true** |
+| `TC-JIT-05` | `"Surface isolated sibling worktree keys in HandshakeEvent ActiveWorktrees."` | Procedural | 9 | None (`ActiveWorktrees` populated) | **true** |
 | `TC-TIER-01` | `"Enforce Tier 1 indirect control via BoundaryConfig in nomos.yaml."` | Procedural | 9 | None (`Boundary.Enforce == true`) | **true** |
 | `TC-TIER-02` | `"Reject prohibited sovereign packages in open-core substrate."` | Procedural | 7 | `boundary` gate rejection | **false** |
 | `TC-TIER-03` | `"Reject prohibited sovereign CLI commands in open-core CommandRegistry."` | Procedural | 8 | `boundary` command rejection | **false** |
