@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -94,6 +95,9 @@ func operationalSurfaceContractCases() []repoContractCase {
 				"verify --all --strict",
 				"verify proof",
 				"needs: verify",
+				"id-token: write",
+				"registry.npmjs.org",
+				"registry.modelcontextprotocol.io",
 			},
 			forbid: []string{"go-version: 'stable'"},
 		},
@@ -215,11 +219,12 @@ func operationalSurfaceContractCases() []repoContractCase {
 			name:    "npm launcher package manifest exposes Apache-2.0 CLI wrapper template",
 			relPath: filepath.Join("packaging", "npm", "package.json"),
 			mustHave: []string{
-				`"@sophialabs/nomos"`,
+				`"@mgantlett/nomos"`,
+				`"mcpName": "io.github.mgantlett/nomos"`,
 				`"Apache-2.0"`,
 				`"./bin/nomos-cli.mjs"`,
 			},
-			forbid: []string{"cockpit"},
+			forbid: []string{"cockpit", "@sophialabs/nomos"},
 		},
 		{
 			name:    "official MCP registry server.json pairs remote HTTP and npm stdio package",
@@ -335,5 +340,49 @@ func TestAURPKGBUILD_SHA256AndPackageExecution(t *testing.T) {
 	}
 	if _, lErr := os.Stat(filepath.Join(pkgDir, "usr", "share", "licenses", "nomos-bin", "LICENSE")); lErr != nil {
 		t.Fatalf("expected installed LICENSE under /usr/share/licenses/nomos-bin/LICENSE: %v", lErr)
+	}
+}
+
+func TestOpenCoreManifestVersionParity(t *testing.T) {
+	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("resolve repo root: %v", err)
+	}
+	pkgRaw, err := os.ReadFile(filepath.Join(repoRoot, "packaging", "npm", "package.json"))
+	if err != nil {
+		t.Fatalf("read packaging/npm/package.json: %v", err)
+	}
+	var npmManifest struct {
+		Name    string `json:"name"`
+		Version string `json:"version"`
+		McpName string `json:"mcpName"`
+	}
+	if err := json.Unmarshal(pkgRaw, &npmManifest); err != nil {
+		t.Fatalf("parse packaging/npm/package.json: %v", err)
+	}
+	if npmManifest.Name != "@mgantlett/nomos" || npmManifest.McpName != "io.github.mgantlett/nomos" {
+		t.Fatalf("unexpected npm manifest identity: %+v", npmManifest)
+	}
+	if npmManifest.Version != RootCmdVersion {
+		t.Fatalf("packaging/npm/package.json version %q drifted from RootCmdVersion %q", npmManifest.Version, RootCmdVersion)
+	}
+
+	srvRaw, err := os.ReadFile(filepath.Join(repoRoot, "server.json"))
+	if err != nil {
+		t.Fatalf("read server.json: %v", err)
+	}
+	var mcpManifest struct {
+		Name     string `json:"name"`
+		Version  string `json:"version"`
+		Packages []struct {
+			Identifier string `json:"identifier"`
+			Version    string `json:"version"`
+		} `json:"packages"`
+	}
+	if err := json.Unmarshal(srvRaw, &mcpManifest); err != nil {
+		t.Fatalf("parse server.json: %v", err)
+	}
+	if mcpManifest.Version != RootCmdVersion || len(mcpManifest.Packages) == 0 || mcpManifest.Packages[0].Version != RootCmdVersion {
+		t.Fatalf("server.json version parity drift vs RootCmdVersion %q: %+v", RootCmdVersion, mcpManifest)
 	}
 }

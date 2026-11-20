@@ -119,6 +119,7 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      id-token: write
     steps:
       - name: Checkout release tag
         uses: actions/checkout@v6
@@ -153,3 +154,56 @@ jobs:
           AUR_KEY: ${{ secrets.AUR_KEY }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ needs.verify.outputs.release_tag }}
+
+      - name: Set up Node.js for Agent Registry Publishing
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Sync @mgantlett/nomos Launcher to npmjs.org
+        env:
+          RELEASE_TAG: ${{ needs.verify.outputs.release_tag }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          CLEAN_VER="${RELEASE_TAG#v}"
+          LIVE_NPM="$(curl -fsSL https://registry.npmjs.org/@mgantlett%2fnomos 2>/dev/null | jq -r '.["dist-tags"].latest // empty' || true)"
+          if [ "${LIVE_NPM}" = "${CLEAN_VER}" ]; then
+            echo "@mgantlett/nomos@${CLEAN_VER} already published on npmjs.org; skipping."
+            exit 0
+          fi
+          if [ -z "${NODE_AUTH_TOKEN}" ]; then
+            echo "::notice::NPM_TOKEN secret not configured; skipping CI npm publish."
+            exit 0
+          fi
+          npm --prefix packaging/npm publish --access public --provenance
+
+      - name: Sync server.json to Official MCP Registry
+        env:
+          RELEASE_TAG: ${{ needs.verify.outputs.release_tag }}
+        run: |
+          CLEAN_VER="${RELEASE_TAG#v}"
+          LIVE_MCP="$(curl -fsSL https://registry.modelcontextprotocol.io/v0.1/servers/io.github.mgantlett%2Fnomos/versions/latest 2>/dev/null | jq -r '.server.version // empty' || true)"
+          if [ "${LIVE_MCP}" = "${CLEAN_VER}" ]; then
+            echo "io.github.mgantlett/nomos@${CLEAN_VER} already published on Official MCP Registry; skipping."
+            exit 0
+          fi
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+            echo "::notice::GitHub OIDC token endpoint unavailable; skipping Official MCP Registry publish."
+            exit 0
+          fi
+          OIDC_JWT="$(curl -fsSL -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=mcp-registry" | jq -r '.value // empty' || true)"
+          if [ -z "${OIDC_JWT}" ]; then
+            echo "::notice::Empty GitHub OIDC token; skipping Official MCP Registry publish."
+            exit 0
+          fi
+          REG_TOKEN="$(curl -fsSL -X POST https://registry.modelcontextprotocol.io/v0/auth/github-oidc -H "Authorization: Bearer ${OIDC_JWT}" -H "Content-Type: application/json" | jq -r '.registry_token // empty' || true)"
+          if [ -z "${REG_TOKEN}" ]; then
+            echo "::notice::Official MCP Registry OIDC exchange unavailable; skipping publish."
+            exit 0
+          fi
+          curl -fsSL -X POST https://registry.modelcontextprotocol.io/v0/publish \
+            -H "Authorization: Bearer ${REG_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data-binary @server.json
+

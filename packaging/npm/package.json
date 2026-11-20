@@ -1,6 +1,7 @@
 {
-  "name": "@sophialabs/nomos",
-  "version": "4.27.0",
+  "name": "@mgantlett/nomos",
+  "version": "4.27.1",
+  "mcpName": "io.github.mgantlett/nomos",
   "description": "Zero-dependency launcher for Nomos: Apache-2.0 static Go AST & Git execution substrate for AI coding agents (nomos xray, nomos init, nomos verify, nomos mcp).",
   "license": "Apache-2.0",
   "type": "module",
@@ -24,10 +25,14 @@
     "ai-agents",
     "ast",
     "claude-code",
+    "code-quality",
     "cursor",
     "git-hooks",
-    "mcp",
+    "git-worktree",
     "guardrails",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
     "sarif"
   ]
 }
