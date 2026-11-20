@@ -235,6 +235,9 @@ func InspectWorktreeNormativeSurface(worktreeDir string) NormativeSurfaceDelta
 
 // ValidateWorktreeIntentTwin enforces intent_twin_mode across commit headers, AST surface deltas, and Twin provenance.
 func ValidateWorktreeIntentTwin(worktreeDir, commitMsg, mode string) string
+
+// EvaluateWorktreeTwinPreflight inspects uncommitted SUB-* worktrees for untwinned normative surface changes (#NormativeSurfaceDelta).
+func EvaluateWorktreeTwinPreflight(worktreeDir, taskKey string) string
 ```
 
 ---
@@ -264,7 +267,9 @@ Session Sentinel (`CHARTER-4-BOUNDARY`) evaluates candidate workspace roots stru
 
 `nomos hook stop` evaluates branch-scoped traces keyed by repository root and branch, blocking turn exit until `nomos verify` passes. Git `pre-commit` blocks protected trunks and runs diff-scoped `nomos verify` on regular `git commit` invocations. `commit-msg` and `CommitSchemaGate` allow standard non-empty subjects without `[INT|SUB-N]` or `Task:` trailers, retaining anti-shim checks. `post-commit` invokes `nomos hook post-commit` to distill verified `trap -> fix` pitfalls into `mneme.db`. Git `pre-push` synchronizes `refs/notes/nomos/releases` to the target remote before trunk pushes complete.
 
-`ParseGoSurfaceFingerprintForPath` extracts exported Go symbols, struct `json` tags, `@intent` bindings, and `verify`/`hookcmd` rule literals into `NormativeSurfaceDelta.GovernanceRules`. `InspectWorktreeNormativeSurface` cancels balanced intra-package moves so file splits pass untwinned while net-new rules require `Twin: INT-<N>`. `nomos hook post-tool` and `nomos hook stop` track `<size>:<sha256_8>` `Bash` digests and evaluate `DirtyUnverifiedEdits` without penalizing post-verify reads. Under `--container-sandbox`, `nomos hook stop` enforces four-strike retries (`StopBlockStrikes`) with inline `FastFileRadar` diagnostics until `nomos verify` passes. `FormatPlainHandshakeBannerWithRoot` appends `Manifest Deps` and `Workspace Modules` summaries during `SessionStart`.
+`ParseGoSurfaceFingerprintForPath` extracts exported Go symbols, struct `json` tags, `@intent` bindings, and `verify`/`hookcmd` rule literals into `NormativeSurfaceDelta.GovernanceRules`. `ParseWebSurfaceFingerprintForPath` extracts TypeScript/JavaScript module exports and `.svelte` component boundaries into `NormativeSurfaceDelta.GovernanceRules` while canceling intra-directory splits. `InspectWorktreeNormativeSurface` cancels balanced intra-package moves so file splits pass untwinned while net-new rules require `Twin: INT-<N>`. `ValidateWorktreeIntentTwin` records a sticky `.tmp/twin_required_<KEY>.json` latch on untwinned surface rejections, blocking subsequent export-hiding evasion without `Twin: INT-<N>`.
+
+`EvaluateWorktreeTwinPreflight` warns during `nomos verify` whenever an untwinned `SUB-*` worktree expands `NormativeSurfaceDelta` prior to commit. `nomos hook post-tool` and `nomos hook stop` track `<size>:<sha256_8>` `Bash` digests and evaluate `DirtyUnverifiedEdits` without penalizing post-verify reads. Under `--container-sandbox`, `nomos hook stop` enforces four-strike retries (`StopBlockStrikes`) with inline `FastFileRadar` diagnostics until `nomos verify` passes. `FormatPlainHandshakeBannerWithRoot` appends `Manifest Deps` and `Workspace Modules` summaries during `SessionStart`.
 
 `HookSessionTrace` sets `DirtyBehavioralEdits` when source mutations occur inside a workspace lacking discovered unit suites. `nomos hook stop` blocks exit until unit suites pass under `nomos verify` or post-edit execution succeeds. `FormatPlainHandshakeBannerWithRoot` emits `.tmp/tests/` regression-suite guidance when executable sources lack committed suites or under `--container-sandbox`.
 
@@ -310,6 +315,7 @@ When a container or hermetic workspace starts with zero tracked baseline unit su
 | `TC-CMT-007` | Internal substrate refactor exemption | `refactor(verify)` modifying private helpers with empty `NormativeSurfaceDelta` | `"Permits untwinned internal refactor under intent_twin_mode: feat."` | PASS |
 | `TC-CMT-008` | Referential `Twin:` provenance check | `Twin: INT-999999` absent from trunk history and task ledger | `"Rejects unresolvable Twin trailer lacking trunk or ledger provenance."` | PASS |
 | `TC-CMT-009` | Hardened Go AST governance delta | Untwinned `refactor`/`fix` adding export, `json` tag, or rule vs intra-package split | `"Rejects untwinned symbol or rule expansion while permitting intra-package splits."` | PASS |
+| `TC-CMT-010` | Polyglot surface, verify preflight, and anti-evasion | Untwinned TS/Svelte export, pre-commit verify, or post-rejection hiding | `"Flags TS/Svelte surface, warns during verify, and blocks export-hiding evasion."` | PASS |
 | `TC-HOOK-001` | Antigravity 2.0 `PostInvocation` flush | `nomos hook post-tool --antigravity --advisory-profile carbon` | `"Returns {} on PostToolUse and flushes buffered advisories on PostInvocation."` | PASS |
 | `TC-HOOK-002` | 5-provider `init` & `hook install` parity | `nomos init` and `nomos hook install` (`--cursor`, `--user`, default) | `"Scaffolds and merges Claude, Gemini, OpenCode, Cursor (.cursor/hooks.json v1), and Antigravity hooks."` | PASS |
 | `TC-HOOK-003` | Cursor lifecycle payload normalization | `nomos hook pre-tool` (`beforeShellExecution`) and `post-tool` (`afterFileEdit`) | `"Denies unsafe Cursor shell execution via permission=deny and runs AST radar on file_path edits."` | PASS |
@@ -333,8 +339,8 @@ When a container or hermetic workspace starts with zero tracked baseline unit su
 ## 7. Cross-Plane Traceability & DoD Verification
 
 1. **Bilateral Plane Lineage:**
-   - **Intent Plane:** `INT-327`, `INT-1951`, `INT-1960`, and `INT-1973` (Hermetic Worktree, Hook Manifests, Sentinel Authorization, and Credential Read Airlock).
-   - **Substrate Plane:** `SUB-327`, `SUB-2209`, and `SUB-2239` (`substrate/src/nomos/core/workspace/`, `substrate/src/nomos/core/capbac/`, `substrate/src/nomos/modules/session/`, and `substrate/cli/`).
+   - **Intent Plane:** `INT-327`, `INT-1951`, `INT-1960`, `INT-1973`, and `INT-2193` (Hermetic Worktree, Hook Manifests, Sentinel Authorization, Credential Airlock, and Polyglot Surface Ratchet).
+   - **Substrate Plane:** `SUB-327`, `SUB-2209`, `SUB-2239`, and `SUB-3386` (`substrate/src/nomos/core/workspace/`, `substrate/src/nomos/core/capbac/`, `substrate/src/nomos/modules/session/`, and `substrate/cli/`).
 2. **7x3 Invariant Matrix Coordinates:**
    - `Cell 3.1 (staged_boundaries)` enforces uncommitted and staged worktree boundary isolation.
    - `Cell 3.2 (hermetic_worktree)` and `Cell 3.2 (git_hygiene)` enforce worktree confinement and `SafeGitCommand` subprocess wrapping.
