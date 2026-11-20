@@ -185,35 +185,7 @@ func countPitfallTopicChain(all []*Memory, repoID string) map[string]int {
 }
 
 func isBuiltInStructuralASTTopic(topic string) bool {
-	lower := strings.ToLower(strings.TrimSpace(topic))
-	prefixes := []string{
-		"pitfall:cognitive_complexity",
-		"pitfall:cognitive_debt_score",
-		"pitfall:max_file_loc",
-		"pitfall:function_length",
-		"pitfall:file_length",
-		"pitfall:docstring_density",
-		"pitfall:statement_coverage",
-		"pitfall:unchecked_error_hygiene",
-		"pitfall:anti-shim_ast",
-		"pitfall:tdd_test_pair",
-		"pitfall:dead-code_reachability",
-		"pitfall:go_toolchain_gate",
-		"pitfall:polyglot_toolchain",
-		"pitfall:intent_steel-man",
-		"pitfall:intent_substrate_parity",
-		"pitfall:intent_traceability",
-		"pitfall:bilateral_parity",
-		"pitfall:plane_separation",
-		"pitfall:hermetic_worktree",
-		"pitfall:zero_filesystem_alias",
-	}
-	for _, p := range prefixes {
-		if strings.HasPrefix(lower, p) {
-			return true
-		}
-	}
-	return false
+	return isBuiltInStructuralGateTopic(topic)
 }
 
 func isGraduationEligibleWithDepth(m *Memory, repoID string, topicDepth int) bool {
