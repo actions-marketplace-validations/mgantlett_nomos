@@ -348,7 +348,7 @@ type UpdateCheckCache struct {
 
 ### 4.19 Zero-Dependency MCP Stdio Server (`nomos mcp`)
 * **`nomos mcp`**: Hidden agent command serving MCP JSON-RPC 2.0 (`#MCPRequest`, `#MCPResponse`) across `2026-07-28`, `2025-11-25`, `2025-06-18`, `2025-03-26`, and `2024-11-05`, including `server/discover` and `-32022` `_meta` validation.
-* **Read-Only Tool, Resource, and Directive Boundaries**: Exposes read-only tools (`nomos_handshake`, `nomos_status`, `nomos_task_dag`, `nomos_mem_recall`, `nomos_verify_impact`, `nomos_xray`, `nomos_capabilities`), `resources/*`, and `prompts/*` while rejecting mutations.
+* **Read-Only Tool, Resource, and Directive Boundaries**: Exposes seven read-only tools, `resources/*`, and `prompts/*` while rejecting mutations. Each tool declares `title`, sibling-boundary disambiguation, `outputSchema`, and `structuredContent`.
 
 ---
 

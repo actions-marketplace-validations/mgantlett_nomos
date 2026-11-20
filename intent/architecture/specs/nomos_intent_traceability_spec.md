@@ -367,6 +367,9 @@ func BuildPRProofReceipt(repoRoot string, posture GatePostureSummary, opts PRPro
 
 // FormatPRProofMarkdown renders a deterministic Markdown PR proof summary table.
 func FormatPRProofMarkdown(receipt *PRProofReceipt) string
+
+// FormatPRProofMarkdownForRepo appends a live X-Ray badge and scorecard link when targetDir resolves to a public GitHub remote.
+func FormatPRProofMarkdownForRepo(receipt *PRProofReceipt, targetDir string) string
 ```
 
 ---
