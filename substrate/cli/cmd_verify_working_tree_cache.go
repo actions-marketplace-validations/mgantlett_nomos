@@ -90,7 +90,7 @@ func executePRProofMode(out io.Writer, targetDir string, report *verify.Pipeline
 		return types.NewNomosError(types.ErrCodeCore, "PR proof generation failed: %v", err)
 	}
 	if strings.TrimSpace(prFlags.prOutput) != "" {
-		md := prproof.FormatPRProofMarkdown(receipt)
+		md := prproof.FormatPRProofMarkdownForRepo(receipt, targetDir)
 		if wErr := os.WriteFile(prFlags.prOutput, []byte(md), 0644); wErr != nil {
 			return types.NewNomosError(types.ErrCodeCore, "failed writing PR proof receipt %s: %v", prFlags.prOutput, wErr)
 		}

@@ -4,7 +4,9 @@
 
 - **License:** Apache-2.0
 - **Repository:** https://github.com/mgantlett/nomos
-- **Agent Skill & Plugin Bootstrapper:** `npx skills add mgantlett/nomos` (`skills/nomos/SKILL.md`, `.claude-plugin/plugin.json`)
+- **Agent Skill & Plugin Bootstrapper:** `npx skills add mgantlett/nomos` or `npx skills add https://sophialabs.ca` (`skills/nomos/SKILL.md`, `.claude-plugin/plugin.json`)
+- **Zero-Install Remote MCP Server (Streamable HTTP):** `https://sophialabs.ca/mcp` (`claude mcp add --transport http nomos https://sophialabs.ca/mcp`)
+- **Zero-Install Public GitHub X-Ray & OpenAPI 3.1:** https://sophialabs.ca/xray (`https://sophialabs.ca/xray.md`, `https://sophialabs.ca/.well-known/openapi.json`)
 - **Documentation:** https://sophialabs.ca/docs/introduction
 - **Full Documentation Corpus:** https://sophialabs.ca/llms-full.txt
 - **Engineering Handbook (12 Chapters):** https://sophialabs.ca/handbook
@@ -27,7 +29,7 @@ Git Repository  -> main stays read-only & verified; broken shortcuts fail closed
 
 When a developer asks an AI coding agent to install or configure Nomos in their repository, follow these 4 rules:
 
-1. **Install Static Binary:** Run `curl -fsSL https://sophialabs.ca/install | bash` (Linux/macOS/WSL2) or `GOTOOLCHAIN=auto CGO_ENABLED=0 go install github.com/mgantlett/nomos/substrate/cmd/nomos@latest`.
+1. **Install or Invoke Static Binary:** Run `brew install --cask mgantlett/tap/nomos` (macOS/Linux), `npx --yes @mgantlett/nomos xray .` (zero-install Node wrapper), `curl -fsSL https://sophialabs.ca/install | bash` (Linux/macOS/WSL2), or `GOTOOLCHAIN=auto CGO_ENABLED=0 go install github.com/mgantlett/nomos/substrate/cmd/nomos@latest`.
 2. **Audit Read-Only First (`0` Writes):** Run `nomos xray .` and report the Day-0 `AI Hangover Score` (`0-100`, `Grade A-F`) and top 3 structural hotspots to the user.
 3. **Default to Non-Breaking Branch Guard (`nomos init`):** Run `nomos init` to enable `isolation_mode: "branch"`, auto-freeze existing legacy debt in `nomos.baseline.json` so zero untouched legacy files fail, and wire native hooks for installed agents (use `nomos init --local` if the user wants a stealth `.git/info/exclude` trial with untouched `git status`). **Never run `nomos init --worktrees` on Day 0 unless the user explicitly requests multi-agent worktree isolation.**
 4. **Operate Invisibly Afterward:** Tell the user setup is complete and their workflow stays unchanged on `feat/*` branches. Resolve any future `nomos verify` or hook rejections yourself without weakening tests (`t.Skip`, deleted assertions, `// TODO` stubs) and never ask the human to run `nomos` CLI commands manually.

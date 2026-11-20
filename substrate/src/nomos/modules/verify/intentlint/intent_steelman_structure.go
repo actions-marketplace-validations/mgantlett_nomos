@@ -37,6 +37,7 @@ type specBodyScan struct {
 	h1Indices    []int
 	h2Entries    []h2HeadingEntry
 	hrIndices    map[int]bool
+	fencedLines  map[int]bool
 	goBlocks     []string
 	proseIssue   string
 }
@@ -82,13 +83,16 @@ func ValidateStrictSpecStructure(body string) string {
 	if goIssue := validateCompiledGoContractBlocks(scan.goBlocks); goIssue != "" {
 		return goIssue
 	}
+	if enumIssue := validateMarkdownEnumerations(scan); enumIssue != "" {
+		return enumIssue
+	}
 	return validateVerificationVectorsSection(scan)
 }
 
 // scanSpecBodyOutsideFences extracts headings, horizontal rules, Go blocks, and prose hygiene violations.
 func scanSpecBodyOutsideFences(body string) specBodyScan {
 	lines := strings.Split(body, "\n")
-	scan := specBodyScan{lines: lines, hrIndices: make(map[int]bool)}
+	scan := specBodyScan{lines: lines, hrIndices: make(map[int]bool), fencedLines: make(map[int]bool)}
 	inFence, inGo := false, false
 	fenceChar, fenceLen := byte(0), 0
 	var curGo []string
@@ -98,12 +102,14 @@ func scanSpecBodyOutsideFences(body string) specBodyScan {
 		ch, count := countLeadingFenceChars(trimmed)
 		if !inFence && count >= 3 {
 			inFence = true
+			scan.fencedLines[idx] = true
 			fenceChar, fenceLen = ch, count
 			inGo = strings.EqualFold(strings.TrimSpace(trimmed[count:]), "go")
 			curGo = nil
 			continue
 		}
 		if inFence {
+			scan.fencedLines[idx] = true
 			if ch == fenceChar && count >= fenceLen && strings.TrimSpace(trimmed[count:]) == "" {
 				if inGo {
 					scan.goBlocks = append(scan.goBlocks, strings.Join(curGo, "\n"))

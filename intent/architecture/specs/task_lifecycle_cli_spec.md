@@ -333,7 +333,7 @@ type UpdateCheckCache struct {
 * **Agent Detection & Filtering (`--agents`)**: Auto-detects present agent configs or binaries (`claude`, `cursor`, `opencode`, `gemini`, `agy`) and falls back to all five when none appear. Passing `--agents <csv|all>` filters hook manifests strictly to named targets and emits `CLAUDE.md` only when `claude` is active or pre-existing.
 * **Hermetic Worktree Graduation (`--worktrees`)**: Scaffolds `isolation_mode: "worktree"`, provisions `worktrees/`, merges full `templates/AGENTS.md`, seeds `mneme.db`, and stages governance commits when `--local` is false.
 * **Two-Tier Root Help (`--help-agent`)**: Default `nomos --help` displays core developer commands (`init`, `status`, `task`, `verify`, `xray`, `mem`, `issue`, `update`, `version`) and a `--help-agent` footer. Passing `nomos --help-agent` unhides internal agent RPCs (`handshake`, `hook`, `directive`, `capabilities`, `physics`, `session`, `mcp`) with zero Cobra aliases under Law 6.
-* **Thin Binary Bootstrapper Manifests (`skills/nomos/SKILL.md`, `.claude-plugin/`)**: Root skill and plugin manifests install the static `nomos` binary, run `nomos xray .` and `nomos init`, and carry zero prompt-pack rules. Ongoing enforcement delegates strictly to compiled Go hooks.
+* **Thin Binary Bootstrapper Manifests (`skills/nomos/SKILL.md`, `.claude-plugin/`, `packaging/npm/`, `packaging/pypi/`)**: Root skill, plugin, npm (`@mgantlett/nomos`), and PyPI (`nomos-cli`) launchers verify SHA-256 digests and carry zero prompt-pack rules. Ongoing enforcement delegates strictly to compiled Go hooks. `ScanLockedDependencyMutations` permits zero-dependency `packaging/*/pyproject.toml` manifests declaring `dependencies = []`.
 
 ### 4.16 Zero-Init Brownfield X-Ray & Baseline Lock (`nomos xray` & `nomos init --baseline`)
 * **`nomos xray [dir] [--json] [--markdown] [--top <N>]`**: Scans any directory across 11 languages without writing files or mutating SQLite stores. Emits `HangoverScore` (`0-100`), `Grade`, clones, monoliths, stubs, skipped tests, and `XrayHotspot` outputs.
@@ -347,8 +347,8 @@ type UpdateCheckCache struct {
 * **`nomos xray [dir] --sarif` and `nomos verify [path] --sarif`**: Emits valid OASIS SARIF 2.1.0 JSON (`version: "2.1.0"`, `$schema: "https://json.schemastore.org/sarif-2.1.0.json"`, `#SarifLog`) ingestible by GitHub Code Scanning. Rejects combining `--sarif` with `--json`, `--markdown`, or `--pr` (`ERR_VALIDATION_FAILED`).
 
 ### 4.19 Zero-Dependency MCP Stdio Server (`nomos mcp`)
-* **`nomos mcp`**: Hidden agent command revealed under `nomos --help-agent` serving MCP JSON-RPC 2.0 (`#MCPRequest`, `#MCPResponse`, `protocolVersion: "2024-11-05"`) over newline-delimited stdio without external runtimes.
-* **Read-Only Tool Boundaries**: Exposes strictly read-only orientation and verification tools (`nomos_handshake`, `nomos_status`, `nomos_task_dag`, `nomos_mem_recall`, `nomos_verify_impact`, `nomos_xray`). Rejects mutating requests under Law 1 and Law 3 CapBAC boundaries.
+* **`nomos mcp`**: Hidden agent command serving MCP JSON-RPC 2.0 (`#MCPRequest`, `#MCPResponse`) across `2026-07-28`, `2025-11-25`, `2025-06-18`, `2025-03-26`, and `2024-11-05`, including `server/discover` and `-32022` `_meta` validation.
+* **Read-Only Tool, Resource, and Directive Boundaries**: Exposes seven read-only tools, `resources/*`, and `prompts/*` while rejecting mutations. Each tool declares `title`, sibling-boundary disambiguation, `outputSchema`, and `structuredContent`.
 
 ---
 
@@ -415,6 +415,7 @@ type UpdateCheckCache struct {
 | `TC-CI-01` | Law 5 & Law 6 (Offline CI & Action) | `nomos init --ci`, `--ci --local`, and root `action.yml` | Writes CI configs, rejects `--ci --local`, and bootstraps static binary + baseline PR proofs |
 | `TC-SARIF-01` | Law 2 & Law 4 (OASIS SARIF 2.1.0 Output) | `nomos xray --sarif` and `nomos verify --sarif` | Emits valid SARIF 2.1.0 JSON with driver rules and locations |
 | `TC-MCP-01` | Law 1 & Law 6 (Read-Only MCP Server) | `nomos mcp` JSON-RPC 2.0 stdio | Serves `initialize`, `tools/list`, read tools; rejects mutating calls |
+| `TC-MCP-02` | Law 4 & Law 6 (MCP Discovery & `prompts/*`) | `nomos mcp` `2026-07-28` `server/discover`, `resources/*`, and `prompts/*` | Negotiates `2026-07-28`, `server/discover`, `-32022` `_meta` checks, resources, `prompts/*`, and capabilities |
 | `TC-XRAY-03` | Law 2 & Law 3 (Read-Only CLI X-Ray) | `nomos xray --json` and `nomos xray --markdown` on uninitialized directory | Emits structured `XrayReport` and Markdown card with zero filesystem or ledger writes |
 | `TC-BG-07` | Law 1 & Law 2 (Post-Commit Mneme Distill) | `nomos hook post-commit` after `nomos verify` trap fix on `feat/auth` | Distills `BRANCH-*` trap-to-fix pitfall into `mneme.db` and clears branch trace |
 | `TC-REL-001` | Law 4 (SPDX Apache-2.0 License) | `LICENSE` audit in `legal_release_contract_test.go` | Verifies verbatim SPDX Apache-2.0 text and appendix |

@@ -153,6 +153,39 @@ func TestIntentSteelmanStrictBlueprintStructureVectors(t *testing.T) {
 			content:   canonicalStrictSpecFixture + "\n```mermaid\nflowchart TD\n    A -->|Events (MESSAGE_CREATE)| B\n```\n",
 			wantError: "inside '|...|' edge label",
 		},
+		{
+			name:    "rejects_numbered_list_enumeration_mismatch",
+			relPath: "architecture/specs/enum_list_spec.md",
+			content: strings.Replace(
+				canonicalStrictSpecFixture,
+				"Every Intent contract binds to one compiled Go Single Source of Truth.",
+				"The AST engine underpins six automated sensor probes in `matrix.go`:\n\n1. Probe A\n2. Probe B\n3. Probe C\n4. Probe D\n5. Probe E\n6. Probe F\n7. Probe G\n8. Probe H",
+				1,
+			),
+			wantError: "enumeration count mismatch",
+		},
+		{
+			name:    "rejects_bullet_list_overflow_mismatch",
+			relPath: "architecture/specs/enum_bullets_spec.md",
+			content: strings.Replace(
+				canonicalStrictSpecFixture,
+				"Every Intent contract binds to one compiled Go Single Source of Truth.",
+				"The control system enforces three physical guarantees:\n\n- Guarantee 1\n- Guarantee 2\n- Guarantee 3\n- Guarantee 4",
+				1,
+			),
+			wantError: "enumeration count mismatch",
+		},
+		{
+			name:    "rejects_table_row_enumeration_mismatch",
+			relPath: "architecture/specs/enum_table_spec.md",
+			content: strings.Replace(
+				canonicalStrictSpecFixture,
+				"Every Intent contract binds to one compiled Go Single Source of Truth.",
+				"A prompt has three structural defects as a governance mechanism:\n\n| Dimension | Prompt | Substrate |\n| :--- | :--- | :--- |\n| A | 1 | 2 |\n| B | 1 | 2 |\n| C | 1 | 2 |\n| D | 1 | 2 |\n| E | 1 | 2 |",
+				1,
+			),
+			wantError: "enumeration count mismatch",
+		},
 	}
 
 	for _, tc := range cases {

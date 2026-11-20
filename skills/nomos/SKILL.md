@@ -17,7 +17,10 @@ curl -fsSL https://sophialabs.ca/install | bash
 
 # Alternatives when shell-pipe policy restricts curl | bash:
 # brew install --cask mgantlett/tap/nomos
+# npx --yes @mgantlett/nomos xray .
 # GOTOOLCHAIN=auto CGO_ENABLED=0 go install github.com/mgantlett/nomos/substrate/cmd/nomos@latest
+# Optional zero-install remote MCP tools (xray_github_repo, diagnose_nomos_error, scaffold_nomos_config):
+# claude mcp add --transport http nomos https://sophialabs.ca/mcp
 ```
 
 ## 2. Run Read-Only Day-0 Audit (`0` Repository Writes)

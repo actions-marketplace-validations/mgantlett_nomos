@@ -29,6 +29,7 @@ type MCPRequest struct {
 	ID      json.RawMessage `json:"id,omitempty"`
 	Method  string          `json:"method"`
 	Params  json.RawMessage `json:"params,omitempty"`
+	Meta    map[string]any  `json:"_meta,omitempty"`
 }
 
 // MCPResponse models a JSON-RPC 2.0 response frame (#MCPResponse).
@@ -43,14 +44,17 @@ type MCPResponse struct {
 type MCPError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
 }
 
 // MCPToolDescriptor declares a read-only MCP tool entry for tools/list.
 type MCPToolDescriptor struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	InputSchema map[string]any `json:"inputSchema"`
-	Annotations map[string]any `json:"annotations,omitempty"`
+	Name         string         `json:"name"`
+	Title        string         `json:"title,omitempty"`
+	Description  string         `json:"description"`
+	InputSchema  map[string]any `json:"inputSchema"`
+	OutputSchema map[string]any `json:"outputSchema,omitempty"`
+	Annotations  map[string]any `json:"annotations,omitempty"`
 }
 
 // MCPToolCallParams decodes parameters passed to tools/call.
@@ -67,8 +71,9 @@ type MCPTextContent struct {
 
 // MCPToolResult wraps structured tool output or fail-closed read-only errors.
 type MCPToolResult struct {
-	Content []MCPTextContent `json:"content"`
-	IsError bool             `json:"isError,omitempty"`
+	Content           []MCPTextContent `json:"content"`
+	StructuredContent map[string]any   `json:"structuredContent,omitempty"`
+	IsError           bool             `json:"isError,omitempty"`
 }
 
 // NewMCPCmd constructs the hidden agent command for serving read-only MCP over stdio.
@@ -130,13 +135,17 @@ func dispatchRPCFrame(raw []byte, version string) (MCPResponse, bool) {
 }
 
 func routeRPCMethod(req MCPRequest, version string) MCPResponse {
+	if errResp, blocked := validateStatelessMeta(req); blocked {
+		return errResp
+	}
+	if resResp, handled := routeResourceOrPromptMethod(req); handled {
+		return resResp
+	}
 	switch req.Method {
+	case "server/discover":
+		return okResponse(req.ID, buildServerDiscoverPayload(version))
 	case "initialize":
-		return okResponse(req.ID, map[string]any{
-			"protocolVersion": mcpProtocolVersion,
-			"capabilities":    map[string]any{"tools": map[string]any{}},
-			"serverInfo":      map[string]any{"name": "nomos", "version": version},
-		})
+		return okResponse(req.ID, buildInitializePayload(req.Params, version))
 	case "ping":
 		return okResponse(req.ID, map[string]any{})
 	case "tools/list":
@@ -159,10 +168,28 @@ func handleToolCall(req MCPRequest) MCPResponse {
 		return errorResponse(req.ID, rpcErrInvalidReq, "invalid tools/call params: missing tool name")
 	}
 	text, isErr := CallReadOnlyTool(params.Name, params.Arguments)
-	return okResponse(req.ID, MCPToolResult{
+	res := MCPToolResult{
 		Content: []MCPTextContent{{Type: "text", Text: text}},
 		IsError: isErr,
-	})
+	}
+	if !isErr {
+		res.StructuredContent = parseStructuredToolContent(text)
+	}
+	return okResponse(req.ID, res)
+}
+
+func parseStructuredToolContent(raw string) map[string]any {
+	var parsed any
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return nil
+	}
+	if obj, ok := parsed.(map[string]any); ok {
+		return obj
+	}
+	if arr, ok := parsed.([]any); ok {
+		return map[string]any{"items": arr, "count": len(arr)}
+	}
+	return nil
 }
 
 func okResponse(id json.RawMessage, result any) MCPResponse {
@@ -174,10 +201,14 @@ func okResponse(id json.RawMessage, result any) MCPResponse {
 }
 
 func errorResponse(id json.RawMessage, code int, msg string) MCPResponse {
+	return errorDataResponse(id, code, msg, nil)
+}
+
+func errorDataResponse(id json.RawMessage, code int, msg string, data any) MCPResponse {
 	return MCPResponse{
 		JSONRPC: jsonRPCVersion,
 		ID:      id,
-		Error:   &MCPError{Code: code, Message: msg},
+		Error:   &MCPError{Code: code, Message: msg, Data: data},
 	}
 }
 

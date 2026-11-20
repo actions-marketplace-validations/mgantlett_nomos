@@ -261,8 +261,9 @@ The system rejects unregistered synonyms.
 5. **Compiled Go SSoT & Vector Parity (Law 2 & Law 4):**
    - Every specification includes at least one fenced `go` block declaring compiled `type`, `func`, `const`, or `var` contracts.
    - Verification tables define at least three `TC-<DOMAIN>-<NN>` vector rows with zero legacy `TV-*`, `VEC-*`, or `CDV-*` prefixes.
-6. **Terminology, Dash & NCTE-100 Hygiene (Law 6 & Law 7):**
+6. **Terminology, Dash, Enumeration & NCTE-100 Hygiene (Law 2, Law 6 & Law 7):**
    - `IntentSteelmanGate` rejects Unicode em-dashes, Unicode en-dashes, legacy `Gate <N>` prose, and dangling `ADR-XXXX` shorthand.
+   - `ValidateStrictSpecStructure` enforces cardinal enumeration parity when a clause ending in `:` states `<N> <plural-noun>:`, rejecting mismatched list or table counts.
    - Every specification passes `ncte.Engine.LintMarkdown` with zero `NCTE-100` diagnostics.
 
 ```go

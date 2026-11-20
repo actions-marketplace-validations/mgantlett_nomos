@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v4.28.0] - 2026-11-20
+
+> Upgrade stdio MCP tool TDQS schemas and add X-Ray badge link to PR proof receipts; Markdown enumeration count parity in intentlint Steel-Man structure checks; Add MCP 2026-07-28 stateless discovery and server/discover; Update `tree_sitter_ast_gate_spec` probe count from six to eight (Apache 2.0)
+
+### Intent & Specifications (`intent/architecture/specs/`)
+- **Update `tree_sitter_ast_gate_spec` probe count from six to eight (`INT-2174`)**: Update `tree_sitter_ast_gate_spec` sensor probe count from six to eight.
+
+### CLI, Distribution & Hooks (`nomos cli`)
+- **Add MCP 2026-07-28 stateless discovery and server/discover (`INT-2169`, `SUB-3328`)**: Nomos mcp negotiates 2026-07-28, serves server/discover with supportedVersions, rejects unsupported _meta protocol versions with -32022, and passes `TC-MCP-02`.
+
+### Verification & Quality Gates (`nomos verify`)
+- **Consolidate canonical npm `package.json`, `server.json`, and CI registry publishing in open-core (`SUB-3368`)**: Allow metadata-only `package.json` updates under `lock_dependencies`.
+- **Enforce Markdown enumeration count parity in intentlint Steel-Man structure checks (`INT-2176`, `SUB-3336`)**: Enforce Markdown enumeration count parity in intentlint Steel-Man structure checks.
+
+### Release & Packaging (`CHANGELOG.md`, `.github/workflows/ci.yaml`, `README.md`)
+- **Replace `@mgantlett/nomos` with `@mgantlett/nomos` in CHANGELOG and launcher User-Agent (`SUB-3370`)**: Replace stale `@mgantlett/nomos` with `@mgantlett/nomos` in CHANGELOG and launcher.
+- **Align canonical `@mgantlett/nomos` `package.json`, version parity contract, and CI registry sync (`SUB-3369`)**: Align canonical `@mgantlett/nomos` `package.json`, manifest version parity, and CI registry sync.
+- **Upgrade stdio MCP tool TDQS schemas and add X-Ray badge link to PR proof receipts (`INT-2182`, `SUB-3362`)**: Add MCP tool TDQS schemas and GitHub X-Ray badge footer on PR proof receipts.
+- **Support NOMOS_RELEASE_BASE_URL for offline SHA-256 launcher verification (`SUB-3356`)**: Support NOMOS_RELEASE_BASE_URL in nomos-cli.mjs for offline SHA-256 verification.
+- **Align npm package scope to `@mgantlett/nomos` (`SUB-3353`)**: Align npm package scope to `@mgantlett/nomos` across docs, llms.txt, skills, and MCP `server.json`.
+- **Fix npm launcher GoReleaser archive naming, add mcpName, and add root `server.json` + `glama.json` (`SUB-3350`)**: Fix npm GoReleaser archive naming and add root `server.json` and `glama.json`.
+
+---
+
+## [v4.27.1] - 2026-11-19
+
+> Upgrade `nomos mcp` stdio server to negotiate MCP `2025-11-25` / `2025-06-18` and expose read-only `resources/*`, `prompts/*`, and `nomos_capabilities`; Add SHA-256 verified `@mgantlett/nomos` `npx` launcher and synchronize Homebrew, OpenAPI 3.1, and remote Streamable HTTP MCP discovery across `llms.txt`, `README.md`, `SKILL.md`, and `plugin.json` (Apache 2.0)
+
+### CLI, MCP & Agent Discovery (`nomos mcp`, `packaging/npm`, `llms.txt`)
+- **Upgrade `nomos mcp` to negotiate `2025-11-25` and serve read-only resources, prompts, and capabilities (`INT-2167`, `SUB-3322`)**: Negotiate MCP protocol versions `2025-11-25`, `2025-06-18`, `2025-03-26`, and `2024-11-05` in `nomos mcp` `initialize`, expose read-only `resources/list` + `resources/read` (`nomos://status`, `nomos://capabilities`, `nomos://directives`) and `prompts/list` + `prompts/get` (`xray-audit`, `verify-impact`, `recall-pitfalls`), and add the read-only `nomos_capabilities` tool (`TC-MCP-02`).
+- **Add SHA-256 verified `@mgantlett/nomos` `npx` launcher and remote HTTP MCP discovery (`SUB-3320`, `SUB-3321`, `SUB-3314`)**: Ship zero-dependency Node.js launcher (`packaging/npm/bin/nomos-cli.mjs`) with automatic latest GitHub Release resolution and `checksums.txt` SHA-256 verification, wire remote Streamable HTTP MCP (`https://sophialabs.ca/mcp`) into `.claude-plugin/plugin.json`, and synchronize Homebrew (`mgantlett/tap/nomos`), `npx`, and OpenAPI 3.1 discovery across `llms.txt`, `README.md`, and `skills/nomos/SKILL.md`.
+
+---
+
 ## [v4.27.0] - 2026-11-19
 
 > Numeric ratchet guard and refactor AST ceiling hotspots; Eliminate self-referential harness terminology in favor of deterministic substrate; Ratchet `max_package_files` to 20 and lock subpackage DAG boundaries in `nomos.yaml`; Extract polygate and ratchet subpackages, co-locate astdebt tests, and cap xray CDS <= 45 (Apache 2.0)

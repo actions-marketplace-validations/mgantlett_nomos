@@ -102,14 +102,18 @@ curl -fsSL https://sophialabs.ca/install | bash
 # macOS & Linux (Homebrew):
 brew install --cask mgantlett/tap/nomos
 
+# Zero-install Node.js / Cloud Agent Sandbox Launcher (SHA-256 verified):
+npx --yes @mgantlett/nomos xray .
+
 # Arch Linux / Omarchy (verified PKGBUILD):
 (tmp="$(mktemp -d)" && cd "$tmp" && curl -fsSLO https://raw.githubusercontent.com/mgantlett/nomos/main/packaging/aur/PKGBUILD && makepkg -si && rm -rf "$tmp")
 
 # Build from source (Go 1.26+; GOTOOLCHAIN=auto fetches Go 1.26+ automatically):
 GOTOOLCHAIN=auto CGO_ENABLED=0 go install github.com/mgantlett/nomos/substrate/cmd/nomos@main
 
-# Agent Skill & Claude Code Plugin Catalogs (Thin Binary Bootstrapper):
+# Agent Skill, Remote HTTP MCP & Claude Code Plugin Catalogs (Thin Binary Bootstrapper):
 npx skills add mgantlett/nomos
+claude mcp add --transport http nomos https://sophialabs.ca/mcp
 # Or inside Claude Code: /plugin marketplace add mgantlett/nomos && /plugin install nomos
 ```
 
@@ -136,7 +140,7 @@ nomos init --worktrees
 # Enforce zero-trust PR mutation proofs in GitHub Actions:
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }
-- uses: mgantlett/nomos@v4.27.0
+- uses: mgantlett/nomos@v4.28.0
   with: { base-ref: origin/main, mutate-diff: 'true' }
 ```
 

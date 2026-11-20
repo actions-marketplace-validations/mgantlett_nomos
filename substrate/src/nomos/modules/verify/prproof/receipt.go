@@ -270,7 +270,7 @@ func RenderVerifyPRAndMutation(out io.Writer, targetDir string, posture GatePost
 	if err != nil {
 		return false, err
 	}
-	md := FormatPRProofMarkdown(receipt)
+	md := FormatPRProofMarkdownForRepo(receipt, targetDir)
 	if strings.TrimSpace(opts.OutputPath) != "" {
 		if wErr := os.WriteFile(opts.OutputPath, []byte(md), 0644); wErr != nil {
 			return false, fmt.Errorf("failed writing PR proof receipt %s: %w", opts.OutputPath, wErr)

@@ -30,53 +30,14 @@ const (
 
 // ReadOnlyTools returns the canonical descriptor catalog of non-mutating Nomos MCP tools.
 func ReadOnlyTools() []MCPToolDescriptor {
-	ro := map[string]any{"readOnlyHint": true, "destructiveHint": false}
-	dirProp := map[string]any{propTypeKey: schemaTypeString, propDescKey: "Target repository directory path (defaults to current working directory)"}
-	limitProp := map[string]any{propTypeKey: schemaTypeInteger, propDescKey: "Maximum number of items to return"}
-	return []MCPToolDescriptor{
-		{
-			Name:        "nomos_handshake",
-			Description: "Synthesize read-only JIT session orientation telemetry without modifying workspace files or hooks.",
-			InputSchema: objectSchema(map[string]any{"dir": dirProp}, nil),
-			Annotations: ro,
-		},
-		{
-			Name:        "nomos_status",
-			Description: "Return unified workspace phase, active branch, database health, and task wavefront metrics.",
-			InputSchema: objectSchema(map[string]any{}, nil),
-			Annotations: ro,
-		},
-		{
-			Name:        "nomos_task_dag",
-			Description: "Query unblocked causal DAG wavefront tasks for the active repository without mutating ledger state.",
-			InputSchema: objectSchema(map[string]any{"dir": dirProp, "limit": limitProp}, nil),
-			Annotations: ro,
-		},
-		{
-			Name:        "nomos_mem_recall",
-			Description: "Search Nomos Mneme institutional memory records matching a semantic or keyword query.",
-			InputSchema: objectSchema(map[string]any{
-				"query": map[string]any{propTypeKey: schemaTypeString, propDescKey: "Search query for Nomos Mneme recall"},
-				"limit": limitProp,
-			}, []string{"query"}),
-			Annotations: ro,
-		},
-		{
-			Name:        "nomos_verify_impact",
-			Description: "Compute 1-hop AST reverse-dependency blast radius for modified files in the target repository.",
-			InputSchema: objectSchema(map[string]any{"dir": dirProp}, nil),
-			Annotations: ro,
-		},
-		{
-			Name:        "nomos_xray",
-			Description: "Run zero-write polyglot brownfield structural X-Ray diagnostics across a repository directory.",
-			InputSchema: objectSchema(map[string]any{
-				"dir": dirProp,
-				"top": map[string]any{propTypeKey: schemaTypeInteger, propDescKey: "Number of top hotspot files to include"},
-			}, nil),
-			Annotations: ro,
-		},
-	}
+	ro := readOnlyToolAnnotations()
+	dirProp := directoryPropertySchema()
+	tools := make([]MCPToolDescriptor, 0, 7)
+	tools = append(tools, buildSessionToolDescriptors(ro, dirProp)...)
+	tools = append(tools, buildLedgerToolDescriptors(ro, dirProp)...)
+	tools = append(tools, buildAnalysisToolDescriptors(ro, dirProp)...)
+	tools = append(tools, capabilitiesToolDescriptor(ro))
+	return tools
 }
 
 // CallReadOnlyTool dispatches strictly read-only MCP tool invocations and rejects mutating names.
@@ -94,6 +55,8 @@ func CallReadOnlyTool(name string, args map[string]any) (string, bool) {
 		return execVerifyImpactTool(args)
 	case "nomos_xray":
 		return execXrayTool(args)
+	case "nomos_capabilities":
+		return execCapabilitiesTool(args)
 	default:
 		return fmt.Sprintf("ERR_MCP_READ_ONLY: tool %q is unknown or mutating; only read-only orientation tools are exposed", name), true
 	}
