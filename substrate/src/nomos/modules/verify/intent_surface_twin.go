@@ -194,6 +194,12 @@ func inspectChangedNormativeFile(worktreeDir, baseRef, rel string, cliSet, cfgSe
 		}
 		return
 	}
+	if astdebt.IsNonTestWebSourcePath(normRel) {
+		baseWeb := astdebt.ParseWebSurfaceFingerprintForPath(normRel, readGitRevisionBytes(worktreeDir, baseRef, normRel))
+		currWeb := astdebt.ParseWebSurfaceFingerprintForPath(normRel, readWorktreeDiskBytes(filepath.Join(worktreeDir, filepath.FromSlash(normRel))))
+		astdebt.MergeSymmetricDiff(govSet, baseWeb, currWeb)
+		return
+	}
 	if !strings.HasSuffix(normRel, ".go") || strings.HasSuffix(normRel, "_test.go") {
 		return
 	}
@@ -229,9 +235,17 @@ func ValidateWorktreeIntentTwin(worktreeDir, commitMsg, mode string) string {
 	if len(twinKeys) == 0 {
 		delta := InspectWorktreeNormativeSurface(worktreeDir)
 		if delta.HasChanges() {
+			summary := delta.Summary()
+			recordTwinRequiredLatch(worktreeDir, subjectKey, summary)
 			return fmt.Sprintf(
 				"Substrate %s commit [%s] modifies normative contract surface (%s) and requires a bound 'Twin: INT-<N>' trailer when governance.quality_gates.intent_twin_mode=%s (Law 2 & Law 4)",
-				commitType, subjectKey, delta.Summary(), normMode,
+				commitType, subjectKey, summary, normMode,
+			)
+		}
+		if latched := readTwinRequiredLatch(worktreeDir, subjectKey); latched != "" {
+			return fmt.Sprintf(
+				"Substrate %s commit [%s] previously triggered normative surface expansion (%s); unexporting or hiding symbols to evade 'Twin: INT-<N>' is prohibited when governance.quality_gates.intent_twin_mode=%s (Law 1 & Law 4)",
+				commitType, subjectKey, latched, normMode,
 			)
 		}
 		return ""
@@ -241,6 +255,7 @@ func ValidateWorktreeIntentTwin(worktreeDir, commitMsg, mode string) string {
 			return provErr
 		}
 	}
+	clearTwinRequiredLatch(worktreeDir, subjectKey)
 	return ""
 }
 

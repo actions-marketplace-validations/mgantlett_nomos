@@ -75,6 +75,9 @@ func renderStandardVerifyReport(out io.Writer, repoRoot, targetDir, activeTask s
 	}
 	renderVerificationSummary(report)
 	if report.Passed && activeTask != "" {
+		if preflightWarn := verify.EvaluateWorktreeTwinPreflight(targetDir, activeTask); preflightWarn != "" {
+			fmt.Fprintf(out, "  %s %s\n", tui.UiWarnStyle.Render("⚠️  [Intent Twin Preflight]"), tui.UiValueStyle.Render(preflightWarn))
+		}
 		tui.RenderPhaseTransitionNextActions(out, types.PhaseReview, activeTask, targetDir, repoRoot)
 	}
 }

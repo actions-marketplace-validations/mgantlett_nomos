@@ -4,7 +4,9 @@ package astdebt
 import (
 	"go/ast"
 	"go/token"
+	"path/filepath"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -228,4 +230,78 @@ func MergeSymmetricDiff(dst, base, curr map[string]bool) {
 			dst["-"+k] = true
 		}
 	}
+}
+
+var (
+	webBlockCommentRe = regexp.MustCompile(`(?s)/\*.*?\*/`)
+	webLineCommentRe  = regexp.MustCompile(`(?m)//.*$`)
+	webExportValRe    = regexp.MustCompile(`(?m)^\s*export\s+(?:(?:async\s+)?function|const|let|var|class|enum)\s+([A-Za-z_$][A-Za-z0-9_$]*)`)
+	webExportTypeRe   = regexp.MustCompile(`(?m)^\s*export\s+(?:interface|type)\s+([A-Za-z_$][A-Za-z0-9_$]*)`)
+)
+
+// IsNonTestWebSourcePath reports whether relPath is a non-test TypeScript, JavaScript, or Svelte source file (@intent nomos_hermetic_worktree_spec.md #NormativeSurfaceDelta).
+func IsNonTestWebSourcePath(relPath string) bool {
+	norm := strings.ToLower(filepath.ToSlash(strings.TrimSpace(relPath)))
+	if norm == "" || isExcludedWebSurfacePath(norm) {
+		return false
+	}
+	for _, ext := range []string{".ts", ".js", ".mjs", ".svelte"} {
+		if strings.HasSuffix(norm, ext) {
+			return true
+		}
+	}
+	return false
+}
+
+// isExcludedWebSurfacePath filters build outputs, type stubs, and test suites from web surface fingerprinting.
+func isExcludedWebSurfacePath(lowerSlash string) bool {
+	for _, seg := range []string{"node_modules/", ".svelte-kit/", "/__tests__/", "dist/", "build/"} {
+		if strings.Contains(lowerSlash, seg) {
+			return true
+		}
+	}
+	for _, suf := range []string{".d.ts", ".test.ts", ".spec.ts", ".test.js", ".spec.js"} {
+		if strings.HasSuffix(lowerSlash, suf) {
+			return true
+		}
+	}
+	return false
+}
+
+// ParseWebSurfaceFingerprintForPath extracts directory-scoped TS/JS exports and Svelte component tokens (@intent nomos_hermetic_worktree_spec.md #NormativeSurfaceDelta).
+func ParseWebSurfaceFingerprintForPath(relPath string, src []byte) map[string]bool {
+	out := make(map[string]bool)
+	if len(src) == 0 || !IsNonTestWebSourcePath(relPath) {
+		return out
+	}
+	norm := filepath.ToSlash(strings.TrimSpace(relPath))
+	dirScope := filepath.ToSlash(filepath.Dir(filepath.FromSlash(norm)))
+	dirScope = strings.TrimPrefix(dirScope, "./")
+	if dirScope == "" || dirScope == "." {
+		dirScope = "root"
+	}
+	if strings.HasSuffix(strings.ToLower(norm), ".svelte") {
+		compName := strings.TrimSuffix(filepath.Base(norm), filepath.Ext(norm))
+		if compName != "" {
+			out["svelte_component:"+dirScope+":"+compName] = true
+		}
+	}
+	clean := stripWebComments(string(src))
+	for _, m := range webExportValRe.FindAllStringSubmatch(clean, -1) {
+		if len(m) > 1 {
+			out["export_ts:"+dirScope+"."+m[1]] = true
+		}
+	}
+	for _, m := range webExportTypeRe.FindAllStringSubmatch(clean, -1) {
+		if len(m) > 1 {
+			out["export_type_ts:"+dirScope+"."+m[1]] = true
+		}
+	}
+	return out
+}
+
+// stripWebComments removes JS/TS block and line comments prior to lexical export matching.
+func stripWebComments(src string) string {
+	noBlock := webBlockCommentRe.ReplaceAllString(src, "")
+	return webLineCommentRe.ReplaceAllString(noBlock, "")
 }
