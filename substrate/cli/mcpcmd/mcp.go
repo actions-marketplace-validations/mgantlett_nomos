@@ -49,10 +49,12 @@ type MCPError struct {
 
 // MCPToolDescriptor declares a read-only MCP tool entry for tools/list.
 type MCPToolDescriptor struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	InputSchema map[string]any `json:"inputSchema"`
-	Annotations map[string]any `json:"annotations,omitempty"`
+	Name         string         `json:"name"`
+	Title        string         `json:"title,omitempty"`
+	Description  string         `json:"description"`
+	InputSchema  map[string]any `json:"inputSchema"`
+	OutputSchema map[string]any `json:"outputSchema,omitempty"`
+	Annotations  map[string]any `json:"annotations,omitempty"`
 }
 
 // MCPToolCallParams decodes parameters passed to tools/call.
@@ -69,8 +71,9 @@ type MCPTextContent struct {
 
 // MCPToolResult wraps structured tool output or fail-closed read-only errors.
 type MCPToolResult struct {
-	Content []MCPTextContent `json:"content"`
-	IsError bool             `json:"isError,omitempty"`
+	Content           []MCPTextContent `json:"content"`
+	StructuredContent map[string]any   `json:"structuredContent,omitempty"`
+	IsError           bool             `json:"isError,omitempty"`
 }
 
 // NewMCPCmd constructs the hidden agent command for serving read-only MCP over stdio.
@@ -165,10 +168,28 @@ func handleToolCall(req MCPRequest) MCPResponse {
 		return errorResponse(req.ID, rpcErrInvalidReq, "invalid tools/call params: missing tool name")
 	}
 	text, isErr := CallReadOnlyTool(params.Name, params.Arguments)
-	return okResponse(req.ID, MCPToolResult{
+	res := MCPToolResult{
 		Content: []MCPTextContent{{Type: "text", Text: text}},
 		IsError: isErr,
-	})
+	}
+	if !isErr {
+		res.StructuredContent = parseStructuredToolContent(text)
+	}
+	return okResponse(req.ID, res)
+}
+
+func parseStructuredToolContent(raw string) map[string]any {
+	var parsed any
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return nil
+	}
+	if obj, ok := parsed.(map[string]any); ok {
+		return obj
+	}
+	if arr, ok := parsed.([]any); ok {
+		return map[string]any{"items": arr, "count": len(arr)}
+	}
+	return nil
 }
 
 func okResponse(id json.RawMessage, result any) MCPResponse {
