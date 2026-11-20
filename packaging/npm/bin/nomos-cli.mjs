@@ -39,16 +39,16 @@ async function resolveEffectiveVersion() {
 
 function resolveTargetPlatform(rawVersion) {
 	const version = String(rawVersion || FALLBACK_VERSION).replace(/^v/, '');
-	const platMap = { linux: 'linux', darwin: 'darwin', win32: 'windows' };
+	const platMap = { linux: 'Linux', darwin: 'Darwin', win32: 'Windows' };
 	const archMap = { x64: 'x86_64', arm64: 'arm64' };
 	const goos = platMap[process.platform];
 	const goarch = archMap[process.arch];
 	if (!goos || !goarch) {
 		throw new Error(`Unsupported OS/arch combination: ${process.platform}/${process.arch}`);
 	}
-	const ext = goos === 'windows' ? 'zip' : 'tar.gz';
-	const binName = goos === 'windows' ? 'nomos.exe' : 'nomos';
-	const archive = `nomos_${version}_${goos}_${goarch}.${ext}`;
+	const ext = goos === 'Windows' ? 'zip' : 'tar.gz';
+	const binName = goos === 'Windows' ? 'nomos.exe' : 'nomos';
+	const archive = `nomos_${goos}_${goarch}.${ext}`;
 	return { version, goos, goarch, ext, binName, archive };
 }
 
@@ -115,7 +115,7 @@ async function ensureCachedBinary(target) {
 		execFileSync('tar', ['-xf', archivePath, '-C', verDir, target.binName]);
 	}
 	fs.unlinkSync(archivePath);
-	if (target.goos !== 'windows') fs.chmodSync(binPath, 0o755);
+	if (target.goos !== 'Windows') fs.chmodSync(binPath, 0o755);
 	return binPath;
 }
 
@@ -126,11 +126,12 @@ async function main() {
 		process.stdout.write(`${JSON.stringify(target)}\n`);
 		return;
 	}
+	const effectiveArgs = args.length === 0 && !process.stdin.isTTY ? ['mcp'] : args;
 	const selfReal = fs.realpathSync(fileURLToPath(import.meta.url));
 	const quickTarget = resolveTargetPlatform(FALLBACK_VERSION);
 	const systemBin = findExistingSystemBinary(selfReal, quickTarget.binName);
 	const bin = systemBin || (await ensureCachedBinary(resolveTargetPlatform(await resolveEffectiveVersion())));
-	const child = spawnSync(bin, args, { stdio: 'inherit' });
+	const child = spawnSync(bin, effectiveArgs, { stdio: 'inherit' });
 	if (child.error) throw child.error;
 	process.exit(child.status ?? 0);
 }

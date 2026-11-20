@@ -222,6 +222,25 @@ func operationalSurfaceContractCases() []repoContractCase {
 			forbid: []string{"cockpit"},
 		},
 		{
+			name:    "official MCP registry server.json pairs remote HTTP and npm stdio package",
+			relPath: "server.json",
+			mustHave: []string{
+				`"io.github.mgantlett/nomos"`,
+				`"https://sophialabs.ca/mcp"`,
+				`"@sophialabs/nomos"`,
+			},
+			forbid: []string{"cockpit"},
+		},
+		{
+			name:    "Glama MCP directory manifest declares maintainer ownership",
+			relPath: "glama.json",
+			mustHave: []string{
+				`"https://glama.ai/mcp/schemas/server.json"`,
+				`"mgantlett"`,
+			},
+			forbid: []string{"cockpit"},
+		},
+		{
 			name:    "npm launcher script verifies SHA-256 checksums before execution",
 			relPath: filepath.Join("packaging", "npm", "bin", "nomos-cli.mjs"),
 			mustHave: []string{

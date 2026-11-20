@@ -1,0 +1,43 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.mgantlett/nomos",
+  "title": "Nomos - Deterministic Git & AST Governance for AI Coding Agents",
+  "description": "Live GitHub repo AST X-Ray, 42 coding-agent DoD gates, Git worktree guards & brownfield baselines.",
+  "version": "4.27.1",
+  "websiteUrl": "https://sophialabs.ca",
+  "repository": {
+    "url": "https://github.com/mgantlett/nomos",
+    "source": "github"
+  },
+  "icons": [
+    {
+      "src": "https://sophialabs.ca/assets/sophia_labs_glyph_square.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "256x256"
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://sophialabs.ca/mcp"
+    }
+  ],
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@sophialabs/nomos",
+      "version": "4.27.1",
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp"
+        }
+      ],
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

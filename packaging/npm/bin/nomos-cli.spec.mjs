@@ -17,6 +17,6 @@ describe('@sophialabs/nomos SHA-256 CLI launcher', () => {
 		assert.equal(info.version, '4.27.1');
 		assert.equal(typeof info.goos, 'string');
 		assert.equal(typeof info.goarch, 'string');
-		assert.equal(info.archive.startsWith('nomos_4.27.1_'), true);
+		assert.equal(info.archive, `nomos_${info.goos}_${info.goarch}.${info.ext}`);
 	});
 });
