@@ -205,14 +205,14 @@ func operationalSurfaceContractCases() []repoContractCase {
 			relPath: "llms.txt",
 			mustHave: []string{
 				"brew install --cask mgantlett/tap/nomos",
-				"npx --yes @sophialabs/nomos xray .",
+				"npx --yes @mgantlett/nomos xray .",
 				"https://sophialabs.ca/mcp",
 				"https://sophialabs.ca/.well-known/openapi.json",
 			},
 			forbid: []string{"cockpit"},
 		},
 		{
-			name:    "npm launcher package manifest exposes @sophialabs/nomos Apache-2.0 CLI wrapper",
+			name:    "npm launcher package manifest exposes Apache-2.0 CLI wrapper template",
 			relPath: filepath.Join("packaging", "npm", "package.json"),
 			mustHave: []string{
 				`"@sophialabs/nomos"`,
@@ -227,7 +227,7 @@ func operationalSurfaceContractCases() []repoContractCase {
 			mustHave: []string{
 				`"io.github.mgantlett/nomos"`,
 				`"https://sophialabs.ca/mcp"`,
-				`"@sophialabs/nomos"`,
+				`"@mgantlett/nomos"`,
 			},
 			forbid: []string{"cockpit"},
 		},

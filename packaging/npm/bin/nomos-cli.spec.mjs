@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const cliPath = path.join(__dirname, 'nomos-cli.mjs');
 
-describe('@sophialabs/nomos SHA-256 CLI launcher', () => {
+describe('@mgantlett/nomos SHA-256 CLI launcher', () => {
 	it('resolves platform archive metadata and strips leading v on NOMOS_VERSION', () => {
 		const out = execFileSync(process.execPath, [cliPath, '--launcher-info'], {
 			env: { ...process.env, NOMOS_VERSION: 'v4.27.1' },

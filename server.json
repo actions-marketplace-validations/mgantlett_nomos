@@ -27,7 +27,7 @@
   "packages": [
     {
       "registryType": "npm",
-      "identifier": "@sophialabs/nomos",
+      "identifier": "@mgantlett/nomos",
       "version": "4.27.1",
       "packageArguments": [
         {

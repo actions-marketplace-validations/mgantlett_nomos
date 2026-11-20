@@ -103,7 +103,7 @@ curl -fsSL https://sophialabs.ca/install | bash
 brew install --cask mgantlett/tap/nomos
 
 # Zero-install Node.js / Cloud Agent Sandbox Launcher (SHA-256 verified):
-npx --yes @sophialabs/nomos xray .
+npx --yes @mgantlett/nomos xray .
 
 # Arch Linux / Omarchy (verified PKGBUILD):
 (tmp="$(mktemp -d)" && cd "$tmp" && curl -fsSLO https://raw.githubusercontent.com/mgantlett/nomos/main/packaging/aur/PKGBUILD && makepkg -si && rm -rf "$tmp")
