@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v4.28.0] - 2026-11-20
+
+> Upgrade stdio MCP tool TDQS schemas and add X-Ray badge link to PR proof receipts; Markdown enumeration count parity in intentlint Steel-Man structure checks; Add MCP 2026-07-28 stateless discovery and server/discover; Update `tree_sitter_ast_gate_spec` probe count from six to eight (Apache 2.0)
+
+### Intent & Specifications (`intent/architecture/specs/`)
+- **Update `tree_sitter_ast_gate_spec` probe count from six to eight (`INT-2174`)**: Update `tree_sitter_ast_gate_spec` sensor probe count from six to eight.
+
+### CLI, Distribution & Hooks (`nomos cli`)
+- **Add MCP 2026-07-28 stateless discovery and server/discover (`INT-2169`, `SUB-3328`)**: Nomos mcp negotiates 2026-07-28, serves server/discover with supportedVersions, rejects unsupported _meta protocol versions with -32022, and passes `TC-MCP-02`.
+
+### Verification & Quality Gates (`nomos verify`)
+- **Consolidate canonical npm `package.json`, `server.json`, and CI registry publishing in open-core (`SUB-3368`)**: Allow metadata-only `package.json` updates under `lock_dependencies`.
+- **Enforce Markdown enumeration count parity in intentlint Steel-Man structure checks (`INT-2176`, `SUB-3336`)**: Enforce Markdown enumeration count parity in intentlint Steel-Man structure checks.
+
+### Release & Packaging (`CHANGELOG.md`, `.github/workflows/ci.yaml`, `README.md`)
+- **Replace `@mgantlett/nomos` with `@mgantlett/nomos` in CHANGELOG and launcher User-Agent (`SUB-3370`)**: Replace stale `@mgantlett/nomos` with `@mgantlett/nomos` in CHANGELOG and launcher.
+- **Align canonical `@mgantlett/nomos` `package.json`, version parity contract, and CI registry sync (`SUB-3369`)**: Align canonical `@mgantlett/nomos` `package.json`, manifest version parity, and CI registry sync.
+- **Upgrade stdio MCP tool TDQS schemas and add X-Ray badge link to PR proof receipts (`INT-2182`, `SUB-3362`)**: Add MCP tool TDQS schemas and GitHub X-Ray badge footer on PR proof receipts.
+- **Support NOMOS_RELEASE_BASE_URL for offline SHA-256 launcher verification (`SUB-3356`)**: Support NOMOS_RELEASE_BASE_URL in nomos-cli.mjs for offline SHA-256 verification.
+- **Align npm package scope to `@mgantlett/nomos` (`SUB-3353`)**: Align npm package scope to `@mgantlett/nomos` across docs, llms.txt, skills, and MCP `server.json`.
+- **Fix npm launcher GoReleaser archive naming, add mcpName, and add root `server.json` + `glama.json` (`SUB-3350`)**: Fix npm GoReleaser archive naming and add root `server.json` and `glama.json`.
+
+---
+
 ## [v4.27.1] - 2026-11-19
 
 > Upgrade `nomos mcp` stdio server to negotiate MCP `2025-11-25` / `2025-06-18` and expose read-only `resources/*`, `prompts/*`, and `nomos_capabilities`; Add SHA-256 verified `@mgantlett/nomos` `npx` launcher and synchronize Homebrew, OpenAPI 3.1, and remote Streamable HTTP MCP discovery across `llms.txt`, `README.md`, `SKILL.md`, and `plugin.json` (Apache 2.0)
