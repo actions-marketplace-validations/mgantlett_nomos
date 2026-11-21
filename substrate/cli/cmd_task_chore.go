@@ -175,6 +175,13 @@ func completeMTPOSync(repoRoot, key string) {
 }
 
 func renderLearnedPitfallsBriefing(repoRoot, taskTitle string) {
+	axioms := mem.RecallRepoAxiomsReadOnly(repoRoot, taskTitle, nil, 2)
+	for i, ax := range axioms {
+		if i == 0 {
+			fmt.Printf("  %s\n", tui.UiHeaderStyle.Render(fmt.Sprintf("Repo Axioms (%d active):", len(axioms))))
+		}
+		fmt.Printf("    🏛️  %s\n", tui.UiValueStyle.Render(ax))
+	}
 	pitfalls := mem.RecallRepoPitfallsReadOnly(repoRoot, nil, 3)
 	for i, p := range pitfalls {
 		if i == 0 {

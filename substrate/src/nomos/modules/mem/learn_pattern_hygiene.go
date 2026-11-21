@@ -5,14 +5,17 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
 
 const (
-	patternTopicPrefix = "pattern:"
-	habitTopicPrefix   = "pattern:habit:"
-	deadEndTopicPrefix = "dead_end:"
+	patternTopicPrefix           = "pattern:"
+	habitTopicPrefix             = "pattern:habit:"
+	deadEndTopicPrefix           = "dead_end:"
+	maxZeroRecallPatternsPerDir  = 3
+	staleZeroRecallPatternMaxAge = 30 * 24 * time.Hour
 )
 
 var blueprintBracketListRe = regexp.MustCompile(`\b(?:files|tests)=\[([^\]]+)\]`)
@@ -38,8 +41,43 @@ func SweepStaleRepoMemories(store *Store, repoRoot, repoID string, now time.Time
 		deadPatterns := sweepStalePatternsWithReceipts(store, all, repoRoot, normRepo, &rep)
 		dismissed = append(dismissed, deadPatterns...)
 	}
+	retireOverflowZeroRecallPatterns(store, all, normRepo, now)
 	rep.CrossScopeHabitsUpdated = consolidateCrossScopeGateHabits(store, surviving, repoID, normRepo)
 	return dismissed, rep
+}
+
+// retireOverflowZeroRecallPatterns supersedes >30d zero-recall directory patterns beyond the newest 3 per scope.
+func retireOverflowZeroRecallPatterns(store *Store, all []*Memory, normRepo string, now time.Time) {
+	buckets := groupZeroRecallPatternsByScope(all, normRepo)
+	cutoff := now.Add(-staleZeroRecallPatternMaxAge)
+	for _, list := range buckets {
+		if len(list) <= maxZeroRecallPatternsPerDir {
+			continue
+		}
+		sort.Slice(list, func(i, j int) bool { return list[i].ID > list[j].ID })
+		for _, old := range list[maxZeroRecallPatternsPerDir:] {
+			if !old.CreatedAt.IsZero() && old.CreatedAt.Before(cutoff) {
+				store.retireCooledPitfall(old.ID)
+			}
+		}
+	}
+}
+
+// groupZeroRecallPatternsByScope buckets active unaccessed non-habit directory patterns by normalized scope.
+func groupZeroRecallPatternsByScope(all []*Memory, normRepo string) map[string][]*Memory {
+	buckets := make(map[string][]*Memory)
+	for _, m := range all {
+		if m == nil || m.Kind != KindPattern || m.Status != StatusActive || m.AccessCount > 0 {
+			continue
+		}
+		if strings.ToLower(strings.TrimSpace(m.RepoID)) != normRepo {
+			continue
+		}
+		if scope := strings.ToLower(extractScopeFromPatternTopic(m.Topic)); scope != "" {
+			buckets[scope] = append(buckets[scope], m)
+		}
+	}
+	return buckets
 }
 
 // DismissStaleRepoMemories executes SweepStaleRepoMemories and returns the itemized tombstoned records (@intent: #Memory).

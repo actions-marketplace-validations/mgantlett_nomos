@@ -172,10 +172,26 @@ func TestSynthesizeDynamicHandshake_ColdStartArchitectureAndLeanChore(t *testing
 	if err := mem.SeedRepositoryArchitectureBaseline(repoDir, "[Architecture Baseline in lean-brownfield (INIT)] stack=[python] roots=[src]"); err != nil {
 		t.Fatalf("seed baseline: %v", err)
 	}
+	axStore, sErr := mem.NewStore("")
+	if sErr != nil {
+		t.Fatalf("NewStore: %v", sErr)
+	}
+	if aErr := axStore.Save(&mem.Memory{
+		RepoID: "lean-brownfield", Kind: mem.KindAxiom, Topic: "axiom:anti-shim-ast-invariant",
+		Content: "[Autonomic Convention Axiom] Zero trivial pass shims", TaskID: "SUB-1", Status: mem.StatusActive,
+	}); aErr != nil {
+		t.Fatalf("save axiom: %v", aErr)
+	}
+	if cErr := axStore.Close(); cErr != nil {
+		t.Fatalf("close store: %v", cErr)
+	}
 
 	ev, err := handshake.SynthesizeDynamicHandshake(repoDir)
 	if err != nil {
 		t.Fatalf("SynthesizeDynamicHandshake: %v", err)
+	}
+	if len(ev.RepoAxioms) != 1 || !strings.Contains(ev.RepoAxioms[0], "Zero trivial pass shims") {
+		t.Fatalf("expected RepoAxioms surfaced in HandshakeEvent, got: %v", ev.RepoAxioms)
 	}
 	if len(ev.VerifiedPatterns) != 1 || !strings.Contains(ev.VerifiedPatterns[0], "Architecture Baseline") {
 		t.Fatalf("expected cold-start VerifiedPatterns to surface Day-0 architecture baseline, got: %v", ev.VerifiedPatterns)

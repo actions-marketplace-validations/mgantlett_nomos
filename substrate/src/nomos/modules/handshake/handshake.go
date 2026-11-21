@@ -35,9 +35,10 @@ type HandshakeEvent struct {
 	DatabasesHealthy bool              `json:"databases_healthy"`
 	GateCount        int               `json:"gate_count"`
 	ReadyWavefront   []string          `json:"ready_wavefront"`
-	Directives           []string                 `json:"directives,omitempty"`
-	LearnedPitfalls      []string                 `json:"learned_pitfalls,omitempty"`
-	VerifiedPatterns     []string                 `json:"verified_patterns,omitempty"`
+	Directives           []string                   `json:"directives,omitempty"`
+	RepoAxioms           []string                   `json:"repo_axioms,omitempty"`
+	LearnedPitfalls      []string                   `json:"learned_pitfalls,omitempty"`
+	VerifiedPatterns     []string                   `json:"verified_patterns,omitempty"`
 	GraduationCandidates []string                 `json:"graduation_candidates,omitempty"`
 	ImpactSummary        []string                 `json:"impact_summary,omitempty"`
 	StaleObligations     []task.StaleSpecObligation `json:"stale_obligations,omitempty"`
@@ -79,7 +80,7 @@ func SynthesizeDynamicHandshake(repoRoot string) (*HandshakeEvent, error) {
 	wavefront := queryReadyWavefront(task.ResolveRepoProject(primaryRoot))
 	directives := loadPhaseDirectives(primaryRoot, phase)
 	modifiedFiles, impactSummary := computeActiveTaskImpact(treeRoot, activeTask)
-	pitfalls, patterns, graduations := recallMnemeHandshakeContext(primaryRoot, activeTask, modifiedFiles)
+	mnemeCtx := recallMnemeHandshakeContext(primaryRoot, activeTask, modifiedFiles)
 	strictMode, intentTwinOff, bfTopology := resolveHandshakeGovernance(treeRoot, primaryRoot)
 	nextActions := resolveHandshakeNextActions(handshakeNextActionsInput{
 		treeRoot: treeRoot, primaryRoot: primaryRoot, branch: branch, phase: phase,
@@ -100,9 +101,10 @@ func SynthesizeDynamicHandshake(repoRoot string) (*HandshakeEvent, error) {
 		GateCount:            verify.RegisteredGateCount(),
 		ReadyWavefront:       wavefront,
 		Directives:           directives,
-		LearnedPitfalls:      pitfalls,
-		VerifiedPatterns:     patterns,
-		GraduationCandidates: graduations,
+		RepoAxioms:           mnemeCtx.axioms,
+		LearnedPitfalls:      mnemeCtx.pitfalls,
+		VerifiedPatterns:     mnemeCtx.patterns,
+		GraduationCandidates: mnemeCtx.graduations,
 		ImpactSummary:        impactSummary,
 		StaleObligations:     resolveHandshakeStaleObligations(primaryRoot),
 		StrictMode:           strictMode,

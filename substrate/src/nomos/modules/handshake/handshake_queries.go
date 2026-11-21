@@ -14,18 +14,29 @@ import (
 
 var scopePathHintRe = regexp.MustCompile(`[a-zA-Z0-9_.-]+(?:/[a-zA-Z0-9_.-]+)+\.[a-zA-Z0-9]+`)
 
-func recallMnemeHandshakeContext(primaryRoot, activeTask string, modifiedFiles []string) ([]string, []string, []string) {
-	var pitfalls, patterns []string
+// mnemeHandshakeContext bundles repo axioms, pitfalls, patterns, and graduation candidates recalled during handshake.
+type mnemeHandshakeContext struct {
+	axioms      []string
+	pitfalls    []string
+	patterns    []string
+	graduations []string
+}
+
+// recallMnemeHandshakeContext recalls repository-scoped axioms, pitfalls, patterns, and graduation candidates.
+func recallMnemeHandshakeContext(primaryRoot, activeTask string, modifiedFiles []string) mnemeHandshakeContext {
+	var ctx mnemeHandshakeContext
 	taskTitle, scopeHints := resolveActiveTaskContext(activeTask)
 	if strings.TrimSpace(activeTask) == "" || len(modifiedFiles) == 0 {
-		pitfalls = mem.RecallRepoPitfallsReadOnly(primaryRoot, scopeHints, 3)
-		patterns = mem.RecallRepoPatternsReadOnly(primaryRoot, taskTitle, scopeHints, 3)
+		ctx.axioms = mem.RecallRepoAxiomsReadOnly(primaryRoot, taskTitle, scopeHints, 2)
+		ctx.pitfalls = mem.RecallRepoPitfallsReadOnly(primaryRoot, scopeHints, 3)
+		ctx.patterns = mem.RecallRepoPatternsReadOnly(primaryRoot, taskTitle, scopeHints, 3)
 	} else {
-		pitfalls = mem.RecallRepoPitfallsForTask(primaryRoot, activeTask, modifiedFiles, 3)
-		patterns = mem.RecallRepoPatternsForTask(primaryRoot, activeTask, taskTitle, modifiedFiles, 3)
+		ctx.axioms = mem.RecallRepoAxiomsForTask(primaryRoot, activeTask, taskTitle, modifiedFiles, 2)
+		ctx.pitfalls = mem.RecallRepoPitfallsForTask(primaryRoot, activeTask, modifiedFiles, 3)
+		ctx.patterns = mem.RecallRepoPatternsForTask(primaryRoot, activeTask, taskTitle, modifiedFiles, 3)
 	}
-	graduations := mem.RecallGraduationCandidates(primaryRoot, 3)
-	return pitfalls, patterns, graduations
+	ctx.graduations = mem.RecallGraduationCandidates(primaryRoot, 3)
+	return ctx
 }
 
 func resolveActiveTaskContext(activeTask string) (string, []string) {

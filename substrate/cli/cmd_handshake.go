@@ -177,6 +177,7 @@ func formatHandshakeWavefront(keys []string) string {
 		tui.UiMutedStyle.Render(fmt.Sprintf("(%d task(s))", len(keys))))
 }
 
+// renderHandshakeMnemeTelemetry prints stale spec obligations, 1-hop AST blast radius, and Mneme recall blocks.
 func renderHandshakeMnemeTelemetry(event *handshake.HandshakeEvent) {
 	if len(event.StaleObligations) > 0 {
 		fmt.Println(tui.KvLine("Stale Obligations", 17, tui.UiWarnStyle.Render(fmt.Sprintf("⚠️  %d spec(s) modified since last SUB-* verification receipt", len(event.StaleObligations)))))
@@ -190,23 +191,24 @@ func renderHandshakeMnemeTelemetry(event *handshake.HandshakeEvent) {
 			fmt.Printf("    %s %s\n", tui.UiSubstrateStyle.Render("•"), tui.UiValueStyle.Render(item))
 		}
 	}
-	if len(event.LearnedPitfalls) > 0 {
-		fmt.Println(tui.KvLine("Learned Pitfalls", 17, tui.UiWarnStyle.Render(fmt.Sprintf("%d distilled repo trap(s) active", len(event.LearnedPitfalls)))))
-		for _, p := range event.LearnedPitfalls {
-			fmt.Printf("    ⚡ %s\n", tui.UiValueStyle.Render(p))
-		}
+	renderHandshakeRecallSection("Repo Axioms", fmt.Sprintf("%d architectural axiom(s) active", len(event.RepoAxioms)), "🏛️ ", event.RepoAxioms, false)
+	renderHandshakeRecallSection("Learned Pitfalls", tui.UiWarnStyle.Render(fmt.Sprintf("%d distilled repo trap(s) active", len(event.LearnedPitfalls))), "⚡", event.LearnedPitfalls, false)
+	renderHandshakeRecallSection("Verified Patterns", fmt.Sprintf("%d structural blueprint(s) active", len(event.VerifiedPatterns)), "🧩", event.VerifiedPatterns, true)
+	renderHandshakeRecallSection("Tier B Candidates", tui.UiIntentStyle.Render(fmt.Sprintf("%d recurring invariant(s) ready for nomos.yaml", len(event.GraduationCandidates))), "🎓", event.GraduationCandidates, true)
+}
+
+// renderHandshakeRecallSection prints a non-empty Mneme recall section with a uniform bullet icon.
+func renderHandshakeRecallSection(title, summary, icon string, items []string, muted bool) {
+	if len(items) == 0 {
+		return
 	}
-	if len(event.VerifiedPatterns) > 0 {
-		fmt.Println(tui.KvLine("Verified Patterns", 17, fmt.Sprintf("%d structural blueprint(s) active", len(event.VerifiedPatterns))))
-		for _, pat := range event.VerifiedPatterns {
-			fmt.Printf("    🧩 %s\n", tui.UiMutedStyle.Render(pat))
-		}
+	fmt.Println(tui.KvLine(title, 17, summary))
+	style := tui.UiValueStyle
+	if muted {
+		style = tui.UiMutedStyle
 	}
-	if len(event.GraduationCandidates) > 0 {
-		fmt.Println(tui.KvLine("Tier B Candidates", 17, tui.UiIntentStyle.Render(fmt.Sprintf("%d recurring invariant(s) ready for nomos.yaml", len(event.GraduationCandidates)))))
-		for _, cand := range event.GraduationCandidates {
-			fmt.Printf("    🎓 %s\n", tui.UiMutedStyle.Render(cand))
-		}
+	for _, entry := range items {
+		fmt.Printf("    %s %s\n", icon, style.Render(entry))
 	}
 }
 
