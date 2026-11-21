@@ -334,26 +334,40 @@ func scanSecretsScoped(ctx *vscope.VerifyContext, root string) ([]string, error)
 	if !vscope.IsBrownfieldRatchetActive(ctx) || (ctx != nil && ctx.AllFiles) || !vscope.HasGitMetadata(root) {
 		return scanSecrets(ctx, root)
 	}
-	leaks := impact.ScanUnignoredEnvFiles(root)
+	var leaks []string
 	err := vscope.WalkTargetFiles(ctx, root, func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil || info == nil || info.IsDir() {
 			return nil
 		}
-		if isIgnoredSecretFile(path) || (impact.IsProhibitedEnvFileName(info.Name()) && impact.IsGitIgnoredPath(root, path)) {
-			return nil
-		}
-		if data, rErr := vscope.MemoizedReadFile(ctx, path); rErr == nil {
-			relPath := ratchet.RelativeOrFullPath(root, path)
-			if label := impact.MatchSecretTokenLabel(string(data)); label != "" {
-				leaks = append(leaks, relPath+" ("+label+")")
-			}
-			for _, cwe := range scanRatchetedCWELeaks(ctx, root, path, relPath, data) {
-				leaks = append(leaks, relPath+" ("+cwe+")")
-			}
-		}
+		leaks = append(leaks, evaluateScopedFileSecretLeaks(ctx, root, path, info.Name())...)
 		return nil
 	})
 	return leaks, err
+}
+
+func evaluateScopedFileSecretLeaks(ctx *vscope.VerifyContext, root, path, name string) []string {
+	relPath := ratchet.RelativeOrFullPath(root, path)
+	if impact.IsProhibitedEnvFileName(name) {
+		if !impact.IsGitIgnoredPath(root, path) {
+			return []string{relPath + " (unignored credential file)"}
+		}
+		return nil
+	}
+	if isIgnoredSecretFile(path) {
+		return nil
+	}
+	data, err := vscope.MemoizedReadFile(ctx, path)
+	if err != nil {
+		return nil
+	}
+	var leaks []string
+	if label := impact.MatchSecretTokenLabel(string(data)); label != "" {
+		leaks = append(leaks, relPath+" ("+label+")")
+	}
+	for _, cwe := range scanRatchetedCWELeaks(ctx, root, path, relPath, data) {
+		leaks = append(leaks, relPath+" ("+cwe+")")
+	}
+	return leaks
 }
 
 func scanBrokenLinksScoped(ctx *vscope.VerifyContext, root string) ([]string, error) {

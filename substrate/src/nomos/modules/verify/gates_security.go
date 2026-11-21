@@ -4,6 +4,7 @@ package verify
 import (
 	"fmt"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/ratchet"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"io/fs"
 	"os"
@@ -148,7 +149,7 @@ var bannedSovereignPrefixes = []string{
 // Evaluate scans Go source files for banned sovereign imports.
 func (g *IPLeakGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
 	root := resolveSecurityRoot(ctx)
-	violations, err := scanIPLeaks(ctx, root)
+	violations, err := scanIPLeaksScoped(ctx, root)
 	if err != nil {
 		return nil, err
 	}
@@ -164,6 +165,26 @@ func (g *IPLeakGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, er
 		GateName: g.Name(), ProbeID: "ip_leak", Law: 5, Ring: RingSyntactic,
 		Passed: true, Message: "zero sovereign IP leaks detected in open-core codebase",
 	}, nil
+}
+
+func scanIPLeaksScoped(ctx *vscope.VerifyContext, root string) ([]string, error) {
+	if !vscope.IsBrownfieldRatchetActive(ctx) || (ctx != nil && ctx.AllFiles) || !vscope.HasGitMetadata(root) {
+		return scanIPLeaks(ctx, root)
+	}
+	var violations []string
+	err := vscope.WalkTargetFiles(ctx, root, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil || info == nil || info.IsDir() || impact.IsVerificationSuiteFile(info.Name()) || !vscope.IsSupportedPolyglotSourceFile(path) {
+			return nil
+		}
+		rel := ratchet.RelativeOrFullPath(root, path)
+		for _, val := range impact.ExtractPolyglotFileImports(path) {
+			if isBannedImport(val) {
+				violations = append(violations, fmt.Sprintf("%s: imports %s", rel, val))
+			}
+		}
+		return nil
+	})
+	return violations, err
 }
 
 func scanIPLeaks(ctx *vscope.VerifyContext, root string) ([]string, error) {
