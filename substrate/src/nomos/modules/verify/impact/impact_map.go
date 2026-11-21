@@ -79,7 +79,7 @@ func ComputeWorkspaceImpact(worktreeDir string, modifiedFiles []string) []string
 		return nil
 	}
 
-	goImportIndex := BuildGoReverseImportIndex(worktreeDir)
+	goImportIndex := buildGoReverseIndexIfNeeded(worktreeDir, modifiedFiles)
 	var summaries []string
 	seenDirs := make(map[string]bool)
 
@@ -173,8 +173,20 @@ func extractFileIntentAnchors(absPath string) []string {
 	return out
 }
 
+func buildGoReverseIndexIfNeeded(worktreeDir string, modifiedFiles []string) map[string][]string {
+	for _, rel := range modifiedFiles {
+		if strings.HasSuffix(rel, astdebt.ExtGo) && !IsTestSourceFile(rel) {
+			return BuildGoReverseImportIndex(worktreeDir)
+		}
+	}
+	return nil
+}
+
 // BuildGoReverseImportIndex executes deterministic impact verification logic (@intent nomos_intent_traceability_spec.md).
 func BuildGoReverseImportIndex(root string) map[string][]string {
+	if gitIdx, ok := tryGitParallelGoReverseIndex(root); ok {
+		return gitIdx
+	}
 	index := make(map[string]map[string]bool)
 	fset := token.NewFileSet()
 

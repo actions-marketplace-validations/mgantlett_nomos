@@ -73,6 +73,9 @@ func resolvePacingTraceTarget(p *shellguard.HookPayload, hermeticDir string) (st
 	if wtRoot := resolveWorktreeTraceRoot(p, hermeticDir); wtRoot != "" {
 		return resolveTraceStateFilePath(wtRoot), wtRoot, false
 	}
+	if fbRoot, fbKey := resolveFeatureBranchTraceScope(p, hermeticDir); fbRoot != "" {
+		return resolveTraceStateFilePath(fbKey), fbRoot, false
+	}
 	path, trunkRoot := resolveTrunkSessionTracePath(p, hermeticDir)
 	return path, trunkRoot, path != ""
 }

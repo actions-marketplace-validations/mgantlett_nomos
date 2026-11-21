@@ -11,8 +11,11 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/treesitter"
 )
@@ -42,13 +45,36 @@ func DetectStructuralClones(files map[string][]byte, minLines int) []CloneGroup 
 	if minLines <= 0 {
 		minLines = DefaultMinCloneLines
 	}
+	buckets := extractCloneBucketsParallel(sortedSourceKeys(files), files, minLines)
+	return buildCloneGroups(buckets)
+}
+
+func extractCloneBucketsParallel(keys []string, files map[string][]byte, minLines int) map[string][]cloneBlockCandidate {
+	workers := min(max(runtime.GOMAXPROCS(0), 1), max(len(keys), 1))
+	results := make([][]cloneBlockCandidate, len(keys))
+	var cursor atomic.Int64
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for w := 0; w < workers; w++ {
+		go func() {
+			defer wg.Done()
+			for {
+				i := int(cursor.Add(1) - 1)
+				if i >= len(keys) {
+					return
+				}
+				results[i] = extractFileCloneCandidates(keys[i], files[keys[i]], minLines)
+			}
+		}()
+	}
+	wg.Wait()
 	buckets := make(map[string][]cloneBlockCandidate)
-	for _, relPath := range sortedSourceKeys(files) {
-		for _, c := range extractFileCloneCandidates(relPath, files[relPath], minLines) {
+	for _, list := range results {
+		for _, c := range list {
 			buckets[c.hash] = append(buckets[c.hash], c)
 		}
 	}
-	return buildCloneGroups(buckets)
+	return buckets
 }
 
 // extractFileCloneCandidates dispatches Go AST or polyglot tree-sitter clone candidate extraction.

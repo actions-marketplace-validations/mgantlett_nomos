@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v4.29.0] - 2026-11-21
+
+> Unify convention-family axiom consolidation, scrub axiom stack traces, and ground KindDeadEnd hygiene in open-core mem; Fail-closed CommitSchemaGate twin preflight and Go const/SQL DML surface fingerprinting; Add zero-dependency PyPI nomos-cli thin binary launcher for uvx and pip; Skip non-shell heredoc stdin lines during trunk (Apache 2.0)
+
+### Intent & Specifications (`intent/architecture/specs/`)
+- **Codify polyglot 24h runner assertion TTL (`INT-2192`)**: Updated `mneme_memory_spec.md` to specify 24h polyglot runner assertion expiry, bare-header tombstoning, 42-gate Tier-C exclusion, and cooled 1x guardrail retirement.
+
+### CLI, Distribution & Hooks (`nomos hook`, `nomos cli`)
+- **Skip non-shell heredoc stdin lines during trunk (`SUB-3409`)**: Skip non-shell heredoc stdin lines during trunk shell redirect checks.
+- **Harden Tier 1 agent radar, worktree loop digest, and concurrency guidance (`INT-2198`, `SUB-3392`)**: Add pre-latch Contract Radar preview, worktree loop digest resolution, and ActiveWorktrees concurrency guidance.
+
+### Verification & Quality Gates (`nomos verify`, `nomos cli`)
+- **Fail-closed CommitSchemaGate twin preflight and Go const/SQL DML surface fingerprinting (`INT-2194`, `SUB-3387`)**: Wired EvaluateWorktreeTwinPreflight fail-closed into CommitSchemaGate on nomos verify with immediate latch arming, added Go const threshold and SQL DDL/DML surface tokens, and removed soft CLI warning.
+- **Polyglot TS/Svelte normative surface fingerprinting, verify twin preflight, and anti-evasion ratchet (`INT-2193`, `SUB-3386`)**: Implement TS/Svelte surface fingerprinting in astdebt/verify, sticky worktree twin-rejection latch against export-hiding evasion, and pre-commit twin preflight reporting during nomos verify.
+
+### Task, Memory & Session (`nomos mem`, `nomos handshake`)
+- **Unify convention-family axiom consolidation, scrub axiom stack traces, and ground KindDeadEnd hygiene in open-core mem (`INT-2208`, `SUB-3407`)**: Unified 24-gate convention axiom consolidation, title/path scrubbing, pattern:habit retirement, and KindDeadEnd deleted-file/cooling hygiene in open-core modules/mem.
+- **Ground absent Trap files and healed ceilings (`INT-2206`, `SUB-3404`)**: SweepStaleRepoMemories and read-time pitfall grounding suppress deleted Trap files and healed LOC/package ceilings in open-core, Verified Patterns excludes negative pattern:habit AST trap clones, and unscoped IDLE pitfalls prioritize >=2x recurring traps.
+- **Recall repo axioms in handshake and task start and cap stale directory patterns (`INT-2201`, `SUB-3397`)**: Handshake and task start/chore recall and reinforce top-2 repo axioms alongside pitfalls and patterns, and SweepRepoPitfallHygiene retires >30d zero-recall pattern overflows beyond top-3 per directory scope.
+- **Add polyglot ephemeral test expiry, bare-header sweep (`SUB-3383`)**: Expanded polyglot single-test assertion expiry (24h), swept bare-header pitfalls, retired cooled 1x guardrails, and completed built-in 42-gate classification.
+
+### Release & Packaging (`.github/workflows/ci.yaml`, `nomos verify`)
+- **Verify pyproject.toml version parity in TestOpenCoreManifestVersionParity (`SUB-3395`)**: Verify pyproject.toml version parity against RootCmdVersion.
+- **Wire GitHub OIDC PyPI Trusted Publishing and mcp-name ownership marker for nomos-cli (`SUB-3381`)**: Added Official MCP Registry mcp-name ownership marker to `packaging/pypi/README.md`, added pypi nomos-cli stdio package to `server.json`, and wired idempotent GitHub OIDC PyPI + npm + Official MCP Registry `sync_registries` job into `.github/workflows/ci.yaml`.
+- **Enable passwordless OIDC Trusted Publisher and CDN wait in `ci.yaml` npm sync (`SUB-3380`)**: Enable passwordless npm OIDC Trusted Publisher and CDN wait.
+- **Add zero-dependency PyPI nomos-cli thin binary launcher for uvx and pip (`INT-2189`, `SUB-3377`)**: Implement packaging/pypi (pyproject.toml, nomos_cli/__init__.py, `README.md`, and `test_nomos_cli`.py) verifying OS/arch resolution and SHA-256 checksum enforcement.
+
+---
+
 ## [v4.28.0] - 2026-11-20
 
 > Upgrade stdio MCP tool TDQS schemas and add X-Ray badge link to PR proof receipts; Markdown enumeration count parity in intentlint Steel-Man structure checks; Add MCP 2026-07-28 stateless discovery and server/discover; Update `tree_sitter_ast_gate_spec` probe count from six to eight (Apache 2.0)

@@ -7,14 +7,11 @@
 **Agents guess; Git cannot. The Apache 2.0 Go execution substrate beneath any coding agent (0 LLM tokens).**
 
 [![CI](https://github.com/mgantlett/nomos/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/mgantlett/nomos/actions/workflows/ci.yaml)
-[![Release](https://img.shields.io/github/v/release/mgantlett/nomos?color=0EA5E9)](https://github.com/mgantlett/nomos/releases/latest)
-[![Marketplace](https://img.shields.io/badge/Marketplace-Nomos_PR_Proof-0EA5E9?logo=github)](https://github.com/marketplace/actions/nomos-zero-trust-pr-proof)
-[![Go Version](https://img.shields.io/github/go-mod/go-version/mgantlett/nomos?filename=substrate%2Fgo.mod&logo=go&logoColor=white)](substrate/go.mod)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24240539.svg)](https://doi.org/10.5281/zenodo.24240539)
-[![Docs](https://img.shields.io/badge/Docs-sophialabs.ca-0EA5E9)](https://sophialabs.ca/docs/introduction)
-[![Web X-Ray](https://img.shields.io/badge/Web_X--Ray-0--Install_Scan-10B981)](https://sophialabs.ca/xray)
-[![Discussions](https://img.shields.io/github/discussions/mgantlett/nomos?color=0EA5E9&label=Discussions)](https://github.com/mgantlett/nomos/discussions)
+[![Release](https://img.shields.io/github/v/release/mgantlett/nomos?label=Release&color=0284C7)](https://github.com/mgantlett/nomos/releases/latest)
+[![License](https://img.shields.io/badge/License-Apache_2.0-0284C7)](LICENSE)
+[![Docs](https://img.shields.io/badge/Docs-sophialabs.ca-0284C7)](https://sophialabs.ca/docs/introduction)
+[![Nomos X-Ray](https://sophialabs.ca/api/xray/badge/mgantlett/nomos.svg)](https://sophialabs.ca/mgantlett/nomos)
+[![Telemetry](https://img.shields.io/badge/Telemetry-Live-0284C7)](https://sophialabs.ca/system/analytics)
 
 <br />
 
@@ -136,11 +133,12 @@ nomos init --ci
 nomos init --worktrees
 ```
 
+Enforce zero-trust PR mutation proofs in GitHub Actions ([GitHub Marketplace](https://github.com/marketplace/actions/nomos-zero-trust-pr-proof)):
+
 ```yaml
-# Enforce zero-trust PR mutation proofs in GitHub Actions:
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }
-- uses: mgantlett/nomos@v4.28.0
+- uses: mgantlett/nomos@v4.29.0
   with: { base-ref: origin/main, mutate-diff: 'true' }
 ```
 
@@ -169,6 +167,7 @@ nomos init --worktrees
 | **CLI Harness Security ([`HarnessSecurity-Bench`](https://arxiv.org/abs/2610.07639))** | **`13.0%` ASR (`3/23`) vs. `60.9%` Control (`14/23`) · `-35.2%` Cost** | `46` paired `Claude Code 2.1.252 + Sonnet 5.5` containers across `9` mechanisms (`92.0%` non-`ro` utility, [Dispatch D-14](https://sophialabs.ca/dispatches/harness-security-bench-paired-audit)) |
 | **`233k`-LOC Mature OSS Brownfield Ratchet** | **`6/6` `42`-Gate Clean · `2x` Debt-Free · `-14.7%` Tokens** | Zero-hint refactors across `sqlglot` (`152k` LOC), `commander.js`, `go-chi`, and `BurntSushi/toml` (blocked `+26` hidden complexity debt) |
 | **`Terminal-Bench 2.0` (`k=5` · `445` Docker Runs)** | **`76.40%` `Pass@1` (`340/445`) · `92.13%` `Pass@5` (`82/89` Tasks)** | Lightweight `Gemini Flash` across `89` tasks (`91.20%` cached tokens, [`nomos-harbor`](https://github.com/mgantlett/nomos-harbor)) |
+| **Self-Dogfooding Velocity (`main` + 1-Seat Studio)** | **`2,270+` Verified `2PC` Tasks · `42+` SemVer Cuts · `0` Rollbacks** | `100%` `42`-gate AST pass rate + `SHA-256` Git Notes receipts ([Live Telemetry](https://sophialabs.ca/system/analytics)) |
 | **Footprint & Gate Latency** | **`~20 MB` binary (`CGO_ENABLED=0`) · `~4ms` hook · `~24ms` `--fast-file`** | `860+` automated tests across `16` packages + `7/7` adversarial fail-closed vectors ([`cleanroom_tracetrial_bench_test.go`](substrate/cli/cleanroom_tracetrial_bench_test.go)) |
 
 <details>
@@ -273,7 +272,7 @@ Nomos Community Edition is **100% open-source under Apache 2.0** with zero telem
 ## Community & License
 
 - **Community & Governance:** Join [GitHub Discussions](https://github.com/mgantlett/nomos/discussions) for setup Q&A, `nomos.yaml` tuning, and feature ideas. See [`CONTRIBUTING.md`](CONTRIBUTING.md), [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md), and [`SECURITY.md`](SECURITY.md).
-- **License:** Licensed under the **Apache License, Version 2.0**. See [`LICENSE`](LICENSE), [`NOTICE`](NOTICE), and [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+- **License & Citation:** Licensed under the **Apache License, Version 2.0** (see [`LICENSE`](LICENSE), [`NOTICE`](NOTICE), and [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)). For academic citation, see [`CITATION.cff`](CITATION.cff) and [DOI `10.5281/zenodo.24240539`](https://doi.org/10.5281/zenodo.24240539).
 
 <div align="center">
   <sub>Built with deterministic rigor by <a href="https://sophialabs.ca"><b>SophiaLabs</b></a> · Governed by Nomos</sub>

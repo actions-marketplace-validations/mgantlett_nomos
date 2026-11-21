@@ -2,13 +2,21 @@
 package impact
 
 import (
+	"bytes"
+	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
+	"go/parser"
+	"go/token"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 )
 
 var (
@@ -43,6 +51,10 @@ func listPolyglotStemImporters(root, targetRel string) []string {
 		wordRe: regexp.MustCompile(`\b` + regexp.QuoteMeta(stem) + `\b`),
 	}
 
+	if gitMatches, handled := tryListGitStemDependents(root, spec); handled {
+		return gitMatches
+	}
+
 	var dependents []string
 	if err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil || d == nil {
@@ -66,6 +78,129 @@ func listPolyglotStemImporters(root, targetRel string) []string {
 	}
 	sort.Strings(dependents)
 	return dependents
+}
+
+func tryListGitStemDependents(root string, spec polyglotTargetSpec) ([]string, bool) {
+	if _, err := workspace.FindWorkingTreeRoot(root); err != nil {
+		return nil, false
+	}
+	out, cmdErr := workspace.SafeGitCommand(
+		root, "grep", "-I", "-l", "-z", "-F", "--untracked", "--", spec.stem,
+	).Output()
+	if cmdErr != nil {
+		if exitErr, ok := cmdErr.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+			return nil, true
+		}
+		return nil, false
+	}
+	var dependents []string
+	for _, raw := range bytes.Split(out, []byte{0}) {
+		rel := filepath.ToSlash(strings.TrimSpace(string(raw)))
+		if rel == "" || hasSkippableImpactSegment(rel) {
+			continue
+		}
+		if fileDependsOnPolyglotTarget(root, filepath.Join(root, filepath.FromSlash(rel)), spec) {
+			dependents = append(dependents, rel)
+		}
+	}
+	sort.Strings(dependents)
+	return dependents, true
+}
+
+func hasSkippableImpactSegment(relSlash string) bool {
+	for _, seg := range strings.Split(filepath.ToSlash(filepath.Dir(relSlash)), "/") {
+		if seg != "" && seg != "." && IsSkippableSecurityDir(seg) {
+			return true
+		}
+	}
+	return false
+}
+
+type goFileImportsEntry struct {
+	relDir  string
+	imports []string
+}
+
+func tryGitParallelGoReverseIndex(root string) (map[string][]string, bool) {
+	if _, err := workspace.FindWorkingTreeRoot(root); err != nil {
+		return nil, false
+	}
+	out, err := workspace.SafeGitCommand(
+		root, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "*.go",
+	).Output()
+	if err != nil {
+		return nil, false
+	}
+	goFiles := filterGitGoImplPaths(out)
+	if len(goFiles) == 0 {
+		return map[string][]string{}, true
+	}
+	entries := parseGoImportsParallel(root, goFiles)
+	index := make(map[string]map[string]bool)
+	for _, ent := range entries {
+		for _, imp := range ent.imports {
+			if index[imp] == nil {
+				index[imp] = make(map[string]bool)
+			}
+			index[imp][ent.relDir] = true
+		}
+	}
+	return flattenGoReverseIndex(index), true
+}
+
+func filterGitGoImplPaths(raw []byte) []string {
+	var out []string
+	for _, part := range bytes.Split(raw, []byte{0}) {
+		rel := filepath.ToSlash(strings.TrimSpace(string(part)))
+		if rel == "" || !strings.HasSuffix(rel, astdebt.ExtGo) || strings.HasSuffix(rel, astdebt.SuffixGoTest) {
+			continue
+		}
+		if !hasSkippableImpactSegment(rel) {
+			out = append(out, rel)
+		}
+	}
+	return out
+}
+
+func parseGoImportsParallel(root string, relFiles []string) []goFileImportsEntry {
+	workers := min(max(runtime.GOMAXPROCS(0), 1), max(len(relFiles), 1))
+	results := make([]goFileImportsEntry, len(relFiles))
+	var cursor atomic.Int64
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for w := 0; w < workers; w++ {
+		go func() {
+			defer wg.Done()
+			fset := token.NewFileSet()
+			for {
+				i := int(cursor.Add(1) - 1)
+				if i >= len(relFiles) {
+					return
+				}
+				results[i] = parseSingleGoFileImports(fset, root, relFiles[i])
+			}
+		}()
+	}
+	wg.Wait()
+	return results
+}
+
+func parseSingleGoFileImports(fset *token.FileSet, root, relSlash string) goFileImportsEntry {
+	node, err := parser.ParseFile(fset, filepath.Join(root, filepath.FromSlash(relSlash)), nil, parser.ImportsOnly)
+	if err != nil || node == nil {
+		return goFileImportsEntry{}
+	}
+	relDir := filepath.ToSlash(filepath.Dir(relSlash))
+	if relDir == "" {
+		relDir = "."
+	}
+	imps := make([]string, 0, len(node.Imports))
+	for _, imp := range node.Imports {
+		if imp.Path != nil {
+			imps = append(imps, strings.Trim(imp.Path.Value, "\""))
+		}
+	}
+	return goFileImportsEntry{relDir: relDir, imports: imps}
 }
 
 func extractTargetModuleMeta(absPath, ext string) string {

@@ -213,7 +213,7 @@ jobs:
           if [ -n "${NPM_FALLBACK_TOKEN:-}" ]; then
             npm config set '//registry.npmjs.org/:_authToken' "${NPM_FALLBACK_TOKEN}"
           fi
-          npm --prefix packaging/npm publish --access public --provenance
+          (cd packaging/npm && npm publish --access public --provenance)
           for i in $(seq 1 24); do
             SEEN="$(curl -fsSL https://registry.npmjs.org/@mgantlett%2fnomos 2>/dev/null | jq -r --arg v "${CLEAN_VER}" '.versions[$v].version // empty' || true)"
             [ "${SEEN}" = "${CLEAN_VER}" ] && break

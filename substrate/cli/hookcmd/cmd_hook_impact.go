@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/mgantlett/nomos/substrate/src/nomos/core/constants"
+	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/handshake"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify"
 )
@@ -65,13 +67,13 @@ func evaluateReadToolBoundaryAndBinary(p *shellguard.HookPayload, hermeticDir st
 }
 
 // evaluateFirstEditImpactAdvisory emits a 1-line 1-hop AST impact and Go interface peer
-// hint at most once per mutated source file in a worktree session.
+// hint at most once per mutated source file in a worktree or initialized feature-branch session.
 func evaluateFirstEditImpactAdvisory(p *shellguard.HookPayload, hermeticDir string) string {
-	wtRoot := resolveWorktreeTraceRoot(p, hermeticDir)
-	if wtRoot == "" {
+	wtRoot, traceKey := resolveImpactTraceScope(p, hermeticDir)
+	if wtRoot == "" || traceKey == "" {
 		return ""
 	}
-	tracePath := resolveTraceStateFilePath(wtRoot)
+	tracePath := resolveTraceStateFilePath(traceKey)
 	if tracePath == "" {
 		return ""
 	}
@@ -89,6 +91,37 @@ func evaluateFirstEditImpactAdvisory(p *shellguard.HookPayload, hermeticDir stri
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+func resolveImpactTraceScope(p *shellguard.HookPayload, hermeticDir string) (string, string) {
+	if wt := resolveWorktreeTraceRoot(p, hermeticDir); wt != "" {
+		return wt, wt
+	}
+	return resolveFeatureBranchTraceScope(p, hermeticDir)
+}
+
+func resolveFeatureBranchTraceScope(p *shellguard.HookPayload, hermeticDir string) (string, string) {
+	baseCwd := resolveHookWorkspaceDir(p, hermeticDir)
+	probe := baseCwd
+	if p != nil && strings.TrimSpace(p.TargetFile) != "" {
+		probe = filepath.Dir(shellguard.NormalizeCanonicalPath(p.TargetFile, baseCwd))
+	}
+	wt, err := workspace.FindWorkingTreeRoot(probe)
+	if err != nil || wt == "" {
+		return "", ""
+	}
+	if _, statErr := os.Stat(filepath.Join(wt, constants.FileNomosYAML)); statErr != nil {
+		return "", ""
+	}
+	out, bErr := workspace.SafeGitCommand(wt, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	if bErr != nil {
+		return "", ""
+	}
+	branch := strings.TrimSpace(string(out))
+	if branch == "" || branch == "main" || branch == "master" || branch == "HEAD" {
+		return "", ""
+	}
+	return wt, wt + "@" + branch
 }
 
 func collectUnseenImpactedFiles(p *shellguard.HookPayload, tr *HookSessionTrace, canonWt, baseCwd string) ([]string, bool) {

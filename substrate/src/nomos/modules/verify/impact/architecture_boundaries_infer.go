@@ -5,8 +5,11 @@ package impact
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/config"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
@@ -189,13 +192,17 @@ func pruneContainerAppLayers(roleByDir map[string]layerRole) {
 }
 
 func synthesizeVerifiedBoundaryRules(root string, allFiles []string, layers []classifiedLayerDir) []config.ArchitectureBoundaryRule {
-	importCache := preloadFileImportCandidates(root, allFiles)
+	innerFiles := collectCandidateInnerLayerFiles(allFiles, layers)
+	if len(innerFiles) == 0 {
+		return nil
+	}
+	importCache := preloadFileImportCandidates(root, innerFiles)
 	var rules []config.ArchitectureBoundaryRule
 	for _, inner := range layers {
 		if inner.role != roleDomain && inner.role != roleApp {
 			continue
 		}
-		forbids := collectZeroViolationForbids(allFiles, importCache, inner, layers)
+		forbids := collectZeroViolationForbids(innerFiles, importCache, inner, layers)
 		if len(forbids) == 0 {
 			continue
 		}
@@ -211,21 +218,66 @@ func synthesizeVerifiedBoundaryRules(root string, allFiles []string, layers []cl
 	return rules
 }
 
-func preloadFileImportCandidates(root string, allFiles []string) map[string][][]string {
-	cache := make(map[string][][]string, len(allFiles))
-	for _, relFile := range allFiles {
-		full := filepath.Join(root, filepath.FromSlash(relFile))
-		rawImports := ExtractPolyglotFileImports(full)
-		if len(rawImports) == 0 {
-			continue
+func collectCandidateInnerLayerFiles(allFiles []string, layers []classifiedLayerDir) []string {
+	var prefixes []string
+	for _, l := range layers {
+		if l.role == roleDomain || l.role == roleApp {
+			prefixes = append(prefixes, l.relDir+"/")
 		}
-		sets := make([][]string, 0, len(rawImports))
-		for _, imp := range rawImports {
-			sets = append(sets, buildImportMatchCandidates(relFile, imp))
+	}
+	if len(prefixes) == 0 {
+		return nil
+	}
+	var out []string
+	for _, f := range allFiles {
+		for _, pfx := range prefixes {
+			if strings.HasPrefix(f, pfx) {
+				out = append(out, f)
+				break
+			}
 		}
-		cache[relFile] = sets
+	}
+	return out
+}
+
+func preloadFileImportCandidates(root string, innerFiles []string) map[string][][]string {
+	workers := min(max(runtime.GOMAXPROCS(0), 1), max(len(innerFiles), 1))
+	parsed := make([][][]string, len(innerFiles))
+	var cursor atomic.Int64
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for w := 0; w < workers; w++ {
+		go func() {
+			defer wg.Done()
+			for {
+				i := int(cursor.Add(1) - 1)
+				if i >= len(innerFiles) {
+					return
+				}
+				parsed[i] = extractSingleFileImportCandidates(root, innerFiles[i])
+			}
+		}()
+	}
+	wg.Wait()
+	cache := make(map[string][][]string, len(innerFiles))
+	for i, sets := range parsed {
+		if len(sets) > 0 {
+			cache[innerFiles[i]] = sets
+		}
 	}
 	return cache
+}
+
+func extractSingleFileImportCandidates(root, relFile string) [][]string {
+	rawImports := ExtractPolyglotFileImports(filepath.Join(root, filepath.FromSlash(relFile)))
+	if len(rawImports) == 0 {
+		return nil
+	}
+	sets := make([][]string, 0, len(rawImports))
+	for _, imp := range rawImports {
+		sets = append(sets, buildImportMatchCandidates(relFile, imp))
+	}
+	return sets
 }
 
 func collectZeroViolationForbids(allFiles []string, importCache map[string][][]string, inner classifiedLayerDir, layers []classifiedLayerDir) []string {
