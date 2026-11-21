@@ -7,11 +7,11 @@
 **Agents guess; Git cannot. The Apache 2.0 Go execution substrate beneath any coding agent (0 LLM tokens).**
 
 [![CI](https://github.com/mgantlett/nomos/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/mgantlett/nomos/actions/workflows/ci.yaml)
-[![Release](https://img.shields.io/github/v/release/mgantlett/nomos?color=0EA5E9)](https://github.com/mgantlett/nomos/releases/latest)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Docs](https://img.shields.io/badge/Docs-sophialabs.ca-0EA5E9)](https://sophialabs.ca/docs/introduction)
+[![Release](https://img.shields.io/github/v/release/mgantlett/nomos?label=Release&color=0284C7)](https://github.com/mgantlett/nomos/releases/latest)
+[![License](https://img.shields.io/badge/License-Apache_2.0-0284C7)](LICENSE)
+[![Docs](https://img.shields.io/badge/Docs-sophialabs.ca-0284C7)](https://sophialabs.ca/docs/introduction)
 [![Nomos X-Ray](https://sophialabs.ca/api/xray/badge/mgantlett/nomos.svg)](https://sophialabs.ca/mgantlett/nomos)
-[![Telemetry](https://img.shields.io/badge/Telemetry-Live-0EA5E9)](https://sophialabs.ca/system/analytics)
+[![Telemetry](https://img.shields.io/badge/Telemetry-Live-0284C7)](https://sophialabs.ca/system/analytics)
 
 <br />
 
