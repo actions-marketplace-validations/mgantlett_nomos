@@ -58,7 +58,7 @@ graph TD
 1. **Machine-First Artifacts**: Format all error outputs, summaries, and triage responses as structured, machine-parsable envelopes. Never rely on subjective conversational qualifiers ("I think this should work").
 2. **AST-Enforced Non-Verbal Proofs**: Every change must be proven via Go unit tests (`go test -v ./...`), compiler checks, and AST static analysis. If `nomos verify` fails, the agent must fix the AST rather than attempting to justify the failure.
 3. **Database Encapsulation**: Tier 1 agents are strictly prohibited from executing raw SQL or invoking `sqlite3` against internal databases (`nomos_global.db`, `mneme.db`). All state queries must proceed via canonical CLI commands (`nomos task`, `nomos mem`).
-4. **Hermetic Worktree Execution**: Mutations occur strictly in `worktrees/<repo>-<KEY>`. Direct mutation of protected trunk `main` is physically blocked.
+4. **Hermetic Per-Worktree Concurrency**: Mutations occur strictly in `worktrees/<repo>-<KEY>`. Direct mutation of protected trunk `main` is physically blocked. Lifecycle phases bind per isolated worktree rather than locking the repository; sibling worktrees execute safely in parallel and serialize during `nomos task sync`.
 
 ---
 

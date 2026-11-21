@@ -25,8 +25,8 @@
 ## 0.1 ⚡ BOOTUP, HATEOAS AFFORDANCES & EMBEDDED PLAYBOOKS
 
 1. **Session Boot & Invisible Substrate:** Run `nomos handshake` on session boot (auto-injected when `SessionStart` hooks are active) to initialize state, verify CapBAC tokens, auto-install Git defense hooks, and receive phase-specific `Next Actions:`.
-2. **1-Turn Task Inception & Phase Machine:** Workspace mutability is procedurally locked across lifecycle phases:
-   `IDLE` (`nomos task chore "<title>"` or `nomos task start <KEY> --edit`) → `PLAN` → `EDIT` (strictly in `worktrees/<repo>-<KEY>`) → `REVIEW` (`nomos verify` DoD gates) → `SYNC` (`nomos task sync <KEY> -m "<summary>"` or `-F <walkthrough-file>` 2PC atomic release) → `LEARN` (distillation).
+2. **1-Turn Task Inception, Per-Worktree Isolation & Phase Machine:** Lifecycle phases are isolated per task worktree (`worktrees/<repo>-<KEY>`) rather than a repo-wide single-writer lock; sibling worktrees execute safely in parallel unless `[Nomos MTPO Advisory]` flags symbol overlap:
+   `IDLE` (`nomos task chore "<title>"`, `nomos task pair "<title>" --scope "<paths>" --ac "<deliverable>" --verify "nomos verify"`, or `nomos task start <KEY> --edit`) → `PLAN` → `EDIT` (strictly in `worktrees/<repo>-<KEY>`) → `REVIEW` (`nomos verify` DoD gates) → `SYNC` (`nomos task sync <KEY> -m "<summary>"` or `-F <walkthrough-file>` 2PC atomic release) → `LEARN` (distillation).
 3. **Self-Contained Embedded Discovery (Zero Nomos Source Required):**
    - `nomos directive` / `nomos directive <name>` — List and read embedded Just-In-Time (JIT) phase playbooks.
    - `nomos capabilities` / `nomos capabilities <id>` — Inspect active quality gates, ambient hooks, directives, and CLI engines.

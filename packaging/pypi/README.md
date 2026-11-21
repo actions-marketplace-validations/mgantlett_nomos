@@ -31,3 +31,5 @@ claude mcp add --transport http nomos https://sophialabs.ca/mcp
 ## SHA-256 Integrity Verification
 
 When `nomos` is not already present on `PATH`, `nomos-cli` downloads the official GitHub Release archive (`https://github.com/mgantlett/nomos/releases`) for your OS/CPU (`Linux`/`Darwin`/`Windows`, `x86_64`/`arm64`) using Python's standard library and verifies its SHA-256 digest against the release `checksums.txt` manifest before extracting or executing the binary.
+
+<!-- mcp-name: io.github.mgantlett/nomos -->

@@ -5,6 +5,7 @@ package handshake
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -26,6 +27,7 @@ type HandshakeEvent struct {
 	Plane            string            `json:"plane,omitempty"`
 	Phase            types.Phase       `json:"phase"`
 	ActiveTask       string            `json:"active_task,omitempty"`
+	ActiveWorktrees  []string          `json:"active_worktrees,omitempty"`
 	Assignee         string            `json:"assignee,omitempty"`
 	TokenID          string            `json:"token_id,omitempty"`
 	StepBudget       int               `json:"step_budget,omitempty"`
@@ -33,9 +35,10 @@ type HandshakeEvent struct {
 	DatabasesHealthy bool              `json:"databases_healthy"`
 	GateCount        int               `json:"gate_count"`
 	ReadyWavefront   []string          `json:"ready_wavefront"`
-	Directives           []string                 `json:"directives,omitempty"`
-	LearnedPitfalls      []string                 `json:"learned_pitfalls,omitempty"`
-	VerifiedPatterns     []string                 `json:"verified_patterns,omitempty"`
+	Directives           []string                   `json:"directives,omitempty"`
+	RepoAxioms           []string                   `json:"repo_axioms,omitempty"`
+	LearnedPitfalls      []string                   `json:"learned_pitfalls,omitempty"`
+	VerifiedPatterns     []string                   `json:"verified_patterns,omitempty"`
 	GraduationCandidates []string                 `json:"graduation_candidates,omitempty"`
 	ImpactSummary        []string                 `json:"impact_summary,omitempty"`
 	StaleObligations     []task.StaleSpecObligation `json:"stale_obligations,omitempty"`
@@ -77,7 +80,7 @@ func SynthesizeDynamicHandshake(repoRoot string) (*HandshakeEvent, error) {
 	wavefront := queryReadyWavefront(task.ResolveRepoProject(primaryRoot))
 	directives := loadPhaseDirectives(primaryRoot, phase)
 	modifiedFiles, impactSummary := computeActiveTaskImpact(treeRoot, activeTask)
-	pitfalls, patterns, graduations := recallMnemeHandshakeContext(primaryRoot, activeTask, modifiedFiles)
+	mnemeCtx := recallMnemeHandshakeContext(primaryRoot, activeTask, modifiedFiles)
 	strictMode, intentTwinOff, bfTopology := resolveHandshakeGovernance(treeRoot, primaryRoot)
 	nextActions := resolveHandshakeNextActions(handshakeNextActionsInput{
 		treeRoot: treeRoot, primaryRoot: primaryRoot, branch: branch, phase: phase,
@@ -90,6 +93,7 @@ func SynthesizeDynamicHandshake(repoRoot string) (*HandshakeEvent, error) {
 		Plane:                plane,
 		Phase:                phase,
 		ActiveTask:           activeTask,
+		ActiveWorktrees:      discoverActiveWorktrees(primaryRoot),
 		TokenID:              leaseID,
 		StepBudget:           stepBudget,
 		TokensUsed:           tokensUsed,
@@ -97,9 +101,10 @@ func SynthesizeDynamicHandshake(repoRoot string) (*HandshakeEvent, error) {
 		GateCount:            verify.RegisteredGateCount(),
 		ReadyWavefront:       wavefront,
 		Directives:           directives,
-		LearnedPitfalls:      pitfalls,
-		VerifiedPatterns:     patterns,
-		GraduationCandidates: graduations,
+		RepoAxioms:           mnemeCtx.axioms,
+		LearnedPitfalls:      mnemeCtx.pitfalls,
+		VerifiedPatterns:     mnemeCtx.patterns,
+		GraduationCandidates: mnemeCtx.graduations,
 		ImpactSummary:        impactSummary,
 		StaleObligations:     resolveHandshakeStaleObligations(primaryRoot),
 		StrictMode:           strictMode,
@@ -118,6 +123,50 @@ func activeWorktreeRoot(treeRoot, activeTask string) string {
 		return treeRoot
 	}
 	return ""
+}
+
+// discoverActiveWorktrees enumerates live isolated task worktree keys under <primaryRoot>/worktrees.
+func discoverActiveWorktrees(primaryRoot string) []string {
+	if strings.TrimSpace(primaryRoot) == "" {
+		return nil
+	}
+	entries, err := os.ReadDir(filepath.Join(primaryRoot, "worktrees"))
+	if err != nil {
+		return nil
+	}
+	seen := make(map[string]bool)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if _, gErr := os.Stat(filepath.Join(primaryRoot, "worktrees", entry.Name(), ".git")); gErr != nil {
+			continue
+		}
+		if key := parseWorktreeDirTaskKey(entry.Name()); key != "" {
+			seen[key] = true
+		}
+	}
+	if len(seen) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(seen))
+	for k := range seen {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func parseWorktreeDirTaskKey(dirName string) string {
+	parts := strings.Split(strings.TrimSpace(dirName), "-")
+	if len(parts) < 2 {
+		return ""
+	}
+	candidate := strings.ToUpper(parts[len(parts)-2] + "-" + parts[len(parts)-1])
+	if err := task.ValidateTaskKey(candidate); err != nil {
+		return ""
+	}
+	return candidate
 }
 
 func resolveHandshakeSeat() string {

@@ -281,6 +281,9 @@ func formatHandshakeBanner(ev *handshake.HandshakeEvent, hookRoot string, allowU
 	} else {
 		b.WriteString(fmt.Sprintf("  Workspace Phase   : %s (Trunk baseline)\n", ev.Phase))
 	}
+	if len(ev.ActiveWorktrees) > 0 {
+		b.WriteString(fmt.Sprintf("  Active Worktrees  : [%s] (isolated - safe to run parallel tasks)\n", strings.Join(ev.ActiveWorktrees, ", ")))
+	}
 	b.WriteString(fmt.Sprintf("  DoD Quality Gates : %d deterministic gates active\n", ev.GateCount))
 	appendPlainBrownfieldTopology(&b, ev)
 	if len(ev.ReadyWavefront) > 0 {

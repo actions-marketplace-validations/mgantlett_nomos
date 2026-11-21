@@ -104,11 +104,11 @@ func InspectWorktreeNormativeSurface(worktreeDir string) NormativeSurfaceDelta {
 	}
 }
 
-// pruneSurvivingPackageGovTokens removes false-positive "-gov_rule:..." deltas when a sibling file in the same package still carries the rule token.
+// pruneSurvivingPackageGovTokens removes false-positive "-gov_..." or "-sql_dml:..." deltas when a sibling file in the same package still carries the token.
 func pruneSurvivingPackageGovTokens(worktreeDir string, govSet map[string]bool) {
 	var removedKeys []string
 	for k := range govSet {
-		if strings.HasPrefix(k, "-gov_rule:") {
+		if strings.HasPrefix(k, "-gov_rule:") || strings.HasPrefix(k, "-gov_const:") || strings.HasPrefix(k, "-sql_dml:") {
 			removedKeys = append(removedKeys, k)
 		}
 	}
@@ -129,9 +129,15 @@ func pruneSurvivingPackageGovTokens(worktreeDir string, govSet map[string]bool) 
 }
 
 func resolveGovRuleRelDir(worktreeDir, tok string) string {
-	rest := strings.TrimPrefix(tok, "gov_rule:")
-	parts := strings.SplitN(rest, ":", 3)
-	if len(parts) == 3 && parts[0] != "" {
+	rest := tok
+	for _, pfx := range []string{"gov_rule:", "gov_const:", "sql_dml:"} {
+		if strings.HasPrefix(rest, pfx) {
+			rest = strings.TrimPrefix(rest, pfx)
+			break
+		}
+	}
+	parts := strings.SplitN(rest, ":", 2)
+	if len(parts) == 2 && parts[0] != "" {
 		if info, err := os.Stat(filepath.Join(worktreeDir, filepath.FromSlash(parts[0]))); err == nil && info.IsDir() {
 			return parts[0]
 		}
@@ -194,6 +200,12 @@ func inspectChangedNormativeFile(worktreeDir, baseRef, rel string, cliSet, cfgSe
 		}
 		return
 	}
+	if astdebt.IsNonTestWebSourcePath(normRel) {
+		baseWeb := astdebt.ParseWebSurfaceFingerprintForPath(normRel, readGitRevisionBytes(worktreeDir, baseRef, normRel))
+		currWeb := astdebt.ParseWebSurfaceFingerprintForPath(normRel, readWorktreeDiskBytes(filepath.Join(worktreeDir, filepath.FromSlash(normRel))))
+		astdebt.MergeSymmetricDiff(govSet, baseWeb, currWeb)
+		return
+	}
 	if !strings.HasSuffix(normRel, ".go") || strings.HasSuffix(normRel, "_test.go") {
 		return
 	}
@@ -229,9 +241,17 @@ func ValidateWorktreeIntentTwin(worktreeDir, commitMsg, mode string) string {
 	if len(twinKeys) == 0 {
 		delta := InspectWorktreeNormativeSurface(worktreeDir)
 		if delta.HasChanges() {
+			summary := delta.Summary()
+			recordTwinRequiredLatch(worktreeDir, subjectKey, summary)
 			return fmt.Sprintf(
 				"Substrate %s commit [%s] modifies normative contract surface (%s) and requires a bound 'Twin: INT-<N>' trailer when governance.quality_gates.intent_twin_mode=%s (Law 2 & Law 4)",
-				commitType, subjectKey, delta.Summary(), normMode,
+				commitType, subjectKey, summary, normMode,
+			)
+		}
+		if latched := readTwinRequiredLatch(worktreeDir, subjectKey); latched != "" {
+			return fmt.Sprintf(
+				"Substrate %s commit [%s] previously triggered normative surface expansion (%s); unexporting or hiding symbols to evade 'Twin: INT-<N>' is prohibited when governance.quality_gates.intent_twin_mode=%s (Law 1 & Law 4)",
+				commitType, subjectKey, latched, normMode,
 			)
 		}
 		return ""
@@ -241,6 +261,7 @@ func ValidateWorktreeIntentTwin(worktreeDir, commitMsg, mode string) string {
 			return provErr
 		}
 	}
+	clearTwinRequiredLatch(worktreeDir, subjectKey)
 	return ""
 }
 
@@ -311,7 +332,7 @@ func IntentTwinModeRemedy(subjectKey string) string {
 		key = "SUB-<N>"
 	}
 	return fmt.Sprintf(
-		"bind an Intent specification twin via 'nomos task create \"<spec title>\" --plane intent --twin-of %s' (or 'nomos task pair') and re-commit via 'nomos task commit'",
+		"bind an Intent specification twin via 'nomos task create \"<spec title>\" --plane intent --scope \"<spec-path>\" --ac \"<contract>\" --verify \"nomos verify\" --twin-of %s' (or 'nomos task pair \"<title>\" --scope \"<paths>\" --ac \"<deliverable>\" --verify \"nomos verify\"') and re-commit via 'nomos task commit'",
 		key,
 	)
 }

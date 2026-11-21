@@ -141,6 +141,7 @@ func appendPlainTurnZeroTelemetryWithMode(b *strings.Builder, ev *handshake.Hand
 		}
 		b.WriteString(fmt.Sprintf("  Stale Specs       : %s\n", strings.Join(paths, ", ")))
 	}
+	appendPlainBoundedList(b, "Repo Axioms", "🏛️", ev.RepoAxioms, 2)
 	appendPlainBoundedList(b, "Learned Pitfalls", "⚡", ev.LearnedPitfalls, 3)
 	appendPlainBoundedList(b, "Verified Patterns", "🧩", ev.VerifiedPatterns, 2)
 	var filtered []types.ActionAffordance

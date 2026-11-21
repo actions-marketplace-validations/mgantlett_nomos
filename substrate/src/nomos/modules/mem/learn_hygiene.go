@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	ephemeralTestAssertionTTL     = 72 * time.Hour
+	ephemeralTestAssertionTTL     = 24 * time.Hour
 	crossScopeConsolidationMinDir = 3
+	cooledOncePitfallMinAccess    = 8
 )
 
 // PitfallHygieneReport summarizes automated pitfall and pattern scope pruning and cross-scope promotion (#PitfallHygieneReport).
@@ -47,17 +48,12 @@ func isAuthoritativeRepoRoot(repoRoot string) bool {
 	return false
 }
 
-// isEphemeralTestAssertionContent detects unit-test runner assertion failures (--- FAIL / TAP not ok)
-// that represent fixed single-test bugs rather than generalizable architectural rules.
+// isEphemeralTestAssertionContent delegates to isPolyglotEphemeralTestContent for polyglot single-test assertion traps.
 func isEphemeralTestAssertionContent(content string) bool {
-	lower := strings.ToLower(content)
-	if strings.Contains(lower, "trap: --- fail:") || strings.Contains(lower, "trap: go compilation/test failed: --- fail:") {
-		return true
-	}
-	return strings.Contains(lower, "trap:") && strings.Contains(lower, "not ok ")
+	return isPolyglotEphemeralTestContent(content)
 }
 
-// sweepStalePitfallsWithReceipts tombstones dead-directory pitfalls/dead-ends and expired unit-test pitfalls.
+// sweepStalePitfallsWithReceipts tombstones dead-directory pitfalls, bare legacy traps, expired test assertions, and cooled 1x guardrails.
 func sweepStalePitfallsWithReceipts(
 	store *Store,
 	all []*Memory,
@@ -66,29 +62,70 @@ func sweepStalePitfallsWithReceipts(
 	now time.Time,
 	rep *PitfallHygieneReport,
 ) ([]*Memory, []*Memory) {
+	topicDepths := countPitfallTopicChain(all, normRepo)
 	var surviving []*Memory
 	var dismissed []*Memory
 	for _, m := range all {
 		if !isActiveRepoPitfall(m, normRepo) {
 			continue
 		}
-		if checkDiskPaths && isStaleRepoPitfallScope(repoRoot, m) {
-			if rec, err := store.Dismiss(m.ID); err == nil && rec != nil {
-				rep.DeadScopesTombstoned++
-				dismissed = append(dismissed, rec)
-				continue
-			}
+		if rec := tryDismissStaleOrNoisePitfall(store, m, repoRoot, checkDiskPaths, now, rep); rec != nil {
+			dismissed = append(dismissed, rec)
+			continue
 		}
-		if isExpiredEphemeralTestPitfall(m, now) {
-			if rec, err := store.Dismiss(m.ID); err == nil && rec != nil {
-				rep.ExpiredTestsTombstoned++
-				dismissed = append(dismissed, rec)
-				continue
-			}
+		if isCooledOnceGuardrail(m, topicDepths[strings.ToLower(m.Topic)], now) && store.retireCooledPitfall(m.ID) {
+			continue
 		}
 		surviving = append(surviving, m)
 	}
 	return surviving, dismissed
+}
+
+func tryDismissStaleOrNoisePitfall(
+	store *Store,
+	m *Memory,
+	repoRoot string,
+	checkDiskPaths bool,
+	now time.Time,
+	rep *PitfallHygieneReport,
+) *Memory {
+	if checkDiskPaths && isStaleRepoPitfallScope(repoRoot, m) {
+		if rec, err := store.Dismiss(m.ID); err == nil && rec != nil {
+			rep.DeadScopesTombstoned++
+			return rec
+		}
+	}
+	if isLegacyBarePitfallContent(m.Content) || isExpiredEphemeralTestPitfall(m, now) {
+		if rec, err := store.Dismiss(m.ID); err == nil && rec != nil {
+			rep.ExpiredTestsTombstoned++
+			return rec
+		}
+	}
+	return nil
+}
+
+func isCooledOnceGuardrail(m *Memory, topicDepth int, now time.Time) bool {
+	if m == nil || m.Kind != KindPitfall || topicDepth > 1 || m.AccessCount < cooledOncePitfallMinAccess {
+		return false
+	}
+	if m.CreatedAt.IsZero() {
+		return false
+	}
+	return now.Sub(m.CreatedAt) > defaultUnscopedPitfallCoolWindow
+}
+
+func (s *Store) retireCooledPitfall(id int) bool {
+	if s == nil || id <= 0 {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	res, err := s.db.Exec(`UPDATE memories SET status = 'superseded' WHERE id = ? AND status = 'active'`, id)
+	if err != nil {
+		return false
+	}
+	n, rErr := res.RowsAffected()
+	return rErr == nil && n > 0
 }
 
 // isMissingRepoScopeDir checks whether a relative directory scope has been removed from repoRoot.

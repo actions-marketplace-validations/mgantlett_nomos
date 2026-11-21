@@ -227,14 +227,21 @@ func operationalSurfaceContractCases() []repoContractCase {
 			forbid: []string{"cockpit", "@sophialabs/nomos"},
 		},
 		{
-			name:    "official MCP registry server.json pairs remote HTTP and npm stdio package",
+			name:    "official MCP registry server.json pairs remote HTTP, npm, and pypi stdio packages",
 			relPath: "server.json",
 			mustHave: []string{
 				`"io.github.mgantlett/nomos"`,
 				`"https://sophialabs.ca/mcp"`,
 				`"@mgantlett/nomos"`,
+				`"nomos-cli"`,
 			},
 			forbid: []string{"cockpit"},
+		},
+		{
+			name:     "PyPI README declares Official MCP Registry mcp-name ownership marker",
+			relPath:  filepath.Join("packaging", "pypi", "README.md"),
+			mustHave: []string{"<!-- mcp-name: io.github.mgantlett/nomos -->"},
+			forbid:   []string{"cockpit"},
 		},
 		{
 			name:    "Glama MCP directory manifest declares maintainer ownership",
@@ -357,16 +364,13 @@ func TestOpenCoreManifestVersionParity(t *testing.T) {
 		Version string `json:"version"`
 		McpName string `json:"mcpName"`
 	}
-	if err := json.Unmarshal(pkgRaw, &npmManifest); err != nil {
-		t.Fatalf("parse packaging/npm/package.json: %v", err)
+	if err := json.Unmarshal(pkgRaw, &npmManifest); err != nil || npmManifest.Name != "@mgantlett/nomos" || npmManifest.McpName != "io.github.mgantlett/nomos" || npmManifest.Version != RootCmdVersion {
+		t.Fatalf("npm manifest drift vs RootCmdVersion %q: err=%v %+v", RootCmdVersion, err, npmManifest)
 	}
-	if npmManifest.Name != "@mgantlett/nomos" || npmManifest.McpName != "io.github.mgantlett/nomos" {
-		t.Fatalf("unexpected npm manifest identity: %+v", npmManifest)
+	pypiRaw, err := os.ReadFile(filepath.Join(repoRoot, "packaging", "pypi", "pyproject.toml"))
+	if err != nil || !strings.Contains(string(pypiRaw), `version = "`+RootCmdVersion+`"`) {
+		t.Fatalf("pyproject.toml version drift vs RootCmdVersion %q: err=%v", RootCmdVersion, err)
 	}
-	if npmManifest.Version != RootCmdVersion {
-		t.Fatalf("packaging/npm/package.json version %q drifted from RootCmdVersion %q", npmManifest.Version, RootCmdVersion)
-	}
-
 	srvRaw, err := os.ReadFile(filepath.Join(repoRoot, "server.json"))
 	if err != nil {
 		t.Fatalf("read server.json: %v", err)
@@ -379,10 +383,12 @@ func TestOpenCoreManifestVersionParity(t *testing.T) {
 			Version    string `json:"version"`
 		} `json:"packages"`
 	}
-	if err := json.Unmarshal(srvRaw, &mcpManifest); err != nil {
-		t.Fatalf("parse server.json: %v", err)
+	if err := json.Unmarshal(srvRaw, &mcpManifest); err != nil || mcpManifest.Version != RootCmdVersion || len(mcpManifest.Packages) < 2 {
+		t.Fatalf("server.json parity drift vs RootCmdVersion %q: err=%v %+v", RootCmdVersion, err, mcpManifest)
 	}
-	if mcpManifest.Version != RootCmdVersion || len(mcpManifest.Packages) == 0 || mcpManifest.Packages[0].Version != RootCmdVersion {
-		t.Fatalf("server.json version parity drift vs RootCmdVersion %q: %+v", RootCmdVersion, mcpManifest)
+	for _, pkg := range mcpManifest.Packages {
+		if pkg.Version != RootCmdVersion {
+			t.Fatalf("server.json package %q version %q != %q", pkg.Identifier, pkg.Version, RootCmdVersion)
+		}
 	}
 }

@@ -239,13 +239,16 @@ func isActiveRepoPitfall(m *Memory, repoID string) bool {
 }
 
 func isPitfallEligibleForScope(m *Memory, repoID, targetScope string, topicDepth int, now time.Time) bool {
-	if !isActiveRepoPitfall(m, repoID) {
+	if !isActiveRepoPitfall(m, repoID) || isLegacyBarePitfallContent(m.Content) {
+		return false
+	}
+	if isExpiredEphemeralTestPitfall(m, now) {
 		return false
 	}
 	if targetScope != workspaceScopeLabel && strings.Contains(m.Topic, targetScope) {
 		return true
 	}
-	if isEphemeralTestAssertionContent(m.Content) {
+	if isEphemeralTestAssertionContent(m.Content) || m.AccessCount >= CleanStreakCoolingThreshold {
 		return false
 	}
 	if topicDepth >= 2 || m.CreatedAt.IsZero() {

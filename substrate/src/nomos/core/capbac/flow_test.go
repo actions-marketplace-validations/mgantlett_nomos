@@ -124,8 +124,8 @@ func TestCapabilityFlowGraph_ChainedVerifyDoesNotSanitize(t *testing.T) {
 		ToolName:    "Bash",
 		CommandLine: "git push origin main",
 	})
-	if pushBlocked.Allowed || pushBlocked.ViolatedLabel != capbac.TaintUntrustedExternal {
-		t.Fatalf("expected untrusted_external taint to remain active after chained verify, got %+v", pushBlocked)
+	if pushBlocked.Allowed || pushBlocked.ViolatedLabel != capbac.TaintUntrustedExternal || !strings.Contains(pushBlocked.Reason, "standalone 'nomos verify'") {
+		t.Fatalf("expected untrusted_external taint to remain active with standalone verify hint, got %+v", pushBlocked)
 	}
 }
 

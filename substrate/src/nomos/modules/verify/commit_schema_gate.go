@@ -4,6 +4,7 @@ package verify
 import (
 	"fmt"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
+	"os"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -54,15 +55,11 @@ func (g *CommitSchemaGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResu
 		}, nil
 	}
 	root := vscope.ResolveBoundariesRoot(ctx)
+	branchMode := isBranchIsolationConfig(ctx)
 	if isPreCommitExempt(root) {
-		return &vscope.GateResult{
-			GateName: g.Name(),
-			Passed:   true,
-			Message:  "worktree branch has zero commits relative to trunk; exempt from HEAD commit schema gate",
-		}, nil
+		return evaluateUncommittedWorktreeGate(g.Name(), ctx, root, branchMode), nil
 	}
 
-	branchMode := isBranchIsolationConfig(ctx)
 	mode := resolveIntentTwinMode(ctx)
 	commits := collectBranchCommitsForSchemaAudit(root)
 	if len(commits) == 0 {
@@ -84,6 +81,30 @@ func (g *CommitSchemaGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResu
 		Passed:   true,
 		Message:  fmt.Sprintf("verified %d branch commit(s) against Commit Schema invariant", len(commits)),
 	}, nil
+}
+
+// evaluateUncommittedWorktreeGate enforces fail-closed Intent Twin preflight on uncommitted SUB-* worktrees during nomos verify.
+func evaluateUncommittedWorktreeGate(gateName string, ctx *vscope.VerifyContext, root string, branchMode bool) *vscope.GateResult {
+	if !branchMode && os.Getenv("NOMOS_COMMIT_IN_PROGRESS") != "1" {
+		taskID := ""
+		if ctx != nil {
+			taskID = ctx.TaskID
+		}
+		if violation := EvaluateWorktreeTwinPreflight(root, taskID); violation != "" {
+			key := resolveSubTaskKeyForPreflight(root, taskID)
+			return &vscope.GateResult{
+				GateName: gateName,
+				Passed:   false,
+				Message:  violation,
+				Remedy:   IntentTwinModeRemedy(key),
+			}
+		}
+	}
+	return &vscope.GateResult{
+		GateName: gateName,
+		Passed:   true,
+		Message:  "worktree branch has zero commits relative to trunk; exempt from HEAD commit schema gate",
+	}
 }
 
 func isBranchIsolationConfig(ctx *vscope.VerifyContext) bool {
