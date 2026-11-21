@@ -18,8 +18,12 @@ func evaluateTrunkShellRedirectGuard(cmdLine, baseCwd, hermeticDir string) shell
 	if hermeticDir != "" || !strings.Contains(cmdLine, ">") {
 		return shellguard.HookDecision{Decision: hookDecisionAllow}
 	}
+	sanitized := stripNonShellHeredocBodies(cmdLine)
+	if !strings.Contains(sanitized, ">") {
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
+	}
 	cwd := shellguard.ResolveInitialEvalDir(baseCwd)
-	for _, rawSeg := range splitUnquotedCommandSegments(cmdLine) {
+	for _, rawSeg := range splitUnquotedCommandSegments(sanitized) {
 		segs, subs := tui.ParseShellCommandSegments(rawSeg)
 		for _, sub := range subs {
 			if dec := evaluateTrunkShellRedirectGuard(sub, cwd, hermeticDir); dec.Decision == hookDecisionDeny {
@@ -183,4 +187,99 @@ func isNonRedirectLeftByte(seg string, idx int) bool {
 
 func isSpecialRedirectRightByte(seg string, j int) bool {
 	return j < len(seg) && (seg[j] == '&' || seg[j] == '=' || seg[j] == '(')
+}
+
+// stripNonShellHeredocBodies omits stdin payload lines of heredocs consumed by non-shell
+// programs (such as python3 or node comparisons like 'len(s) > 2200') while preserving
+// header redirects and shell-interpreter heredoc bodies ('bash <<EOF', 'cat <<EOF | sh').
+func stripNonShellHeredocBodies(cmdLine string) string {
+	if !strings.Contains(cmdLine, "<<") || !strings.Contains(cmdLine, "\n") {
+		return cmdLine
+	}
+	var b strings.Builder
+	activeDelim := ""
+	for idx, line := range strings.Split(cmdLine, "\n") {
+		if activeDelim != "" {
+			if strings.TrimSpace(line) == activeDelim {
+				activeDelim = ""
+			}
+			continue
+		}
+		if idx > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(line)
+		activeDelim = detectNonShellHeredocDelimiter(line)
+	}
+	return b.String()
+}
+
+func detectNonShellHeredocDelimiter(headerLine string) string {
+	delim := parseUnquotedHeredocTag(headerLine)
+	if delim == "" || headerInvokesShellInterpreter(headerLine) {
+		return ""
+	}
+	return delim
+}
+
+func parseUnquotedHeredocTag(line string) string {
+	idx := findUnquotedHeredocOp(line)
+	if idx < 0 {
+		return ""
+	}
+	return parseHeredocDelimAfterOp(line[idx+2:])
+}
+
+func findUnquotedHeredocOp(line string) int {
+	inSingle, inDouble := false, false
+	for i := 0; i+1 < len(line); i++ {
+		ch := line[i]
+		if ch == '\'' && !inDouble {
+			inSingle = !inSingle
+		} else if ch == '"' && !inSingle {
+			inDouble = !inDouble
+		} else if !inSingle && !inDouble && ch == '<' && line[i+1] == '<' {
+			return i
+		}
+	}
+	return -1
+}
+
+func parseHeredocDelimAfterOp(afterOp string) string {
+	if strings.HasPrefix(afterOp, "<") {
+		return ""
+	}
+	trimmed := strings.TrimPrefix(afterOp, "-")
+	trimmed = strings.TrimLeft(trimmed, " \t")
+	return readHeredocTagWord(trimmed)
+}
+
+func readHeredocTagWord(rest string) string {
+	cleaned := strings.TrimLeft(rest, "\\'\"")
+	end := 0
+	for end < len(cleaned) {
+		c := cleaned[end]
+		if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' {
+			end++
+			continue
+		}
+		break
+	}
+	return cleaned[:end]
+}
+
+func headerInvokesShellInterpreter(headerLine string) bool {
+	for _, clause := range shellguard.SplitUnquotedShellSegments(headerLine) {
+		for _, pipePart := range strings.Split(clause, "|") {
+			exe, rawExe, rawArgs := shellguard.ExtractLeadingExeAndArgs(strings.TrimSpace(pipePart))
+			if rawExe == "" && len(rawArgs) == 0 {
+				continue
+			}
+			switch exe {
+			case "sh", "bash", "dash", "zsh", "ksh", "eval":
+				return true
+			}
+		}
+	}
+	return false
 }
