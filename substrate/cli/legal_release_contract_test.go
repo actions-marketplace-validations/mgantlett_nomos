@@ -136,6 +136,7 @@ func operationalSurfaceContractCases() []repoContractCase {
 				"Receipt-Gated Episodic Memory",
 				"Multi-Seat CapBAC Leases & Cross-Repo DAGs",
 				"https://sophialabs.ca/sovereign#nomos-code",
+				"https://sophialabs.ca/api/xray/badge/mgantlett/nomos.svg",
 				"https://sophialabs.ca/system/analytics",
 				"intent/assets/nomos_hero_terminal.svg",
 				"0/100 Grade A",
