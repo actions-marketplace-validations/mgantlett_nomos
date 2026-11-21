@@ -201,7 +201,7 @@ func groupPitfallsByGateSlug(activePitfalls []*Memory) map[string]map[string]*Me
 		}
 		gateSlug := extractGateSlugFromPitfallTopic(m.Topic)
 		scope := extractScopeFromPitfallTopic(m.Topic)
-		if gateSlug == "" || scope == "" || scope == workspaceScopeLabel {
+		if gateSlug == "" || isAstCeilingGateSlug(gateSlug) || scope == "" || scope == workspaceScopeLabel {
 			continue
 		}
 		if byGate[gateSlug] == nil {

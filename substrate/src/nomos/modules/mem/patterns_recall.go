@@ -114,6 +114,12 @@ func rankRepoPatterns(candidates []*Memory, targetScope, queryHint string) {
 			if iSim != jSim {
 				return iSim > jSim
 			}
+		} else {
+			iBlueprint := !strings.HasPrefix(strings.ToLower(candidates[i].Topic), habitTopicPrefix)
+			jBlueprint := !strings.HasPrefix(strings.ToLower(candidates[j].Topic), habitTopicPrefix)
+			if iBlueprint != jBlueprint {
+				return iBlueprint
+			}
 		}
 		return candidates[i].ID > candidates[j].ID
 	})

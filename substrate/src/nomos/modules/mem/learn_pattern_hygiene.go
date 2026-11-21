@@ -103,7 +103,7 @@ func sweepStalePatternsWithReceipts(
 		if strings.ToLower(strings.TrimSpace(m.RepoID)) != normRepo {
 			continue
 		}
-		if !isStaleRepoPattern(repoRoot, m) {
+		if !isStaleRepoPattern(repoRoot, m) && !isAstCeilingHabitPattern(m) {
 			continue
 		}
 		if rec, err := store.Dismiss(m.ID); err == nil && rec != nil {
@@ -147,13 +147,25 @@ func isStaleRepoPatternForRoots(roots []string, m *Memory) bool {
 	return true
 }
 
-// isStaleRepoPitfallScope returns true when a pitfall:<gate>:<scope> or dead_end:<scope> targets a deleted directory.
+// isAstCeilingHabitPattern identifies legacy pattern:habit:* rows minted for AST file/complexity ceilings.
+func isAstCeilingHabitPattern(m *Memory) bool {
+	if m == nil || m.Kind != KindPattern {
+		return false
+	}
+	lower := strings.ToLower(strings.TrimSpace(m.Topic))
+	if !strings.HasPrefix(lower, habitTopicPrefix) {
+		return false
+	}
+	return isAstCeilingGateSlug(strings.TrimPrefix(lower, habitTopicPrefix))
+}
+
+// isStaleRepoPitfallScope returns true when a pitfall or dead_end targets a missing directory, absent Trap file, or healed ceiling.
 func isStaleRepoPitfallScope(repoRoot string, m *Memory) bool {
 	if m == nil {
 		return false
 	}
 	scope := extractScopeFromPitfallOrDeadEndTopic(m.Topic)
-	return isMissingRepoScopeDir(repoRoot, scope)
+	return isMissingRepoScopeDir(repoRoot, scope) || isPitfallDeletedOrHealedOnDisk(repoRoot, m)
 }
 
 // isStaleRepoPitfallScopeForRoots checks whether a pitfall or dead_end scope is missing across trunk and any active task worktree.
