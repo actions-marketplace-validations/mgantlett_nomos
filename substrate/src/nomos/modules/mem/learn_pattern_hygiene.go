@@ -36,13 +36,13 @@ func SweepStaleRepoMemories(store *Store, repoRoot, repoID string, now time.Time
 	}
 	checkDiskPaths := isAuthoritativeRepoRoot(repoRoot)
 	normRepo := strings.ToLower(strings.TrimSpace(repoID))
-	surviving, dismissed := sweepStalePitfallsWithReceipts(store, all, repoRoot, normRepo, checkDiskPaths, now, &rep)
+	dismissed := sweepStalePitfallsWithReceipts(store, all, repoRoot, normRepo, checkDiskPaths, now, &rep)
 	if checkDiskPaths {
 		deadPatterns := sweepStalePatternsWithReceipts(store, all, repoRoot, normRepo, &rep)
 		dismissed = append(dismissed, deadPatterns...)
 	}
 	retireOverflowZeroRecallPatterns(store, all, normRepo, now)
-	rep.CrossScopeHabitsUpdated = consolidateCrossScopeGateHabits(store, surviving, repoID, normRepo)
+	rep.CrossScopeHabitsUpdated = consolidateRepoConventionAxioms(store, normRepo)
 	return dismissed, rep
 }
 

@@ -28,15 +28,17 @@ func isAstCeilingGateSlug(slug string) bool {
 	return false
 }
 
-// isPitfallDeletedOrHealedOnDisk checks whether a KindPitfall cites absent Trap files or healed LOC/file-count ceilings.
+// isPitfallDeletedOrHealedOnDisk checks whether a KindPitfall or KindDeadEnd cites absent files or healed LOC/file-count ceilings.
 func isPitfallDeletedOrHealedOnDisk(repoRoot string, m *Memory) bool {
-	if m == nil || m.Kind != KindPitfall || strings.TrimSpace(repoRoot) == "" {
+	if m == nil || (m.Kind != KindPitfall && m.Kind != KindDeadEnd) || strings.TrimSpace(repoRoot) == "" {
 		return false
 	}
-	parts := strings.SplitN(m.Content, "-> Verified Fix", 2)
-	trap := strings.TrimSpace(parts[0])
+	trap := extractObservedTrapOrDeadEndBody(m)
 	if trap == "" {
 		return false
+	}
+	if m.Kind == KindDeadEnd {
+		return allOpenCoreCitedTrapFilesAbsent(repoRoot, trap)
 	}
 	if checked, stale := checkOpenCoreHealedLocTrap(repoRoot, trap); checked {
 		return stale
@@ -45,6 +47,16 @@ func isPitfallDeletedOrHealedOnDisk(repoRoot string, m *Memory) bool {
 		return stale
 	}
 	return allOpenCoreCitedTrapFilesAbsent(repoRoot, trap)
+}
+
+// extractObservedTrapOrDeadEndBody isolates the observed trap or rolled-back file clause ahead of the fix suffix.
+func extractObservedTrapOrDeadEndBody(m *Memory) string {
+	sep := "-> Verified Fix"
+	if m.Kind == KindDeadEnd {
+		sep = "-> Winning Fix"
+	}
+	parts := strings.SplitN(m.Content, sep, 2)
+	return strings.TrimSpace(parts[0])
 }
 
 // checkOpenCoreHealedLocTrap returns (true, true) when a Max File LOC target is absent or shrunk to <=90% of max LOC.
