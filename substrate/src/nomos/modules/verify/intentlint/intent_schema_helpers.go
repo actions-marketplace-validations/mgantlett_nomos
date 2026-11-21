@@ -2,6 +2,7 @@
 package intentlint
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
@@ -22,23 +23,38 @@ var (
 // VerifyIntentASTAnchors verifies that @intent #<TypeName> and <spec>.md tokens resolve in source and intent roots.
 // @intent nomos_intent_traceability_spec.md #ContractsConfig
 func VerifyIntentASTAnchors(ctx *vscope.VerifyContext, root, targetDir string) []string {
+	var taggedPaths []string
+	if walkErr := vscope.WalkTargetFiles(ctx, targetDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info == nil || info.IsDir() || impact.IsVerificationSuiteFile(info.Name()) {
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") && !vscope.IsSupportedPolyglotSourceFile(path) {
+			return nil
+		}
+		if raw, rErr := vscope.MemoizedReadFile(ctx, path); rErr == nil && bytes.Contains(raw, []byte("@intent")) {
+			taggedPaths = append(taggedPaths, path)
+		}
+		return nil
+	}); walkErr != nil {
+		return nil
+	}
+	if len(taggedPaths) == 0 {
+		return nil
+	}
+
 	definedTypes := collectDefinedGoTypeAnchors(root, targetDir)
 	collectPolyglotDefinedTypeAnchors(root, definedTypes)
 	definedSpecs := collectIntentSpecBasenames(ctx, root)
 
 	fset := token.NewFileSet()
 	var unresolved []string
-	vscope.WalkTargetFiles(ctx, targetDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info == nil || info.IsDir() || impact.IsVerificationSuiteFile(info.Name()) {
-			return nil
-		}
+	for _, path := range taggedPaths {
 		if strings.HasSuffix(path, ".go") {
 			unresolved = append(unresolved, scanFileIntentASTAnchors(fset, targetDir, path, definedTypes, definedSpecs)...)
-		} else if vscope.IsSupportedPolyglotSourceFile(path) {
+		} else {
 			unresolved = append(unresolved, scanPolyglotFileIntentAnchors(root, path, definedTypes, definedSpecs)...)
 		}
-		return nil
-	})
+	}
 	return unresolved
 }
 

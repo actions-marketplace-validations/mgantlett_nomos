@@ -31,6 +31,15 @@ func TestComputeWorkspaceImpact_SkipsGoWalkOnPythonAndUsesGitGrep(t *testing.T) 
 	if !strings.Contains(got[0], "paired test: test_billing_engine.py") || !strings.Contains(got[0], "api/checkout.py") {
 		t.Fatalf("unexpected impact summary: %s", got[0])
 	}
+
+	writeTestFile(t, filepath.Join(dir, "go.mod"), "module example.com/mono\n\ngo 1.23\n")
+	writeTestFile(t, filepath.Join(dir, "pkg", "rbac", "check.go"), "package rbac\n\nfunc Check() bool { return true }\n")
+	writeTestFile(t, filepath.Join(dir, "pkg", "api", "handler.go"), "package api\n\nimport \"example.com/mono/pkg/rbac\"\n\nfunc Handle() bool { return rbac.Check() }\n")
+	runGit("add", ".")
+	goImp := impact.ComputeWorkspaceImpact(dir, []string{"pkg/rbac/check.go"})
+	if len(goImp) != 1 || !strings.Contains(goImp[0], "importers(1): api") {
+		t.Fatalf("expected targeted Go reverse import match, got %+v", goImp)
+	}
 }
 
 func writeTestFile(t *testing.T, path, body string) {

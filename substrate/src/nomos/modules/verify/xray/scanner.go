@@ -2,7 +2,6 @@
 package xray
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"io/fs"
@@ -226,11 +225,8 @@ func countLines(data []byte) int {
 	if len(data) == 0 {
 		return 0
 	}
-	sc := bufio.NewScanner(bytes.NewReader(data))
-	buf := make([]byte, 0, 64*1024)
-	sc.Buffer(buf, maxScannableFileBytes)
-	lines := 0
-	for sc.Scan() {
+	lines := bytes.Count(data, []byte{'\n'})
+	if data[len(data)-1] != '\n' {
 		lines++
 	}
 	return lines

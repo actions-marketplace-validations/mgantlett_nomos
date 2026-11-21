@@ -35,4 +35,8 @@ func TestScanRepository_GitIndexedParallelParity(t *testing.T) {
 	if rep.FilesScanned != 12 || rep.Languages["go"] != 12 {
 		t.Fatalf("expected 12 scanned Go files, got %+v", rep)
 	}
+	subRep, subErr := xray.ScanRepository(filepath.Join(dir, "pkg"), xray.XrayScanOptions{TopHotspots: 5})
+	if subErr != nil || subRep.FilesScanned != 12 {
+		t.Fatalf("expected scoped subdir ScanRepository parity, got err=%v rep=%+v", subErr, subRep)
+	}
 }

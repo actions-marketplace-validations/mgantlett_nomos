@@ -87,8 +87,8 @@ func TestHotspotFirstReadHint_FiresOnceAboveCeilingAndSilentBelow(t *testing.T) 
 		t.Fatal(err)
 	}
 	msg1 := evaluateReadSpiralAdvisory(&shellguard.HookPayload{ToolName: "Read", TargetFile: hot, Cwd: wtDir}, "", "terse")
-	if !strings.Contains(msg1, "Nomos Hotspot Read") || !strings.Contains(msg1, "small.go") {
-		t.Fatalf("expected one-time hotspot read orientation + peer hint, got: %q", msg1)
+	if !strings.Contains(msg1, "Nomos Hotspot Read") || !strings.Contains(msg1, "small.go") || !strings.Contains(msg1, "outline: Handle:L512-512") {
+		t.Fatalf("expected one-time hotspot read orientation + outline + peer hint, got: %q", msg1)
 	}
 	if msg2 := evaluateReadSpiralAdvisory(&shellguard.HookPayload{ToolName: "Read", TargetFile: hot, Cwd: wtDir}, "", "terse"); msg2 != "" {
 		t.Fatalf("expected second read of hotspot file to be silent, got: %q", msg2)
@@ -134,5 +134,34 @@ func TestFeatureBranchMode_EmitsFirstEditImpactAndHotspotRead(t *testing.T) {
 	editHint := EvaluatePostToolHook(&shellguard.HookPayload{ToolName: "Write", TargetFile: handler, Cwd: repoDir}, repoDir)
 	if !strings.Contains(editHint, "Nomos 1-Hop Impact") || !strings.Contains(editHint, "router.go") {
 		t.Fatalf("expected 1-hop impact hint on feat/* branch, got: %q", editHint)
+	}
+}
+
+func TestMonorepoFirstReadSeamHint_EmitsPairedTestAndPeersOnLargeWorkspace(t *testing.T) {
+	t.Setenv("NOMOS_HOME", t.TempDir())
+	wtDir := filepath.Join(t.TempDir(), "worktrees", "mono-SUB-9")
+	if err := os.MkdirAll(filepath.Join(wtDir, "tools", "api"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(wtDir, "tests", "tools", "api"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rules := filepath.Join(wtDir, "tools", "api", "rules.py")
+	if err := os.WriteFile(rules, []byte("RULES = {'S021': 'summary'}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wtDir, "tools", "api", "card.py"), []byte("from tools.api import rules\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wtDir, "tests", "tools", "api", "test_rules.py"), []byte("def test_ok():\n    assert True\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tr := &HookSessionTrace{WorktreeRoot: wtDir, ImpactedFiles: []string{monoScaleYesToken}}
+	got := evaluateFirstHotspotReadHint(&shellguard.HookPayload{ToolName: "Read", TargetFile: rules, Cwd: wtDir}, tr, wtDir)
+	if !strings.Contains(got, "Nomos Monorepo Seam") || !strings.Contains(got, "tests/tools/api/test_rules.py") || !strings.Contains(got, "tools/api/card.py") {
+		t.Fatalf("expected monorepo seam hint with mirrored test + 1-hop dependent, got: %q", got)
+	}
+	if again := evaluateFirstHotspotReadHint(&shellguard.HookPayload{ToolName: "Read", TargetFile: rules, Cwd: wtDir}, tr, wtDir); again != "" {
+		t.Fatalf("expected second read of same file to stay silent, got: %q", again)
 	}
 }

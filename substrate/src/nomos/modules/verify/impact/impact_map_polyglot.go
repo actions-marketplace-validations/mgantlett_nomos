@@ -42,16 +42,7 @@ func buildPairedTestCandidates(rel, dir, stem, ext string) []string {
 	case astdebt.ExtGo:
 		return []string{filepath.Join(dir, stem+astdebt.SuffixGoTest)}
 	case astdebt.ExtPy:
-		return []string{
-			filepath.Join(dir, astdebt.PrefixPyTest+stem+astdebt.ExtPy),
-			filepath.Join(dir, stem+astdebt.SuffixPyTest),
-			filepath.Join(astdebt.DirTests, astdebt.PrefixPyTest+stem+astdebt.ExtPy),
-			filepath.Join(astdebt.DirTests, stem+astdebt.SuffixPyTest),
-			filepath.Join(astdebt.DirTest, astdebt.PrefixPyTest+stem+astdebt.ExtPy),
-			filepath.Join(".tmp", astdebt.DirTests, astdebt.PrefixPyTest+stem+astdebt.ExtPy),
-			filepath.Join(".tmp", astdebt.DirTests, stem+astdebt.SuffixPyTest),
-			filepath.Join(".tmp", astdebt.DirTest, astdebt.PrefixPyTest+stem+astdebt.ExtPy),
-		}
+		return pythonPairedTestCandidates(dir, stem)
 	case astdebt.ExtRB, astdebt.ExtRake:
 		return rubyPairedTestCandidates(dir, stem)
 	case astdebt.ExtRS:
@@ -63,6 +54,95 @@ func buildPairedTestCandidates(rel, dir, stem, ext string) []string {
 	default:
 		return nativePairedTestCandidates(rel, dir, stem, ext)
 	}
+}
+
+func pythonPairedTestCandidates(dir, stem string) []string {
+	out := []string{
+		filepath.Join(dir, astdebt.PrefixPyTest+stem+astdebt.ExtPy),
+		filepath.Join(dir, stem+astdebt.SuffixPyTest),
+		filepath.Join(astdebt.DirTests, dir, astdebt.PrefixPyTest+stem+astdebt.ExtPy),
+		filepath.Join(astdebt.DirTests, dir, stem+astdebt.SuffixPyTest),
+		filepath.Join(astdebt.DirTests, astdebt.PrefixPyTest+stem+astdebt.ExtPy),
+		filepath.Join(astdebt.DirTests, stem+astdebt.SuffixPyTest),
+		filepath.Join(astdebt.DirTest, astdebt.PrefixPyTest+stem+astdebt.ExtPy),
+		filepath.Join(".tmp", astdebt.DirTests, astdebt.PrefixPyTest+stem+astdebt.ExtPy),
+		filepath.Join(".tmp", astdebt.DirTests, stem+astdebt.SuffixPyTest),
+		filepath.Join(".tmp", astdebt.DirTest, astdebt.PrefixPyTest+stem+astdebt.ExtPy),
+	}
+	slashDir := filepath.ToSlash(dir)
+	if strings.HasPrefix(slashDir, "src/") {
+		sub := strings.TrimPrefix(slashDir, "src/")
+		out = append(out,
+			filepath.Join(astdebt.DirTests, sub, astdebt.PrefixPyTest+stem+astdebt.ExtPy),
+			filepath.Join(astdebt.DirTests, sub, stem+astdebt.SuffixPyTest),
+		)
+	}
+	return out
+}
+
+func rubyPairedTestCandidates(dir, stem string) []string {
+	out := []string{
+		filepath.Join(dir, stem+"_test.rb"),
+		filepath.Join(dir, stem+"_spec.rb"),
+		filepath.Join(astdebt.DirTest, stem+"_test.rb"),
+		filepath.Join(astdebt.DirSpec, stem+"_spec.rb"),
+	}
+	slashDir := filepath.ToSlash(dir)
+	if strings.HasPrefix(slashDir, "app/") {
+		sub := strings.TrimPrefix(slashDir, "app/")
+		out = append(out,
+			filepath.Join(astdebt.DirTest, sub, stem+"_test.rb"),
+			filepath.Join(astdebt.DirSpec, sub, stem+"_spec.rb"),
+		)
+	}
+	return out
+}
+
+func tryGitTargetedGoReverseIndex(root string, pkgDirs []string) (map[string][]string, bool) {
+	if _, err := workspace.FindWorkingTreeRoot(root); err != nil {
+		return nil, false
+	}
+	cands, ok := collectTargetedGoImporterCandidates(root, pkgDirs)
+	if !ok {
+		return nil, false
+	}
+	if len(cands) == 0 {
+		return map[string][]string{}, true
+	}
+	index := make(map[string]map[string]bool)
+	for _, ent := range parseGoImportsParallel(root, cands) {
+		for _, imp := range ent.imports {
+			if index[imp] == nil {
+				index[imp] = make(map[string]bool)
+			}
+			index[imp][ent.relDir] = true
+		}
+	}
+	return flattenGoReverseIndex(index), true
+}
+
+func collectTargetedGoImporterCandidates(root string, pkgDirs []string) ([]string, bool) {
+	candSet := make(map[string]bool)
+	for _, pkgDir := range pkgDirs {
+		exact := resolveExactGoImportPath(root, pkgDir)
+		if exact == "" {
+			return nil, false
+		}
+		out, err := workspace.SafeGitCommand(
+			root, "grep", "-I", "-l", "-z", "-F", "--untracked", "--", "\""+exact+"\"", "*.go",
+		).Output()
+		if err != nil && len(out) == 0 {
+			continue
+		}
+		for _, p := range filterGitGoImplPaths(out) {
+			candSet[p] = true
+		}
+	}
+	cands := make([]string, 0, len(candSet))
+	for p := range candSet {
+		cands = append(cands, p)
+	}
+	return cands, true
 }
 
 func nativePairedTestCandidates(rel, dir, stem, ext string) []string {

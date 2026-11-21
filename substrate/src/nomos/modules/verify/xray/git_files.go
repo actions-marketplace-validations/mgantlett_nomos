@@ -90,7 +90,7 @@ func tryCollectGitCandidates(absRoot string) ([]scanCandidate, bool) {
 		return nil, false
 	}
 	out, cmdErr := workspace.SafeGitCommand(
-		absRoot, "ls-files", "-z", "--cached", "--others", "--exclude-standard",
+		absRoot, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", ".",
 	).Output()
 	if cmdErr != nil {
 		return nil, false

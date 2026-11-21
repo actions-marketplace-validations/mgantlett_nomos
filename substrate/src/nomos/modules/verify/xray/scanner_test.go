@@ -10,7 +10,7 @@ import (
 
 func TestScanRepository_WalkFallbackDeterminism(t *testing.T) {
 	dir := t.TempDir()
-	pySrc := "def alpha(items):\n    return [x for x in items if x]\n"
+	pySrc := "def alpha(items):\n    return [x for x in items if x]"
 	for _, name := range []string{"mod_a.py", "mod_b.py", "test_mod_a.py"} {
 		p := filepath.Join(dir, "src", name)
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {

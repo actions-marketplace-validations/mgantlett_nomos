@@ -60,7 +60,7 @@ func (g *IntentTraceabilityGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.Ga
 		}, nil
 	}
 
-	tagged, total := countTraceabilityTags(targetDir)
+	tagged, total := countTraceabilityTags(ctx, targetDir)
 	if total == 0 {
 		return &vscope.GateResult{
 			GateName: g.Name(), ProbeID: probeIDIntentTraceability, Law: 4, Ring: RingSyntactic,
@@ -78,12 +78,12 @@ func (g *IntentTraceabilityGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.Ga
 	}, nil
 }
 
-func countTraceabilityTags(srcDir string) (int, int) {
+func countTraceabilityTags(ctx *vscope.VerifyContext, srcDir string) (int, int) {
 	fset := token.NewFileSet()
 	var tagged, total int
 
-	filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+	if walkErr := vscope.WalkTargetFiles(ctx, srcDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info == nil || info.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
 		node, pErr := parser.ParseFile(fset, path, nil, parser.ParseComments)
@@ -99,7 +99,9 @@ func countTraceabilityTags(srcDir string) (int, int) {
 			}
 		}
 		return nil
-	})
+	}); walkErr != nil {
+		return tagged, total
+	}
 	return tagged, total
 }
 

@@ -23,4 +23,10 @@ func TestResolvePairedTestStatus_GitIndexedNestedTest(t *testing.T) {
 	if got != "paired test: OrderProcessorTests.cs" {
 		t.Fatalf("expected nested C# paired test via git index, got %q", got)
 	}
+
+	writeTestFile(t, filepath.Join(dir, "tools", "api_guidelines", "rules.py"), "RULES = {}\n")
+	writeTestFile(t, filepath.Join(dir, "tests", "tools", "api_guidelines", "test_rules.py"), "def test_rules():\n    assert True\n")
+	if pyGot := impact.ResolvePairedTestStatus(dir, "tools/api_guidelines/rules.py"); pyGot != "paired test: test_rules.py" {
+		t.Fatalf("expected mirrored tests/<dir>/test_<stem>.py match, got %q", pyGot)
+	}
 }
