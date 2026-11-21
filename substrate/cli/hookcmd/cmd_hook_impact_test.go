@@ -2,6 +2,7 @@ package hookcmd
 
 import (
 	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
+	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
 	"os"
 	"path/filepath"
 	"strings"
@@ -91,5 +92,47 @@ func TestHotspotFirstReadHint_FiresOnceAboveCeilingAndSilentBelow(t *testing.T) 
 	}
 	if msg2 := evaluateReadSpiralAdvisory(&shellguard.HookPayload{ToolName: "Read", TargetFile: hot, Cwd: wtDir}, "", "terse"); msg2 != "" {
 		t.Fatalf("expected second read of hotspot file to be silent, got: %q", msg2)
+	}
+}
+
+func TestFeatureBranchMode_EmitsFirstEditImpactAndHotspotRead(t *testing.T) {
+	t.Setenv("NOMOS_HOME", t.TempDir())
+	repoDir := t.TempDir()
+	runGit := func(args ...string) {
+		t.Helper()
+		cmd := workspace.SafeGitCommand(repoDir, args...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v failed: %v (%s)", args, err, string(out))
+		}
+	}
+	runGit("init", "-q", "-b", "main")
+	runGit("config", "user.email", "test@example.com")
+	runGit("config", "user.name", "Test")
+	if err := os.WriteFile(filepath.Join(repoDir, "nomos.yaml"), []byte("project: demo\ndefault_branch: main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	peer := filepath.Join(repoDir, "router.go")
+	if err := os.WriteFile(peer, []byte("package demo\ntype Router interface { Serve() }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	handler := filepath.Join(repoDir, "handler.go")
+	if err := os.WriteFile(handler, []byte("package demo\nfunc Dispatch() int { return 2 }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	hot := filepath.Join(repoDir, "monolith.go")
+	if err := os.WriteFile(hot, []byte("package demo\n"+strings.Repeat("// legacy\n", 510)+"func Handle() int { return 1 }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit("add", ".")
+	runGit("commit", "-q", "-m", "init")
+	runGit("checkout", "-q", "-b", "feat/seam-fix")
+
+	readHint := evaluateReadSpiralAdvisory(&shellguard.HookPayload{ToolName: "Read", TargetFile: hot, Cwd: repoDir}, "", "terse")
+	if !strings.Contains(readHint, "Nomos Hotspot Read") || !strings.Contains(readHint, "router.go") {
+		t.Fatalf("expected hotspot read hint on feat/* branch, got: %q", readHint)
+	}
+	editHint := EvaluatePostToolHook(&shellguard.HookPayload{ToolName: "Write", TargetFile: handler, Cwd: repoDir}, repoDir)
+	if !strings.Contains(editHint, "Nomos 1-Hop Impact") || !strings.Contains(editHint, "router.go") {
+		t.Fatalf("expected 1-hop impact hint on feat/* branch, got: %q", editHint)
 	}
 }

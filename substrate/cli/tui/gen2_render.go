@@ -32,6 +32,12 @@ func RenderXrayTerminal(rep *xray.XrayReport) string {
 	actions := []types.ActionAffordance{
 		{Command: rep.NextCommand, Summary: nextSummary},
 	}
+	if rep.FilesScanned >= 1500 {
+		actions = append(actions, types.ActionAffordance{
+			Command: "nomos xray <subdir>",
+			Summary: "Monorepo scale detected - zoom into a target subsystem seam in milliseconds",
+		})
+	}
 	if rep.FilesScanned >= 50 && len(rep.Languages) >= 2 {
 		actions = append(actions, types.ActionAffordance{
 			Command: "https://sophialabs.ca/sovereign",

@@ -2,6 +2,8 @@
 package impact
 
 import (
+	"bytes"
+	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
 	"io/fs"
 	"os"
@@ -139,6 +141,9 @@ func searchNestedLanguageTest(root, stem, ext string) string {
 	if len(targetNames) == 0 {
 		return ""
 	}
+	if match, ok := tryGitIndexedNestedTest(root, targetNames); ok {
+		return match
+	}
 	found := ""
 	if err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil || d == nil {
@@ -159,6 +164,29 @@ func searchNestedLanguageTest(root, stem, ext string) string {
 		return found
 	}
 	return found
+}
+
+func tryGitIndexedNestedTest(root string, targetNames map[string]bool) (string, bool) {
+	if _, err := workspace.FindWorkingTreeRoot(root); err != nil {
+		return "", false
+	}
+	out, err := workspace.SafeGitCommand(
+		root, "ls-files", "-z", "--cached", "--others", "--exclude-standard",
+	).Output()
+	if err != nil {
+		return "", false
+	}
+	for _, raw := range bytes.Split(out, []byte{0}) {
+		rel := filepath.ToSlash(strings.TrimSpace(string(raw)))
+		if rel == "" || hasSkippableImpactSegment(rel) {
+			continue
+		}
+		base := filepath.Base(rel)
+		if targetNames[base] {
+			return base, true
+		}
+	}
+	return "", true
 }
 
 func nestedLanguageTestNames(stem, ext string) map[string]bool {

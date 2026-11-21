@@ -66,6 +66,8 @@ type fileEvalMetrics struct {
 	secretLeak   int
 	secretTokens int
 	pathLeaks    int
+	highArity    int
+	deepNest     int
 }
 
 // ScanRepository executes a read-only 11-language structural scan of targetDir without writing files or touching SQLite (@intent tree_sitter_ast_gate_spec.md #XrayReport).
@@ -80,14 +82,12 @@ func ScanRepository(targetDir string, opts XrayScanOptions) (*XrayReport, error)
 		topLimit = DefaultTopHotspots
 	}
 	acc := newScanAccumulator(absRoot)
-	if !tryScanViaGitIndex(absRoot, acc) {
-		walkErr := filepath.WalkDir(absRoot, func(path string, d fs.DirEntry, wErr error) error {
-			return visitRepositoryEntry(absRoot, path, d, wErr, acc)
-		})
-		if walkErr != nil {
-			return nil, fmt.Errorf("failed walking repository %s: %w", filepath.Base(absRoot), walkErr)
-		}
+	candidates, cErr := collectRepositoryCandidates(absRoot)
+	if cErr != nil {
+		return nil, cErr
 	}
+	outcomes := evaluateCandidatesParallel(candidates, acc.thresholds)
+	reduceScannedFiles(outcomes, acc)
 	finalizeScanReport(absRoot, topLimit, start, acc)
 	return acc.report, nil
 }
@@ -137,43 +137,6 @@ func sanitizeProjectName(absRoot string) string {
 	return base
 }
 
-func visitRepositoryEntry(absRoot, path string, d fs.DirEntry, err error, acc *scanAccumulator) error {
-	if err != nil || d == nil {
-		return nil
-	}
-	if d.IsDir() {
-		if path != absRoot && shouldSkipDir(d.Name()) {
-			return filepath.SkipDir
-		}
-		return nil
-	}
-	return inspectCandidateFile(absRoot, path, d, acc)
-}
-
-func inspectCandidateFile(absRoot, path string, d fs.DirEntry, acc *scanAccumulator) error {
-	if isBundledArtifactFileName(d.Name()) {
-		return nil
-	}
-	lang := treesitter.DetectLanguage(d.Name())
-	if !codeLanguages[lang] || !isReadableRegularFile(d) {
-		return nil
-	}
-	rel, rErr := filepath.Rel(absRoot, path)
-	if rErr != nil || strings.HasPrefix(rel, "..") {
-		return nil
-	}
-	relSlash := filepath.ToSlash(rel)
-	if isBundledAssetRelPath(relSlash) {
-		return nil
-	}
-	data, readErr := os.ReadFile(path)
-	if readErr != nil {
-		return nil
-	}
-	ingestSourceFile(relSlash, lang, data, acc)
-	return nil
-}
-
 func isBundledAssetRelPath(relSlash string) bool {
 	if strings.Contains(relSlash, "/sovereign-sandbox/assets/") || strings.Contains(relSlash, "/_app/immutable/") {
 		return true
@@ -216,35 +179,12 @@ func shouldSkipDir(name string) bool {
 	return ignoredScanDirs[lower]
 }
 
-func ingestSourceFile(relSlash, lang string, data []byte, acc *scanAccumulator) {
-	loc := countLines(data)
-	if isMinifiedSourceChunk(lang, loc, len(data)) {
-		return
-	}
-	acc.report.FilesScanned++
-	acc.report.TotalLOC += loc
-	acc.report.Languages[lang]++
-
-	acc.report.SkippedTests += countSkippedTests(lang, data)
-	if impact.IsTestSourceFile(relSlash) {
-		return
-	}
-
-	acc.nonTestSources[relSlash] = data
-	relDir := filepath.ToSlash(filepath.Dir(relSlash))
-	acc.dirFileCounts[relDir]++
-	if acc.dirFileCounts[relDir] > acc.report.BaselineEnvelope.ObservedMaxPackageFiles {
-		acc.report.BaselineEnvelope.ObservedMaxPackageFiles = acc.dirFileCounts[relDir]
-	}
-	evaluateImplementationMetrics(relSlash, lang, loc, data, acc)
-}
-
-func evaluateImplementationMetrics(relSlash, lang string, loc int, data []byte, acc *scanAccumulator) {
+func computeImplementationMetrics(relSlash, lang string, loc int, data []byte, thresholds treesitter.EngineThresholds) (fileEvalMetrics, int) {
 	funcs, err := treesitter.ExtractFunctions(lang, relSlash, data)
 	if err != nil {
 		funcs = nil
 	}
-	eval := treesitter.BuildEvaluationReport(relSlash, loc, funcs, acc.thresholds)
+	eval := treesitter.BuildEvaluationReport(relSlash, loc, funcs, thresholds)
 	cds := 0
 	if len(eval.Files) > 0 {
 		cds = eval.Files[0].CDS
@@ -256,27 +196,30 @@ func evaluateImplementationMetrics(relSlash, lang string, loc int, data []byte, 
 	)
 	unchecked := verify.CountFileUncheckedErrors(relSlash, data)
 	secretTokens, pathLeaks := verify.SplitFileSecretAndPathLeaks(relSlash, data)
-	secretLeaks := secretTokens + pathLeaks
-
-	acc.report.EmptyStubs += stubs
-	acc.report.SecuritySinks += sinks
-	acc.report.HighArityFuncs += highArity
-	acc.report.DeepNestingFuncs += deepNest
-	acc.report.UncheckedErrors += unchecked
-	acc.report.SecretPathLeaks += secretLeaks
-	if loc > acc.thresholds.MaxFileLOC {
-		acc.report.MonolithFiles++
-	}
-	maxComp, maxFnLOC, oversized := summarizeFunctionBounds(funcs, acc.thresholds)
-	acc.report.OversizedFuncs += oversized
+	maxComp, maxFnLOC, oversized := summarizeFunctionBounds(funcs, thresholds)
 	fm := fileEvalMetrics{
 		relSlash: relSlash, lang: lang, loc: loc, cds: cds,
 		maxComp: maxComp, maxFnLOC: maxFnLOC, maxParams: maxParams, maxNesting: maxNesting,
-		stubs: stubs, sinks: sinks, unchecked: unchecked, secretLeak: secretLeaks,
-		secretTokens: secretTokens, pathLeaks: pathLeaks,
+		stubs: stubs, sinks: sinks, unchecked: unchecked,
+		secretLeak: secretTokens + pathLeaks, secretTokens: secretTokens, pathLeaks: pathLeaks,
+		highArity: highArity, deepNest: deepNest,
 	}
+	return fm, oversized
+}
+
+func applyImplementationMetrics(fm fileEvalMetrics, oversized int, hotspot *XrayHotspot, acc *scanAccumulator) {
+	acc.report.EmptyStubs += fm.stubs
+	acc.report.SecuritySinks += fm.sinks
+	acc.report.HighArityFuncs += fm.highArity
+	acc.report.DeepNestingFuncs += fm.deepNest
+	acc.report.UncheckedErrors += fm.unchecked
+	acc.report.SecretPathLeaks += fm.secretLeak
+	if fm.loc > acc.thresholds.MaxFileLOC {
+		acc.report.MonolithFiles++
+	}
+	acc.report.OversizedFuncs += oversized
 	updateBaselineEnvelope(&acc.report.BaselineEnvelope, fm)
-	acc.hotspotsByFile[relSlash] = buildHotspotCandidate(fm, acc.thresholds)
+	acc.hotspotsByFile[fm.relSlash] = hotspot
 }
 
 func countLines(data []byte) int {

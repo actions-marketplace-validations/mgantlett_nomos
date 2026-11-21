@@ -12,8 +12,11 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/types"
 )
@@ -329,37 +332,59 @@ func CountCorpusMagicStringGroups(sources map[string][]byte, maxDup int) int {
 	if maxDup <= 0 {
 		maxDup = DefaultXrayMagicStringThreshold
 	}
-	paths := make([]string, 0, len(sources))
-	for rel := range sources {
-		paths = append(paths, rel)
+	dirFiles, dirs := groupCorpusFilesByDir(sources)
+	workers := min(max(runtime.GOMAXPROCS(0), 1), max(len(dirs), 1))
+	var total atomic.Int64
+	var cursor atomic.Int64
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for w := 0; w < workers; w++ {
+		go func() {
+			defer wg.Done()
+			fset := token.NewFileSet()
+			for {
+				i := int(cursor.Add(1) - 1)
+				if i >= len(dirs) {
+					return
+				}
+				total.Add(int64(countSingleDirMagicClusters(fset, dirFiles[dirs[i]], sources, maxDup)))
+			}
+		}()
 	}
-	sort.Strings(paths)
-
-	byDir := make(map[string]map[string]map[string]int)
-	fset := token.NewFileSet()
-	for _, rel := range paths {
-		dirKey := filepath.ToSlash(filepath.Dir(rel))
-		if byDir[dirKey] == nil {
-			byDir[dirKey] = make(map[string]map[string]int)
-		}
-		data := sources[rel]
-		if strings.HasSuffix(rel, astdebt.ExtGo) {
-			collectGoStringLiteralsFromSrc(fset, rel, data, byDir[dirKey])
-			continue
-		}
-		collectPolyglotStringLiteralsFromBytes(rel, data, byDir[dirKey])
-	}
-	return countExceedingStringClusters(byDir, maxDup)
+	wg.Wait()
+	return int(total.Load())
 }
 
-func countExceedingStringClusters(byDir map[string]map[string]map[string]int, maxDup int) int {
+func groupCorpusFilesByDir(sources map[string][]byte) (map[string][]string, []string) {
+	byDir := make(map[string][]string)
+	for rel := range sources {
+		dirKey := filepath.ToSlash(filepath.Dir(rel))
+		byDir[dirKey] = append(byDir[dirKey], rel)
+	}
+	dirs := make([]string, 0, len(byDir))
+	for dirKey, list := range byDir {
+		sort.Strings(list)
+		byDir[dirKey] = list
+		dirs = append(dirs, dirKey)
+	}
+	sort.Strings(dirs)
+	return byDir, dirs
+}
+
+func countSingleDirMagicClusters(fset *token.FileSet, files []string, sources map[string][]byte, maxDup int) int {
+	pkgMaps := make(map[string]map[string]int)
+	for _, rel := range files {
+		if strings.HasSuffix(rel, astdebt.ExtGo) {
+			collectGoStringLiteralsFromSrc(fset, rel, sources[rel], pkgMaps)
+		} else {
+			collectPolyglotStringLiteralsFromBytes(rel, sources[rel], pkgMaps)
+		}
+	}
 	groups := 0
-	for _, pkgMaps := range byDir {
-		for _, pkgMap := range pkgMaps {
-			for _, cnt := range pkgMap {
-				if cnt > maxDup {
-					groups++
-				}
+	for _, pkgMap := range pkgMaps {
+		for _, cnt := range pkgMap {
+			if cnt > maxDup {
+				groups++
 			}
 		}
 	}
