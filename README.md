@@ -1,10 +1,6 @@
-<div align="center">
-
-<img src="intent/assets/nomos_hero_emblem.jpg" alt="SophiaLabs // Nomos Unified Emblem" width="180" />
-
 # Nomos (Νόμος)
 
-**Agents guess; Git cannot. The Apache 2.0 Go execution substrate beneath any coding agent (0 LLM tokens).**
+**Agents guess; Git cannot. The Apache 2.0 Go execution substrate beneath any coding agent (0 LLM tokens, certified up to `3.60M` LOC).**
 
 [![CI](https://github.com/mgantlett/nomos/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/mgantlett/nomos/actions/workflows/ci.yaml)
 [![Release](https://img.shields.io/github/v/release/mgantlett/nomos?label=Release&color=0284C7)](https://github.com/mgantlett/nomos/releases/latest)
@@ -13,15 +9,7 @@
 [![Nomos X-Ray](https://sophialabs.ca/api/xray/badge/mgantlett/nomos.svg)](https://sophialabs.ca/mgantlett/nomos)
 [![Telemetry](https://img.shields.io/badge/Telemetry-Live-0284C7)](https://sophialabs.ca/system/analytics)
 
-<br />
-
-<img src="intent/assets/nomos_hero_terminal.svg" alt="Nomos Split-Terminal Overview - Day-0 Brownfield X-Ray and Baseline Ratchet paired with Fail-Closed AST Verification and 2PC Release" width="100%" />
-
-</div>
-
----
-
-**Nomos** is a single `~20 MB` static Go binary (`Apache 2.0`, `0` LLM tokens, zero cloud account) between your coding agent (**Claude Code**, **Cursor**, **OpenCode**, **Codex**, **Gemini CLI**, **Antigravity**, **Windsurf**, or **Aider**) and Git. Run `nomos init` once (or paste 1 prompt into your agent) - Nomos blocks skipped tests, hollow stubs, and leaked secrets in `24ms`, your agent fixes its own mess mid-turn, and your `feat/*` workflow never changes:
+**Nomos** is a single `~20 MB` static Go binary (`Apache 2.0`, `0` LLM tokens, zero cloud account) between your coding agent (**Claude Code**, **Cursor**, **OpenCode**, **Codex**, **Gemini CLI**, **Antigravity**, **Windsurf**, or **Aider**) and Git. Run `nomos init` once (or paste 1 prompt into your agent) - Nomos blocks skipped tests, hollow stubs, monolith bloat, and leaked secrets in `24ms` (`<365ms` full 42-gate diff verify even across `3.60M`-LOC monorepos), your agent fixes its own mess mid-turn, and your `feat/*` workflow never changes:
 
 ```text
 You             -> Same plain-English prompts, same IDE, normal feat/* PRs (0 new commands to learn)
@@ -33,7 +21,7 @@ Nomos Substrate -> Invisible ~4ms hooks + 42 AST gates + Day-0 debt ratchet (0 L
 Git             -> main stays read-only & verified; shortcuts fail closed before commit
 ```
 
-> **Initialize once, then forget `nomos` exists.** Nomos supplies `0`-token repository physics; **your coding agent supplies the intelligence** to self-correct before ending its turn. Use `nomos xray .` anytime you want a 5-second codebase health scan.
+> **Initialize once, then forget `nomos` exists.** Nomos supplies `0`-token repository physics; **your coding agent supplies the intelligence** to self-correct before ending its turn. Use `nomos xray .` anytime you want a `~4s` codebase health scan.
 
 ### Two Ways to Set Up in 30 Seconds (Or Scan in Browser First)
 
@@ -49,10 +37,14 @@ Install Nomos (curl -fsSL https://sophialabs.ca/install | bash), run `nomos xray
 
 ```bash
 curl -fsSL https://sophialabs.ca/install | bash
-cd your-project && nomos xray .          # 1. Read-only 5s AI Hangover Score & hotspot scan (use --markdown to share)
+cd your-project && nomos xray .          # 1. Read-only ~4s AI Hangover Score & hotspot scan (use --markdown to share)
 nomos init                               # 2. Branch Guard + brownfield baseline + agent hooks (or --local for stealth trial)
 git switch -c feat/auth                  # 3. Done - forget nomos and keep coding & committing as usual
 ```
+
+<div align="center">
+  <img src="intent/assets/nomos_hero_terminal.svg" alt="Nomos Split-Terminal Overview - Day-0 Brownfield X-Ray and Baseline Ratchet paired with Fail-Closed AST Verification and 2PC Release" width="100%" />
+</div>
 
 What happens automatically underneath your agent the next time it tries taking a shortcut on `feat/*`:
 
@@ -277,5 +269,7 @@ Nomos Community Edition is **100% open-source under Apache 2.0** with zero telem
 - **License & Citation:** Licensed under the **Apache License, Version 2.0** (see [`LICENSE`](LICENSE), [`NOTICE`](NOTICE), and [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)). For academic citation, see [`CITATION.cff`](CITATION.cff) and [DOI `10.5281/zenodo.24240539`](https://doi.org/10.5281/zenodo.24240539).
 
 <div align="center">
+  <img src="intent/assets/nomos_hero_emblem.jpg" alt="SophiaLabs // Nomos Unified Emblem" width="56" />
+  <br />
   <sub>Built with deterministic rigor by <a href="https://sophialabs.ca"><b>SophiaLabs</b></a> · Governed by Nomos</sub>
 </div>
