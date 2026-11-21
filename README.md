@@ -14,6 +14,7 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24240539.svg)](https://doi.org/10.5281/zenodo.24240539)
 [![Docs](https://img.shields.io/badge/Docs-sophialabs.ca-0EA5E9)](https://sophialabs.ca/docs/introduction)
 [![Web X-Ray](https://img.shields.io/badge/Web_X--Ray-0--Install_Scan-10B981)](https://sophialabs.ca/xray)
+[![Telemetry](https://img.shields.io/badge/Telemetry-42--Gate_Velocity-0EA5E9)](https://sophialabs.ca/system/analytics)
 [![Discussions](https://img.shields.io/github/discussions/mgantlett/nomos?color=0EA5E9&label=Discussions)](https://github.com/mgantlett/nomos/discussions)
 
 <br />
@@ -169,6 +170,7 @@ nomos init --worktrees
 | **CLI Harness Security ([`HarnessSecurity-Bench`](https://arxiv.org/abs/2610.07639))** | **`13.0%` ASR (`3/23`) vs. `60.9%` Control (`14/23`) · `-35.2%` Cost** | `46` paired `Claude Code 2.1.252 + Sonnet 5.5` containers across `9` mechanisms (`92.0%` non-`ro` utility, [Dispatch D-14](https://sophialabs.ca/dispatches/harness-security-bench-paired-audit)) |
 | **`233k`-LOC Mature OSS Brownfield Ratchet** | **`6/6` `42`-Gate Clean · `2x` Debt-Free · `-14.7%` Tokens** | Zero-hint refactors across `sqlglot` (`152k` LOC), `commander.js`, `go-chi`, and `BurntSushi/toml` (blocked `+26` hidden complexity debt) |
 | **`Terminal-Bench 2.0` (`k=5` · `445` Docker Runs)** | **`76.40%` `Pass@1` (`340/445`) · `92.13%` `Pass@5` (`82/89` Tasks)** | Lightweight `Gemini Flash` across `89` tasks (`91.20%` cached tokens, [`nomos-harbor`](https://github.com/mgantlett/nomos-harbor)) |
+| **Self-Dogfooding Velocity (`main` + 1-Seat Studio)** | **`2,270+` Verified `2PC` Tasks · `42+` SemVer Cuts · `0` Rollbacks** | `100%` `42`-gate AST pass rate + `SHA-256` Git Notes receipts ([Live Telemetry](https://sophialabs.ca/system/analytics)) |
 | **Footprint & Gate Latency** | **`~20 MB` binary (`CGO_ENABLED=0`) · `~4ms` hook · `~24ms` `--fast-file`** | `860+` automated tests across `16` packages + `7/7` adversarial fail-closed vectors ([`cleanroom_tracetrial_bench_test.go`](substrate/cli/cleanroom_tracetrial_bench_test.go)) |
 
 <details>
