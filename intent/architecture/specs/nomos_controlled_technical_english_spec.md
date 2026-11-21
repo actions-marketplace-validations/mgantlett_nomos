@@ -311,6 +311,7 @@ type HandshakeEvent struct {
 	GateCount            int                        `json:"gate_count"`
 	ReadyWavefront       []string                   `json:"ready_wavefront"`
 	Directives           []string                   `json:"directives,omitempty"`
+	RepoAxioms           []string                   `json:"repo_axioms,omitempty"`
 	LearnedPitfalls      []string                   `json:"learned_pitfalls,omitempty"`
 	VerifiedPatterns     []string                   `json:"verified_patterns,omitempty"`
 	GraduationCandidates []string                   `json:"graduation_candidates,omitempty"`
