@@ -3,18 +3,15 @@
 package mem
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 )
 
 const (
-	ephemeralTestAssertionTTL     = 24 * time.Hour
-	crossScopeConsolidationMinDir = 3
-	cooledOncePitfallMinAccess    = 8
+	ephemeralTestAssertionTTL  = 24 * time.Hour
+	cooledOncePitfallMinAccess = 8
 )
 
 // PitfallHygieneReport summarizes automated pitfall and pattern scope pruning and cross-scope promotion (#PitfallHygieneReport).
@@ -61,9 +58,8 @@ func sweepStalePitfallsWithReceipts(
 	checkDiskPaths bool,
 	now time.Time,
 	rep *PitfallHygieneReport,
-) ([]*Memory, []*Memory) {
+) []*Memory {
 	topicDepths := countPitfallTopicChain(all, normRepo)
-	var surviving []*Memory
 	var dismissed []*Memory
 	for _, m := range all {
 		if !isActiveRepoPitfall(m, normRepo) {
@@ -73,12 +69,11 @@ func sweepStalePitfallsWithReceipts(
 			dismissed = append(dismissed, rec)
 			continue
 		}
-		if isCooledOnceGuardrail(m, topicDepths[strings.ToLower(m.Topic)], now) && store.retireCooledPitfall(m.ID) {
-			continue
+		if isCooledOnceGuardrail(m, topicDepths[strings.ToLower(m.Topic)], now) {
+			store.retireCooledPitfall(m.ID)
 		}
-		surviving = append(surviving, m)
 	}
-	return surviving, dismissed
+	return dismissed
 }
 
 func tryDismissStaleOrNoisePitfall(
@@ -105,10 +100,13 @@ func tryDismissStaleOrNoisePitfall(
 }
 
 func isCooledOnceGuardrail(m *Memory, topicDepth int, now time.Time) bool {
-	if m == nil || m.Kind != KindPitfall || topicDepth > 1 || m.AccessCount < cooledOncePitfallMinAccess {
+	if m == nil || m.AccessCount < cooledOncePitfallMinAccess || m.CreatedAt.IsZero() {
 		return false
 	}
-	if m.CreatedAt.IsZero() {
+	if m.Kind == KindDeadEnd {
+		return now.Sub(m.CreatedAt) > 7*24*time.Hour
+	}
+	if m.Kind != KindPitfall || topicDepth > 1 {
 		return false
 	}
 	return now.Sub(m.CreatedAt) > defaultUnscopedPitfallCoolWindow
@@ -126,6 +124,46 @@ func (s *Store) retireCooledPitfall(id int) bool {
 	}
 	n, rErr := res.RowsAffected()
 	return rErr == nil && n > 0
+}
+
+// supersedeSingleRecord marks a single active memory record superseded by canonID in SQLite.
+func (s *Store) supersedeSingleRecord(id, canonID int) bool {
+	if s == nil || id <= 0 {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	res, err := s.db.Exec(`UPDATE memories SET status = 'superseded', superseded_by = ? WHERE id = ? AND status = 'active'`, canonID, id)
+	if err != nil {
+		return false
+	}
+	n, rErr := res.RowsAffected()
+	return rErr == nil && n > 0
+}
+
+// supersedeRecordsByIDs marks a slice of active Memory records superseded by canonID.
+func (s *Store) supersedeRecordsByIDs(cards []*Memory, canonID int) int {
+	count := 0
+	for _, c := range cards {
+		if c != nil && s.supersedeSingleRecord(c.ID, canonID) {
+			count++
+		}
+	}
+	return count
+}
+
+// normalizeAxiomTopicAndScrubContent persists canonical topic and scrubbed title/path body on an active convention axiom.
+func (s *Store) normalizeAxiomTopicAndScrubContent(rec *Memory, normTopic, title string) {
+	newContent := rebuildScrubbedAutonomicAxiomContent(rec.Content, title)
+	if normTopic == rec.Topic && newContent == rec.Content {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, err := s.db.Exec(`UPDATE memories SET topic = ?, content = ? WHERE id = ?`, normTopic, newContent, rec.ID); err == nil {
+		rec.Topic = normTopic
+		rec.Content = newContent
+	}
 }
 
 // isMissingRepoScopeDir checks whether a relative directory scope has been removed from repoRoot.
@@ -175,82 +213,4 @@ func extractGateSlugFromPitfallTopic(topic string) string {
 		return rest
 	}
 	return rest[:idx]
-}
-
-// consolidateCrossScopeGateHabits synthesizes one repo-wide KindPattern when the same gate trips across >= 3 directories.
-func consolidateCrossScopeGateHabits(store *Store, activePitfalls []*Memory, repoID, normRepo string) int {
-	byGate := groupPitfallsByGateSlug(activePitfalls)
-	updated := 0
-	for gateSlug, scopesMap := range byGate {
-		if len(scopesMap) < crossScopeConsolidationMinDir {
-			continue
-		}
-		if upsertHabitPattern(store, repoID, normRepo, gateSlug, scopesMap) {
-			updated++
-		}
-	}
-	return updated
-}
-
-// groupPitfallsByGateSlug buckets non-ephemeral active pitfalls by gate slug and distinct directory scope.
-func groupPitfallsByGateSlug(activePitfalls []*Memory) map[string]map[string]*Memory {
-	byGate := make(map[string]map[string]*Memory)
-	for _, m := range activePitfalls {
-		if isEphemeralTestAssertionContent(m.Content) {
-			continue
-		}
-		gateSlug := extractGateSlugFromPitfallTopic(m.Topic)
-		scope := extractScopeFromPitfallTopic(m.Topic)
-		if gateSlug == "" || scope == "" || scope == workspaceScopeLabel {
-			continue
-		}
-		if byGate[gateSlug] == nil {
-			byGate[gateSlug] = make(map[string]*Memory)
-		}
-		byGate[gateSlug][scope] = m
-	}
-	return byGate
-}
-
-// upsertHabitPattern saves and deduplicates a consolidated repo-wide habit blueprint under pattern:habit:<gate>.
-func upsertHabitPattern(store *Store, repoID, normRepo, gateSlug string, scopesMap map[string]*Memory) bool {
-	scopes := make([]string, 0, len(scopesMap))
-	var newest *Memory
-	for sc, rec := range scopesMap {
-		scopes = append(scopes, sc)
-		if newest == nil || rec.ID > newest.ID {
-			newest = rec
-		}
-	}
-	sort.Strings(scopes)
-	topic := "pattern:habit:" + gateSlug
-	exemplar := extractVerifiedFixTail(newest.Content)
-	content := fmt.Sprintf("[Repo-Wide Habit (%s across %d dirs: %s)] %s",
-		strings.ReplaceAll(gateSlug, "_", " "),
-		len(scopes),
-		strings.Join(scopes, ", "),
-		exemplar,
-	)
-	rec := &Memory{
-		RepoID:  repoID,
-		Kind:    KindPattern,
-		Topic:   topic,
-		Content: content,
-		TaskID:  newest.TaskID,
-		Status:  StatusActive,
-	}
-	if err := store.Save(rec); err != nil {
-		return false
-	}
-	store.supersedeOlderTopicPatterns(normRepo, topic, rec.ID)
-	return true
-}
-
-// extractVerifiedFixTail extracts the concise Trap -> Verified Fix clause from a distilled pitfall body.
-func extractVerifiedFixTail(content string) string {
-	idx := strings.Index(content, "] ")
-	if idx >= 0 && idx+2 < len(content) {
-		return strings.TrimSpace(content[idx+2:])
-	}
-	return strings.TrimSpace(content)
 }

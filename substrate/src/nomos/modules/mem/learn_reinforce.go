@@ -248,7 +248,7 @@ func isPitfallEligibleForScope(m *Memory, repoID, targetScope string, topicDepth
 	if targetScope != workspaceScopeLabel && strings.Contains(m.Topic, targetScope) {
 		return true
 	}
-	if isEphemeralTestAssertionContent(m.Content) || m.AccessCount >= CleanStreakCoolingThreshold {
+	if m.Kind == KindDeadEnd || isEphemeralTestAssertionContent(m.Content) || m.AccessCount >= CleanStreakCoolingThreshold {
 		return false
 	}
 	if topicDepth >= 2 || m.CreatedAt.IsZero() {
@@ -282,11 +282,12 @@ func RecordRolledBackDeadEnds(repoRoot, taskKey string, traceMutatedFiles, commi
 			break
 		}
 		scope := dirToScopeLabel(filepath.ToSlash(filepath.Dir(rel)))
+		winningFile := bestMatchingCommittedFile(repoRoot, rel, committedFiles)
 		rec := &Memory{
 			RepoID:  repoID,
 			Kind:    KindDeadEnd,
 			Topic:   fmt.Sprintf("dead_end:%s", scope),
-			Content: fmt.Sprintf("[Dead-End in %s] Rolled back un-merged edit to %s during %s -> Winning Fix (%s): %s", scope, rel, upperTask, filepath.Base(committedFiles[0]), fixSummary),
+			Content: fmt.Sprintf("[Dead-End in %s] Rolled back un-merged edit to %s during %s -> Winning Fix (%s): %s", scope, rel, upperTask, winningFile, fixSummary),
 			TaskID:  upperTask,
 			Status:  StatusActive,
 		}
@@ -319,6 +320,18 @@ func isScratchOrWalkthroughPath(rel string) bool {
 		strings.HasPrefix(base, "walkthrough") ||
 		strings.HasSuffix(base, ".bak") ||
 		strings.HasSuffix(base, ".tmp")
+}
+
+// bestMatchingCommittedFile selects a committed file in the same directory as revertedRel when present.
+func bestMatchingCommittedFile(repoRoot, revertedRel string, committedFiles []string) string {
+	targetDir := filepath.ToSlash(filepath.Dir(revertedRel))
+	for _, raw := range committedFiles {
+		norm := normalizePatternPath(repoRoot, raw)
+		if norm != "" && filepath.ToSlash(filepath.Dir(norm)) == targetDir {
+			return filepath.Base(norm)
+		}
+	}
+	return filepath.Base(committedFiles[0])
 }
 
 

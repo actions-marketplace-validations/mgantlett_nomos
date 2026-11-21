@@ -99,9 +99,13 @@ func TestSweepRepoPitfallHygiene_DeadScopesExpiredTestsAndCrossFolderHabits(t *t
 		t.Fatalf("expected expired test pitfall #%d tombstoned, got %+v (err=%v)", testFailID, testRec, tErr)
 	}
 
+	axioms := RecallRepoAxiomsReadOnly(repo, "", nil, 5)
+	if len(axioms) != 1 || !strings.Contains(axioms[0], "Autonomic Convention Axiom") || !strings.Contains(axioms[0], "Unchecked Error Hygiene Invariant") {
+		t.Fatalf("expected 1 consolidated Autonomic Convention Axiom, got %v", axioms)
+	}
 	patterns := RecallRepoPatternsReadOnly(repo, "unchecked error blank discard", nil, 5)
-	if len(patterns) != 1 || !strings.Contains(patterns[0], "Repo-Wide Habit") {
-		t.Fatalf("expected 1 consolidated Repo-Wide Habit pattern, got %v", patterns)
+	if len(patterns) != 0 {
+		t.Fatalf("expected 0 pattern:habit:* clones in Verified Patterns, got %v", patterns)
 	}
 }
 

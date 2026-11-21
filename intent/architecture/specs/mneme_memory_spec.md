@@ -140,6 +140,12 @@ func ValidateAdvisoryWriteKind(kind MemoryKind) error
 
 // ResolveHotScopeReflex inspects active directory pitfalls for post-tool AST sensitization (@intent: #HotScopeReflex).
 func ResolveHotScopeReflex(repoRoot, relDir string) *HotScopeReflex
+
+// NormalizeConventionGateSlug maps truncated or underscored convention gate slugs onto canonical hyphenated identifiers (@intent: #Memory).
+func NormalizeConventionGateSlug(raw string) string
+
+// ConsolidateConventionAxioms collapses multi-scope convention pitfalls and legacy habit patterns into scrubbed repository axioms (@intent: #Memory).
+func ConsolidateConventionAxioms(store *Store) int
 ```
 
 The SQLite persistence schema matches `mem.Memory`:
@@ -199,8 +205,8 @@ $$\text{Score} = (0.75 \times \text{CosineSimilarity} + 0.25 \times \text{Lexica
 - **Recurrence-Aware Graduation & Clean-Streak Cooling (`RecallGraduationCandidates`)**: All 42 compiled Tier-C gates (`isBuiltInStructuralASTTopic`) bypass `nomos.yaml` graduation banners in Open-Core handshakes and route into `HotScopeReflex`. Policy-graduatable statutory pitfalls surface when topic recurrence $\ge 2$ or task-deduplicated `access_count >= 3`. Active head pitfalls cool out of `graduation_candidates` once `access_count >= 5` consecutive clean task recalls complete without re-tripping.
 - **Closed-Loop Hot-Scope AST Reflexes (`ResolveHotScopeReflex`)**: When built-in AST pitfalls in `relDir` reach recurrence $\ge 3$ with head `access_count < 5`, `ResolveHotScopeReflex` activates sensitized `EvaluateFastFileRadar` checks. Sensitized scopes tighten `V(G)` and `LOC` warnings from `80%` to `65%` and run inline `arity`, `unchecked_error_hygiene`, and `anti_shim` micro-probes. Reaching head `access_count >= 5` consecutive clean recalls cools the scope back to baseline `80%`.
 - **Symbol-Delta Pitfall Distillation (`DistillTaskLearnings`)**: When a buffered gate failure cites a repository file, 2PC sync parses verified post-fix AST symbols. Distillation prepends `Refactored <file> [<symbols>]` ahead of walkthrough prose.
-- **Unscoped One-Off Pitfall Cooling (`RecallRepoPitfalls`)**: Unscoped handshakes (`targetScope == "workspace"`) exclude polyglot runner assertions, bare headers, pitfalls with `access_count >= 5`, and `1x` pitfalls older than `14d`. Scoped recall retains active directory pitfalls before expiry.
-- **Dual-Gate Filesystem Grounding (`SweepRepoPitfallHygiene`)**: Sweeps and 2PC sync tombstone missing scopes, bare headers, and polyglot runner assertions (`24h` TTL). Single-occurrence guardrails (`access_count >= 8`, age `> 14d`) retire to `superseded`. Zero-recall directory pattern overflows beyond the newest three per scope retire after `30d`. Read-time `os.Stat` checks suppress missing scopes immediately.
+- **Unscoped One-Off Pitfall Cooling (`RecallRepoPitfalls`)**: Unscoped handshakes (`targetScope == "workspace"`) exclude `dead_end` notes, polyglot runner assertions, bare headers, pitfalls with `access_count >= 5`, and `1x` pitfalls older than `14d`. Unscoped ranking prioritizes recurring traps (`recurrence >= 2`), while scoped recall retains directory pitfalls and `dead_end` warnings.
+- **Dual-Gate Filesystem Grounding & Convention Consolidation (`SweepRepoPitfallHygiene`, `ConsolidateConventionAxioms`)**: Sweeps and read-time `os.Stat` checks suppress missing scopes, absent `Trap` or `dead_end` files, and healed ceilings. Sweeps tombstone bare headers and polyglot runner assertions (`24h` TTL) while retiring cooled `1x` guardrails (`> 14d`) and `dead_end` notes (`> 7d`). Convention pitfalls across two scopes or three hits consolidate into scrubbed `axiom:<gate>` records and retire `pattern:habit:*` clones. Zero-recall directory pattern overflows beyond three per scope retire after `30d`.
 - **Repository Axiom Handshake Recall (`RecallRepoAxioms`)**: Handshake and task inception surface up to two active repository-scoped `axiom` records ranked by query similarity and reinforcement. Active task sessions reinforce recalled axioms at most once per `(task_id, memory_id)`.
 - **JIT Post-Edit Pitfall Recall & Trunk Pacing (`nomos hook post-tool`)**: First worktree mutation in `relDir` recalls matching directory pitfalls once via `RecallRepoPitfallsForTask` and records `relDir` in session trace. Trunk sessions (`wtRoot == ""`, `SessionID != ""`) track consecutive exploratory reads per session and emit pacing advisories at configured thresholds.
 
@@ -267,7 +273,7 @@ $$\text{Score} = (0.75 \times \text{CosineSimilarity} + 0.25 \times \text{Lexica
 | `TC-LRN-01` | Gate trap buffering | Failing DoD gate evaluated during active task (`GateTrapEntry`) | Buffers gate name, scope, and failure message for `LEARN` phase distillation. |
 | `TC-LRN-02` | Trap-to-fix distillation | Buffered `GateTrapEntry` resolved before 2PC `nomos task sync` | Mints statutory `kind="pitfall"` pairing trap and verified fix. |
 | `TC-LRN-03` | Dead-scope pitfall & pattern hygiene | `PitfallHygieneReport` audit when target directory or `files=[...]` disappear | Tombstones dead pitfalls and patterns (`DeadScopesTombstoned`, `DeadPatternsTombstoned`). |
-| `TC-LRN-04` | Cross-scope habit promotion | Identical pitfall recurring across $\ge 3$ distinct package scopes | Promotes pitfall scope to repository-wide orientation. |
+| `TC-LRN-04` | Cross-scope convention promotion | Identical convention gate recurring across $\ge 2$ scopes or $\ge 3$ hits | Consolidates pitfalls into `axiom:<gate>` and retires `pattern:habit:*` clones. |
 | `TC-LRN-05` | Duplicate memory superseding | `MaintainReport` deduplication pass on identical topic and content | Marks older duplicate `superseded` and preserves newest record. |
 | `TC-LRN-06` | `mneme.db` WAL checkpoint | Periodic maintenance pass over `mneme.db` (`MaintainReport`) | Checkpoints WAL and reclaims fragmented pages cleanly. |
 | `TC-MNM-030` | JIT pitfall recall & trunk pacing | First `post-tool` edit in `relDir`; consecutive trunk reads | Recalls scoped pitfall once per `relDir`; paces trunk reads (`7/12`, `12/20`). |
@@ -280,7 +286,7 @@ $$\text{Score} = (0.75 \times \text{CosineSimilarity} + 0.25 \times \text{Lexica
 
 ## 7. Cross-Plane Traceability & DoD Verification
 
-- **Intent Lineage**: `INT-735`, `INT-855`, `INT-899`, `INT-926`, `INT-927`, `INT-1944`, `INT-1956`, `INT-1962`, `INT-1984`, `INT-2055`, `INT-2192`.
-- **Substrate SSoT**: `SUB-1213`, `SUB-1524`, `SUB-1680`, `SUB-2157`, `SUB-2203`, `SUB-2211`, `SUB-2279`, `SUB-3099`, `SUB-3383` (`substrate/src/nomos/modules/mem/*.go`, `substrate/src/nomos/modules/verify/fast_radar.go`, `substrate/cli/maintenance_hook.go`, `substrate/cli/inspectcmd/cmd_mem_dismiss.go`).
+- **Intent Lineage**: `INT-735`, `INT-855`, `INT-899`, `INT-926`, `INT-927`, `INT-1944`, `INT-1956`, `INT-1962`, `INT-1984`, `INT-2055`, `INT-2192`, `INT-2206`, `INT-2208`.
+- **Substrate SSoT**: `SUB-1213`, `SUB-1524`, `SUB-1680`, `SUB-2157`, `SUB-2203`, `SUB-2211`, `SUB-2279`, `SUB-3099`, `SUB-3383`, `SUB-3404`, `SUB-3407` (`substrate/src/nomos/modules/mem/*.go`, `substrate/src/nomos/modules/verify/fast_radar.go`, `substrate/cli/maintenance_hook.go`, `substrate/cli/inspectcmd/cmd_mem_dismiss.go`).
 - **Canonical 7x3 Matrix Coordinates**: `Cell 1.1 (boundary)`, `Cell 4.1 (intent_traceability)`, `Cell 6.2 (zero_alias)`.
 - **Deterministic Verification**: `nomos verify` executes unit tests across `substrate/src/nomos/modules/mem/` and validates Database Encapsulation and CLI zero-alias invariants with exit code `0`.

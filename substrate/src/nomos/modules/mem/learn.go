@@ -223,24 +223,31 @@ func recallRepoPitfallsWithTask(repoRoot, taskKey string, touchedFiles []string,
 
 	repoID := strings.ToLower(filepath.Base(filepath.Clean(repoRoot)))
 	targetScope := DeriveDirectoryScope(repoRoot, touchedFiles)
+	topicDepths := countPitfallTopicChain(all, repoID)
 	candidates := filterEligibleRepoPitfalls(all, repoRoot, taskKey, repoID, targetScope, time.Now().UTC())
 	if len(candidates) == 0 {
 		return nil
 	}
 
-	rankRepoPitfalls(candidates, targetScope)
+	rankRepoPitfallsWithDepth(candidates, targetScope, topicDepths)
 	if len(candidates) > limit {
 		candidates = candidates[:limit]
 	}
 	return collectRecalledContents(store, repoRoot, taskKey, targetScope, candidates, recordAccess)
 }
 
-func rankRepoPitfalls(candidates []*Memory, targetScope string) {
+// rankRepoPitfallsWithDepth orders candidates by directory scope match, recurring depth (>=2), and recency.
+func rankRepoPitfallsWithDepth(candidates []*Memory, targetScope string, topicDepths map[string]int) {
 	sort.SliceStable(candidates, func(i, j int) bool {
 		iMatch := targetScope != "workspace" && strings.Contains(candidates[i].Topic, targetScope)
 		jMatch := targetScope != "workspace" && strings.Contains(candidates[j].Topic, targetScope)
 		if iMatch != jMatch {
 			return iMatch
+		}
+		iRecur := topicDepths[strings.ToLower(candidates[i].Topic)] >= 2
+		jRecur := topicDepths[strings.ToLower(candidates[j].Topic)] >= 2
+		if iRecur != jRecur {
+			return iRecur
 		}
 		return candidates[i].ID > candidates[j].ID
 	})
