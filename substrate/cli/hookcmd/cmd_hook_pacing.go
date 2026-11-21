@@ -16,10 +16,21 @@ import (
 )
 
 const (
-	readSpiralWarnThreshold = 12
-	readSpiralCritThreshold = 20
-	pacingTracesSubdir      = "pacing_traces"
+	readSpiralWarnThreshold        = 12
+	readSpiralCritThreshold        = 20
+	readSpiralSearchBlockThreshold = 22
+	pacingTracesSubdir             = "pacing_traces"
 )
+
+var broadSearchToolNames = map[string]bool{
+	"grep": true, "grep_search": true, "search_file_content": true,
+	"glob": true, "find_by_name": true,
+	"list_dir": true, "list_directory": true, "list": true, "ls": true,
+}
+
+var broadSearchShellPrefixes = []string{
+	"git grep", "grep ", "rg ", "find ",
+}
 
 var exploratoryReadToolNames = map[string]bool{
 	"read": true, "read_file": true, "view_file": true,
@@ -101,6 +112,9 @@ func advanceReadSpiralWarning(tr *HookSessionTrace, warnAt, critAt int, isTrunk 
 		}
 		return formatReadSpiralAdvisory(tr.ConsecutiveReadCalls, true, style)
 	}
+	if !isTrunk && tr.ConsecutiveReadCalls > critAt && (tr.ConsecutiveReadCalls-critAt)%4 == 0 {
+		return formatReadSpiralAdvisory(tr.ConsecutiveReadCalls, true, style)
+	}
 	if tr.ConsecutiveReadCalls >= warnAt && !tr.WarnedReadSpiral12 {
 		tr.WarnedReadSpiral12 = true
 		if isTrunk {
@@ -109,6 +123,43 @@ func advanceReadSpiralWarning(tr *HookSessionTrace, warnAt, critAt int, isTrunk 
 		return formatReadSpiralAdvisory(tr.ConsecutiveReadCalls, false, style)
 	}
 	return ""
+}
+
+func evaluateReadSpiralSearchCircuitBreaker(p *shellguard.HookPayload, hermeticDir string) shellguard.HookDecision {
+	if p == nil || !isBroadSearchOrListCall(p) {
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
+	}
+	path, traceRoot, isTrunk := resolvePacingTraceTarget(p, hermeticDir)
+	if path == "" || isTrunk {
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
+	}
+	tr := loadOrInitHookSessionTrace(path, traceRoot)
+	if len(tr.MutatedFiles) > 0 || tr.ConsecutiveReadCalls < readSpiralSearchBlockThreshold {
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
+	}
+	return shellguard.HookDecision{
+		Decision: hookDecisionDeny,
+		Reason: fmt.Sprintf(
+			"❌ [NOMOS PACING INTERCEPT] %d consecutive read/search calls with 0 source edits: broad search/directory exploration is paused. Read the exact target file slice if needed, apply your minimal fix hypothesis now, and verify with tests (1 edit resets search access).",
+			tr.ConsecutiveReadCalls,
+		),
+	}
+}
+
+func isBroadSearchOrListCall(p *shellguard.HookPayload) bool {
+	if p.CommandLine == "" {
+		return broadSearchToolNames[strings.ToLower(strings.TrimSpace(p.ToolName))]
+	}
+	trimmed := strings.ToLower(strings.TrimSpace(p.CommandLine))
+	if trimmed == "" || strings.Contains(trimmed, ">") {
+		return false
+	}
+	for _, prefix := range broadSearchShellPrefixes {
+		if trimmed == strings.TrimSpace(prefix) || strings.HasPrefix(trimmed, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // resolveTrunkSessionTracePath resolves a session-scoped pacing trace file under NOMOS_HOME/cache/pacing_traces

@@ -16,6 +16,7 @@ import (
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/handshake"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/treesitter"
 )
 
 var (
@@ -175,6 +176,9 @@ func evaluateFirstHotspotReadHint(p *shellguard.HookPayload, tr *HookSessionTrac
 	}
 	tr.ImpactedFiles = appendUniqueBounded(tr.ImpactedFiles, rel, 64)
 	msg := fmt.Sprintf("🧭 [Nomos Hotspot Read] %s (%d LOC >= %d ceiling): avoid growing in place; keep call-site edits minimal and place net-new helpers in a sibling file", rel, lines, hotspotReadCeilingLOC)
+	if outline := buildHotspotSymbolOutline(rel, data); outline != "" {
+		msg += " | outline: " + outline
+	}
 	if paired := resolveExistingPairedTestRel(canonWt, rel); paired != "" {
 		msg += " | paired test: " + paired
 	}
@@ -182,6 +186,41 @@ func evaluateFirstHotspotReadHint(p *shellguard.HookPayload, tr *HookSessionTrac
 		msg += " | " + peers
 	}
 	return msg
+}
+
+func buildHotspotSymbolOutline(rel string, data []byte) string {
+	lang := treesitter.DetectLanguage(filepath.Base(rel))
+	funcs, err := treesitter.ExtractFunctions(lang, rel, data)
+	if err != nil || len(funcs) == 0 {
+		return ""
+	}
+	filtered := make([]treesitter.FunctionMetric, 0, len(funcs))
+	for _, fn := range funcs {
+		if fn.Name != "" && (len(funcs) <= 14 || fn.LOC >= 8) {
+			filtered = append(filtered, fn)
+		}
+	}
+	if len(filtered) == 0 {
+		filtered = funcs
+	}
+	const maxItems = 14
+	items := make([]string, 0, min(len(filtered), maxItems))
+	if len(filtered) <= maxItems {
+		for _, fn := range filtered {
+			items = append(items, formatFuncSpanItem(fn))
+		}
+		return strings.Join(items, ", ")
+	}
+	for i := 0; i < maxItems; i++ {
+		idx := i * (len(filtered) - 1) / (maxItems - 1)
+		items = append(items, formatFuncSpanItem(filtered[idx]))
+	}
+	return strings.Join(items, ", ")
+}
+
+func formatFuncSpanItem(fn treesitter.FunctionMetric) string {
+	end := max(fn.Line, fn.Line+fn.LOC-1)
+	return fmt.Sprintf("%s:L%d-%d", fn.Name, fn.Line, end)
 }
 
 func evaluateMonorepoFirstReadSeamHint(canonWt, rel string, tr *HookSessionTrace) string {

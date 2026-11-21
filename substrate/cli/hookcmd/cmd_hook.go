@@ -149,10 +149,16 @@ func newHookPostToolCmd(hermeticDir *string, containerSandbox *bool, budgetSec *
 }
 
 func dispatchPreToolHook(payload *shellguard.HookPayload, hermeticDir string, containerSandbox bool, profile HookAdvisoryProfile) shellguard.HookDecision {
+	var dec shellguard.HookDecision
 	if containerSandbox && hermeticDir == "" {
-		return EvaluateContainerPreToolHookWithProfile(payload, profile)
+		dec = EvaluateContainerPreToolHookWithProfile(payload, profile)
+	} else {
+		dec = EvaluatePreToolHookWithProfile(payload, hermeticDir, profile)
 	}
-	return EvaluatePreToolHookWithProfile(payload, hermeticDir, profile)
+	if dec.Decision == hookDecisionDeny {
+		return dec
+	}
+	return evaluateReadSpiralSearchCircuitBreaker(payload, hermeticDir)
 }
 
 func dispatchPostToolHook(payload *shellguard.HookPayload, hermeticDir string, containerSandbox bool, budgetSec int, profile HookAdvisoryProfile) string {

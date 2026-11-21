@@ -87,8 +87,8 @@ func TestHotspotFirstReadHint_FiresOnceAboveCeilingAndSilentBelow(t *testing.T) 
 		t.Fatal(err)
 	}
 	msg1 := evaluateReadSpiralAdvisory(&shellguard.HookPayload{ToolName: "Read", TargetFile: hot, Cwd: wtDir}, "", "terse")
-	if !strings.Contains(msg1, "Nomos Hotspot Read") || !strings.Contains(msg1, "small.go") {
-		t.Fatalf("expected one-time hotspot read orientation + peer hint, got: %q", msg1)
+	if !strings.Contains(msg1, "Nomos Hotspot Read") || !strings.Contains(msg1, "small.go") || !strings.Contains(msg1, "outline: Handle:L512-512") {
+		t.Fatalf("expected one-time hotspot read orientation + outline + peer hint, got: %q", msg1)
 	}
 	if msg2 := evaluateReadSpiralAdvisory(&shellguard.HookPayload{ToolName: "Read", TargetFile: hot, Cwd: wtDir}, "", "terse"); msg2 != "" {
 		t.Fatalf("expected second read of hotspot file to be silent, got: %q", msg2)
