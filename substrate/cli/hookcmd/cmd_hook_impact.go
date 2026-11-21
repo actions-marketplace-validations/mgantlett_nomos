@@ -15,6 +15,7 @@ import (
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/handshake"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
 )
 
 var (
@@ -147,14 +148,21 @@ func collectUnseenImpactedFiles(p *shellguard.HookPayload, tr *HookSessionTrace,
 	return unseen, dirty
 }
 
-const hotspotReadCeilingLOC = 500
+const (
+	hotspotReadCeilingLOC = 500
+	monorepoSeamFileFloor = 1000
+	maxMonorepoSeamReads  = 5
+	monoScaleYesToken     = "__mono:1"
+	monoScaleNoToken      = "__mono:0"
+	seamReadPrefix        = "seam:"
+)
 
 // evaluateFirstHotspotReadHint emits a one-time orientation advisory when an agent inside an
-// active worktree reads a >=500-LOC brownfield hotspot file, surfacing sibling-file extraction
-// guidance and 1-hop AST/interface peers before the first edit is attempted.
+// active worktree reads a >=500-LOC brownfield hotspot file, or reads up to 5 coupled <500-LOC
+// source files inside a >=1,000-file monorepo.
 func evaluateFirstHotspotReadHint(p *shellguard.HookPayload, tr *HookSessionTrace, wtRoot string) string {
 	resolved, rel, canonWt, ok := resolveUnseenHotspotReadTarget(p, tr, wtRoot)
-	if !ok {
+	if !ok || impact.IsTestSourceFile(rel) {
 		return ""
 	}
 	data, err := os.ReadFile(resolved)
@@ -163,14 +171,104 @@ func evaluateFirstHotspotReadHint(p *shellguard.HookPayload, tr *HookSessionTrac
 	}
 	lines := bytes.Count(data, []byte("\n")) + 1
 	if lines < hotspotReadCeilingLOC {
-		return ""
+		return evaluateMonorepoFirstReadSeamHint(canonWt, rel, tr)
 	}
 	tr.ImpactedFiles = appendUniqueBounded(tr.ImpactedFiles, rel, 64)
 	msg := fmt.Sprintf("🧭 [Nomos Hotspot Read] %s (%d LOC >= %d ceiling): avoid growing in place; keep call-site edits minimal and place net-new helpers in a sibling file", rel, lines, hotspotReadCeilingLOC)
+	if paired := resolveExistingPairedTestRel(canonWt, rel); paired != "" {
+		msg += " | paired test: " + paired
+	}
 	if peers := verify.ComputeFirstEditCoChangeHint(canonWt, rel); peers != "" {
 		msg += " | " + peers
 	}
 	return msg
+}
+
+func evaluateMonorepoFirstReadSeamHint(canonWt, rel string, tr *HookSessionTrace) string {
+	if countMonorepoSeamReads(tr) >= maxMonorepoSeamReads || !isLargeMonorepoWorkspace(canonWt, tr) {
+		return ""
+	}
+	var parts []string
+	if paired := resolveExistingPairedTestRel(canonWt, rel); paired != "" {
+		parts = append(parts, "paired test: "+paired)
+	}
+	if peers := verify.ComputeFirstEditCoChangeHint(canonWt, rel); peers != "" {
+		parts = append(parts, peers)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	tr.ImpactedFiles = appendUniqueBounded(tr.ImpactedFiles, rel, 64)
+	tr.ImpactedFiles = appendUniqueBounded(tr.ImpactedFiles, seamReadPrefix+rel, 64)
+	return fmt.Sprintf("🧭 [Nomos Monorepo Seam] %s -> %s", rel, strings.Join(parts, " | "))
+}
+
+func countMonorepoSeamReads(tr *HookSessionTrace) int {
+	n := 0
+	for _, item := range tr.ImpactedFiles {
+		if strings.HasPrefix(item, seamReadPrefix) {
+			n++
+		}
+	}
+	return n
+}
+
+func isLargeMonorepoWorkspace(canonWt string, tr *HookSessionTrace) bool {
+	if containsTraceItem(tr.ImpactedFiles, monoScaleYesToken) {
+		return true
+	}
+	if containsTraceItem(tr.ImpactedFiles, monoScaleNoToken) {
+		return false
+	}
+	out, err := workspace.SafeGitCommand(canonWt, "ls-files", "-z", "--cached").Output()
+	if err != nil {
+		tr.ImpactedFiles = appendUniqueBounded(tr.ImpactedFiles, monoScaleNoToken, 64)
+		return false
+	}
+	if bytes.Count(out, []byte{0}) >= monorepoSeamFileFloor {
+		tr.ImpactedFiles = appendUniqueBounded(tr.ImpactedFiles, monoScaleYesToken, 64)
+		return true
+	}
+	tr.ImpactedFiles = appendUniqueBounded(tr.ImpactedFiles, monoScaleNoToken, 64)
+	return false
+}
+
+func resolveExistingPairedTestRel(canonWt, rel string) string {
+	ext := strings.ToLower(filepath.Ext(rel))
+	stem := strings.TrimSuffix(filepath.Base(rel), filepath.Ext(rel))
+	dir := filepath.ToSlash(filepath.Dir(rel))
+	for _, cand := range monorepoPairedTestRelCandidates(dir, stem, ext) {
+		if fi, err := os.Stat(filepath.Join(canonWt, filepath.FromSlash(cand))); err == nil && !fi.IsDir() {
+			return cand
+		}
+	}
+	return ""
+}
+
+func monorepoPairedTestRelCandidates(dir, stem, ext string) []string {
+	joinClean := func(parts ...string) string { return filepath.ToSlash(filepath.Join(parts...)) }
+	switch ext {
+	case ".go":
+		return []string{joinClean(dir, stem+"_test.go")}
+	case ".py":
+		cands := []string{
+			joinClean(dir, "test_"+stem+".py"),
+			joinClean(dir, stem+"_test.py"),
+			joinClean("tests", dir, "test_"+stem+".py"),
+			joinClean("tests", dir, stem+"_test.py"),
+		}
+		if strings.HasPrefix(dir, "src/") {
+			sub := strings.TrimPrefix(dir, "src/")
+			cands = append(cands, joinClean("tests", sub, "test_"+stem+".py"))
+		}
+		return cands
+	case ".ts", ".tsx", ".js", ".jsx":
+		return []string{joinClean(dir, stem+".test"+ext), joinClean(dir, stem+".spec"+ext), joinClean(dir, "__tests__", stem+".test"+ext)}
+	case ".rs":
+		return []string{joinClean(dir, "tests.rs"), joinClean(dir, stem+"_test.rs")}
+	default:
+		return nil
+	}
 }
 
 func resolveUnseenHotspotReadTarget(p *shellguard.HookPayload, tr *HookSessionTrace, wtRoot string) (string, string, string, bool) {

@@ -139,24 +139,6 @@ func buildSingleFileImpact(root, rel string, goReverse map[string][]string, seen
 	return fmt.Sprintf("%s -> %s", rel, strings.Join(parts, " | "))
 }
 
-func rubyPairedTestCandidates(dir, stem string) []string {
-	out := []string{
-		filepath.Join(dir, stem+"_test.rb"),
-		filepath.Join(dir, stem+"_spec.rb"),
-		filepath.Join(astdebt.DirTest, stem+"_test.rb"),
-		filepath.Join(astdebt.DirSpec, stem+"_spec.rb"),
-	}
-	slashDir := filepath.ToSlash(dir)
-	if strings.HasPrefix(slashDir, "app/") {
-		sub := strings.TrimPrefix(slashDir, "app/")
-		out = append(out,
-			filepath.Join(astdebt.DirTest, sub, stem+"_test.rb"),
-			filepath.Join(astdebt.DirSpec, sub, stem+"_spec.rb"),
-		)
-	}
-	return out
-}
-
 func extractFileIntentAnchors(absPath string) []string {
 	data, err := os.ReadFile(absPath)
 	if err != nil {
@@ -174,12 +156,26 @@ func extractFileIntentAnchors(absPath string) []string {
 }
 
 func buildGoReverseIndexIfNeeded(worktreeDir string, modifiedFiles []string) map[string][]string {
+	var pkgDirs []string
+	seen := make(map[string]bool)
 	for _, rel := range modifiedFiles {
 		if strings.HasSuffix(rel, astdebt.ExtGo) && !IsTestSourceFile(rel) {
-			return BuildGoReverseImportIndex(worktreeDir)
+			d := filepath.ToSlash(filepath.Dir(rel))
+			if !seen[d] {
+				seen[d] = true
+				pkgDirs = append(pkgDirs, d)
+			}
 		}
 	}
-	return nil
+	if len(pkgDirs) == 0 {
+		return nil
+	}
+	if len(pkgDirs) <= 3 {
+		if targeted, ok := tryGitTargetedGoReverseIndex(worktreeDir, pkgDirs); ok {
+			return targeted
+		}
+	}
+	return BuildGoReverseImportIndex(worktreeDir)
 }
 
 // BuildGoReverseImportIndex executes deterministic impact verification logic (@intent nomos_intent_traceability_spec.md).
