@@ -10,6 +10,7 @@ governance:
             - "substrate/membrane"
             - "substrate/cockpit-ui"
         prohibited_commands:
+            - "audit"
             - "code"
             - "cockpit"
             - "outreach"
