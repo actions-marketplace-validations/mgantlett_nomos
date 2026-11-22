@@ -17,10 +17,10 @@ const (
 	externalPluginGroupTitle = "External Plugins:"
 )
 
-// discoverPlugins scans the configured plugin binary root for executable shims starting
+// DiscoverPlugins scans the configured plugin binary root for executable shims starting
 // with "nomos-plugin-" and registers them as subcommands on the root CLI without shadowing
-// built-in substrate commands (Law 6).
-func DiscoverPlugins(rootCmd *cobra.Command) {
+// built-in substrate commands (Law 6) or registering repository prohibited_commands.
+func DiscoverPlugins(rootCmd *cobra.Command, prohibitedCommands []string) {
 	pluginsRoot := getPluginsRoot()
 	if pluginsRoot == "" {
 		return
@@ -31,12 +31,16 @@ func DiscoverPlugins(rootCmd *cobra.Command) {
 		return
 	}
 
+	blocked := toNormalizedSet(prohibitedCommands)
 	groupAdded := false
 	for _, entry := range entries {
 		if !isValidPlugin(pluginsRoot, entry) {
 			continue
 		}
 		pluginCmd := buildPluginCmd(pluginsRoot, entry.Name())
+		if blocked[strings.ToLower(pluginCmd.Use)] {
+			continue
+		}
 		// Law 6 (Canonical Singularity): Never shadow or duplicate native substrate commands.
 		if existing, _, fErr := rootCmd.Find([]string{pluginCmd.Use}); fErr == nil && existing != nil && existing != rootCmd {
 			continue
@@ -47,6 +51,16 @@ func DiscoverPlugins(rootCmd *cobra.Command) {
 		}
 		rootCmd.AddCommand(pluginCmd)
 	}
+}
+
+func toNormalizedSet(items []string) map[string]bool {
+	out := make(map[string]bool, len(items))
+	for _, raw := range items {
+		if trimmed := strings.ToLower(strings.TrimSpace(raw)); trimmed != "" {
+			out[trimmed] = true
+		}
+	}
+	return out
 }
 
 // getPluginsRoot returns NOMOS_PLUGINS_ROOT, GOBIN, or the first $(go env GOPATH)/bin directory.

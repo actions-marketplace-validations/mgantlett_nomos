@@ -92,7 +92,7 @@ func TestRootCmd_HelpOutput(t *testing.T) {
 	expectedGroups := []string{
 		"Workspace & Lifecycle Commands:",
 		"Quality & Invariant Verification Commands:",
-		"Agent Boot & Cognitive Memory Commands:",
+		"Cognitive Memory Commands:",
 		"Diagnostics & System Commands:",
 	}
 	for _, grp := range expectedGroups {
