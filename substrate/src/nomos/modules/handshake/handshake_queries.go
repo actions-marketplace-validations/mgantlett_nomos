@@ -53,7 +53,8 @@ func resolveActiveTaskContext(activeTask string) (string, []string) {
 		}
 	}()
 	if rec, tErr := store.GetTask(activeTask); tErr == nil && rec != nil {
-		hints := scopePathHintRe.FindAllString(rec.Title+"\n"+rec.Description, 8)
+		hints := append([]string{}, rec.ScopePaths...)
+		hints = append(hints, scopePathHintRe.FindAllString(rec.Title+"\n"+rec.Description, 8)...)
 		return rec.Title, hints
 	}
 	return "", nil

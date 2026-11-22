@@ -95,6 +95,9 @@ func finalizeSyncWithWalkthrough(key, walkthroughPath, rawWalkthrough string) er
 	if pErr := validateReceiptTraceParityContent(wtPath, rawWalkthrough, touchedFiles); pErr != nil {
 		return pErr
 	}
+	if oErr := verifyTaskBoundObligations(wtPath, t); oErr != nil {
+		return oErr
+	}
 	preMergeSHA, mErr := mergeTrunkWithMTPOGuard(mgr.RepoRoot, branch, key)
 	if mErr != nil {
 		return mErr

@@ -21,15 +21,57 @@ const (
 
 var (
 	htmlCommentRe = regexp.MustCompile(`<!--[\s\S]*?-->`)
-	checkboxRe    = regexp.MustCompile(`^[-*]\s*\[([ xX]?)\]\s*(.*)$`)
+	checkboxRe    = regexp.MustCompile(`^[-*]\s*\[([ xX]?)\s*\]\s*(.*)$`)
+	tcVectorIDRe  = regexp.MustCompile(`^TC-[A-Z0-9]+-[0-9]+$`)
 )
 
-// TaskCardInput models the fail-closed 3-section backlog card contract (#TaskCardInput).
+// TaskCardInput models the fail-closed Agent-to-Agent backlog card contract (#TaskCardInput).
 type TaskCardInput struct {
 	Scope              string   `json:"scope"`
+	ScopePaths         []string `json:"scope_paths,omitempty"`
+	Obligations        []string `json:"obligations,omitempty"`
 	AcceptanceCriteria []string `json:"acceptance_criteria"`
 	Verification       string   `json:"verification"`
 	Burden             int      `json:"burden,omitempty"`
+}
+
+// NormalizeScopePaths deduplicates and normalizes CSV or repeatable path globs.
+func NormalizeScopePaths(raw []string) []string {
+	seen := make(map[string]bool, len(raw))
+	var out []string
+	for _, item := range raw {
+		for _, part := range strings.Split(item, ",") {
+			clean := strings.TrimSpace(strings.ReplaceAll(part, "\\", "/"))
+			clean = strings.TrimPrefix(clean, "./")
+			if clean == "" || seen[clean] {
+				continue
+			}
+			seen[clean] = true
+			out = append(out, clean)
+		}
+	}
+	return out
+}
+
+// NormalizeObligations validates and deduplicates TC-* obligation identifiers.
+func NormalizeObligations(raw []string) ([]string, error) {
+	seen := make(map[string]bool, len(raw))
+	var out []string
+	for _, item := range raw {
+		for _, part := range strings.Split(item, ",") {
+			clean := strings.ToUpper(strings.TrimSpace(part))
+			if clean == "" || seen[clean] {
+				continue
+			}
+			if !tcVectorIDRe.MatchString(clean) {
+				return nil, types.NewNomosError(types.ErrCodeValidationFailed,
+					"invalid obligation %q: must match TC-<DOMAIN>-<NUM> (e.g. TC-TSK-18)", part)
+			}
+			seen[clean] = true
+			out = append(out, clean)
+		}
+	}
+	return out, nil
 }
 
 // TaskCardRemedy returns an actionable 3-line HATEOAS hint for backlog card failures.
@@ -73,9 +115,16 @@ func RenderTaskCardBody(in TaskCardInput) (string, error) {
 			"--verify must be at least %d characters", minVerificationRunes)
 	}
 
+	paths := NormalizeScopePaths(in.ScopePaths)
+	obligations, oErr := NormalizeObligations(in.Obligations)
+	if oErr != nil {
+		return "", oErr
+	}
+
 	var sb strings.Builder
 	sb.WriteString("## Scope & Context\n")
 	sb.WriteString(scope)
+	writeScopeMetadata(&sb, paths, obligations)
 	sb.WriteString("\n\n## Acceptance Criteria\n")
 	for _, it := range items {
 		sb.WriteString("- [ ] ")
@@ -94,6 +143,19 @@ func RenderTaskCardBody(in TaskCardInput) (string, error) {
 		return "", err
 	}
 	return rendered, nil
+}
+
+func writeScopeMetadata(sb *strings.Builder, paths, obligations []string) {
+	if len(paths) > 0 {
+		sb.WriteString("\n- **Paths**: `")
+		sb.WriteString(strings.Join(paths, "`, `"))
+		sb.WriteString("`")
+	}
+	if len(obligations) > 0 {
+		sb.WriteString("\n- **Obligations**: `")
+		sb.WriteString(strings.Join(obligations, "`, `"))
+		sb.WriteString("`")
+	}
 }
 
 func normalizeACItems(raw []string) ([]string, error) {
@@ -271,5 +333,22 @@ func DeriveTaskBurden(explicit int, body string) (int, error) {
 		score = 8
 	}
 	return score, nil
+}
+
+// ExtractCardIRFromBody extracts normalized acceptance criteria and verification command from a validated Markdown card.
+func ExtractCardIRFromBody(body string) ([]string, string) {
+	cleaned := strings.TrimSpace(htmlCommentRe.ReplaceAllString(body, ""))
+	sections := parseCardSections(cleaned)
+	var ac []string
+	for _, line := range sections["ac"] {
+		if m := checkboxRe.FindStringSubmatch(strings.TrimSpace(line)); m != nil {
+			if item := strings.TrimSpace(m[2]); item != "" {
+				ac = append(ac, item)
+			}
+		}
+	}
+	verify := strings.TrimSpace(strings.Join(sections["verify"], "\n"))
+	verify = strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(verify, "- "), "* "))
+	return ac, verify
 }
 

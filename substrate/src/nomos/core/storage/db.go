@@ -22,9 +22,13 @@ CREATE TABLE IF NOT EXISTS tasks (
     plane          TEXT NOT NULL CHECK(plane IN ('intent', 'substrate')),
     project        TEXT NOT NULL DEFAULT '',
     schema_type    TEXT NOT NULL DEFAULT 'substrate',
-    title          TEXT NOT NULL,
-    description    TEXT NOT NULL DEFAULT '',
-    status         TEXT NOT NULL DEFAULT 'BACKLOG',
+    title               TEXT NOT NULL,
+    description         TEXT NOT NULL DEFAULT '',
+    scope_paths         TEXT NOT NULL DEFAULT '[]',
+    obligations         TEXT NOT NULL DEFAULT '[]',
+    acceptance_criteria TEXT NOT NULL DEFAULT '[]',
+    verify_cmd          TEXT NOT NULL DEFAULT '',
+    status              TEXT NOT NULL DEFAULT 'BACKLOG',
     tier           TEXT NOT NULL DEFAULT 'T1',
     priority       INTEGER NOT NULL DEFAULT 50,
     created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
@@ -129,7 +133,7 @@ func pingAndInit(db *sql.DB) error {
 
 // currentSchemaUserVersion tracks the authoritative SQLite schema version in the page-1 header.
 // Increment whenever SchemaDDL or migrateLegacyColumns changes so OpenDB skips redundant DDL writes.
-const currentSchemaUserVersion = 3
+const currentSchemaUserVersion = 4
 
 // InitSchema executes idempotent table definitions, indexes, and runtime pragmas.
 func InitSchema(db *sql.DB) error {
@@ -182,6 +186,10 @@ func migrateLegacyColumns(db *sql.DB) error {
 		"ALTER TABLE tasks ADD COLUMN burden INTEGER NOT NULL DEFAULT 0;",
 		"ALTER TABLE tasks ADD COLUMN context_burden INTEGER NOT NULL DEFAULT 0;",
 		"ALTER TABLE tasks ADD COLUMN arch_layer INTEGER NOT NULL DEFAULT 0;",
+		"ALTER TABLE tasks ADD COLUMN scope_paths TEXT NOT NULL DEFAULT '[]';",
+		"ALTER TABLE tasks ADD COLUMN obligations TEXT NOT NULL DEFAULT '[]';",
+		"ALTER TABLE tasks ADD COLUMN acceptance_criteria TEXT NOT NULL DEFAULT '[]';",
+		"ALTER TABLE tasks ADD COLUMN verify_cmd TEXT NOT NULL DEFAULT '';",
 		"CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project);",
 		"DROP TABLE IF EXISTS journal;",
 		"DROP TABLE IF EXISTS telemetry_intent_activity;",
