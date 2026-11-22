@@ -116,48 +116,89 @@ const (
 
 // TaskRecord defines the formal specification for Living Ledger task records (#TaskRecord).
 type TaskRecord struct {
-	ID            int        `json:"id,omitempty"`
-	Key           string     `json:"key"`
-	Plane         string     `json:"plane"`
-	Project       string     `json:"project,omitempty"`
-	SchemaType    SchemaType `json:"schema_type"`
-	Title         string     `json:"title"`
-	Description   string     `json:"description,omitempty"`
-	Status        Status     `json:"status"`
-	Tier          Tier       `json:"tier"`
-	Priority      int        `json:"priority"`
-	CreatedAt     string     `json:"created_at"`
-	UpdatedAt     string     `json:"updated_at"`
-	CompletedAt   *string    `json:"completed_at,omitempty"`
-	Dependencies  []string   `json:"dependencies,omitempty"`
-	TwinKey       string     `json:"twin_key,omitempty"`
-	Assignee      string     `json:"assignee,omitempty"`
-	ArcID         string     `json:"arc_id,omitempty"`
-	IntentDelta   string     `json:"intent_delta,omitempty"`
-	Burden        int        `json:"burden,omitempty"`
-	ContextBurden int        `json:"context_burden,omitempty"`
-	ArchLayer     int        `json:"arch_layer,omitempty"`
+	ID                 int        `json:"id,omitempty"`
+	Key                string     `json:"key"`
+	Plane              string     `json:"plane"`
+	Project            string     `json:"project,omitempty"`
+	SchemaType         SchemaType `json:"schema_type"`
+	Title              string     `json:"title"`
+	Description        string     `json:"description,omitempty"`
+	ScopePaths         []string   `json:"scope_paths,omitempty"`
+	Obligations        []string   `json:"obligations,omitempty"`
+	AcceptanceCriteria []string   `json:"acceptance_criteria,omitempty"`
+	VerifyCmd          string     `json:"verify_cmd,omitempty"`
+	Status             Status     `json:"status"`
+	Tier               Tier       `json:"tier"`
+	Priority           int        `json:"priority"`
+	CreatedAt          string     `json:"created_at"`
+	UpdatedAt          string     `json:"updated_at"`
+	CompletedAt        *string    `json:"completed_at,omitempty"`
+	Dependencies       []string   `json:"dependencies,omitempty"`
+	TwinKey            string     `json:"twin_key,omitempty"`
+	Assignee           string     `json:"assignee,omitempty"`
+	ArcID              string     `json:"arc_id,omitempty"`
+	IntentDelta        string     `json:"intent_delta,omitempty"`
+	Burden             int        `json:"burden,omitempty"`
+	ContextBurden      int        `json:"context_burden,omitempty"`
+	ArchLayer          int        `json:"arch_layer,omitempty"`
 }
 
-// TaskCardInput models the fail-closed 3-section backlog card contract (#TaskCardInput).
+// TaskCardInput models the fail-closed Agent-to-Agent backlog card contract (#TaskCardInput).
 type TaskCardInput struct {
 	Scope              string   `json:"scope"`
+	ScopePaths         []string `json:"scope_paths,omitempty"`
+	Obligations        []string `json:"obligations,omitempty"`
 	AcceptanceCriteria []string `json:"acceptance_criteria"`
 	Verification       string   `json:"verification"`
 	Burden             int      `json:"burden,omitempty"`
 }
 
+// TaskBatchNode declares one node inside an atomic Agent-to-Agent DAG subgraph (#TaskBatchNode).
+type TaskBatchNode struct {
+	Ref                string   `json:"ref,omitempty"`
+	Key                string   `json:"key,omitempty"`
+	Plane              string   `json:"plane"`
+	Title              string   `json:"title"`
+	Scope              string   `json:"scope"`
+	ScopePaths         []string `json:"scope_paths,omitempty"`
+	Obligations        []string `json:"obligations,omitempty"`
+	AcceptanceCriteria []string `json:"acceptance_criteria"`
+	VerifyCmd          string   `json:"verify_cmd"`
+	DependsOn          []string `json:"depends_on,omitempty"`
+	TwinOf             string   `json:"twin_of,omitempty"`
+	Tier               string   `json:"tier,omitempty"`
+	Priority           int      `json:"priority,omitempty"`
+	Burden             int      `json:"burden,omitempty"`
+}
+
+// TaskBatchManifest encapsulates a multi-node DAG subgraph submitted via nomos task batch (#TaskBatchManifest).
+type TaskBatchManifest struct {
+	Project string          `json:"project,omitempty"`
+	Tasks   []TaskBatchNode `json:"tasks"`
+}
+
+// TaskBatchResult reports allocated canonical keys and resolved symbolic refs from nomos task batch (#TaskBatchResult).
+type TaskBatchResult struct {
+	Project      string            `json:"project"`
+	CreatedKeys  []string          `json:"created_keys"`
+	ResolvedRefs map[string]string `json:"resolved_refs,omitempty"`
+	Tasks        []TaskRecord      `json:"tasks"`
+}
+
 // WavefrontCandidate represents an unblocked DAG candidate task (#WavefrontCandidate).
 type WavefrontCandidate struct {
-	Key         string     `json:"key"`
-	Title       string     `json:"title"`
-	Plane       string     `json:"plane"`
-	Project     string     `json:"project,omitempty"`
-	SchemaType  SchemaType `json:"schema_type"`
-	Status      Status     `json:"status"`
-	Tier        Tier       `json:"tier"`
-	TwinKey     string     `json:"twin_key,omitempty"`
-	IsUnblocked bool       `json:"is_unblocked"`
+	Key            string     `json:"key"`
+	Title          string     `json:"title"`
+	Plane          string     `json:"plane"`
+	Project        string     `json:"project,omitempty"`
+	SchemaType     SchemaType `json:"schema_type"`
+	Status         Status     `json:"status"`
+	Tier           Tier       `json:"tier"`
+	TwinKey        string     `json:"twin_key,omitempty"`
+	ScopePaths     []string   `json:"scope_paths,omitempty"`
+	Obligations    []string   `json:"obligations,omitempty"`
+	OverlapsActive []string   `json:"overlaps_active,omitempty"`
+	IsUnblocked    bool       `json:"is_unblocked"`
 }
 
 // ReleaseHookTrace summarizes verified worktree tool and shell activity sealed at 2PC release (#ReleaseHookTrace).
@@ -266,13 +307,14 @@ type UpdateCheckCache struct {
 * **Syntax**: `nomos status [-A|--all-projects] [--json]`
 * **Semantics**: Emits a Lipgloss dashboard or JSON payload scoped to the active `project` (or all projects with `-A, --all-projects`). Reports phase, task card, worktree, token budget, DB status, `In Progress` vs `Pending` counts, and DAG wavefront candidates.
 
-### 4.2 `nomos task create`
-* **Syntax**: `nomos task create <TITLE> --plane <intent|substrate> (--scope <TEXT> --ac <ITEM>... --verify <TEXT> | -F|--file <PATH|-> | -d|--desc <MARKDOWN>) [--key <KEY>] [--project <PROJECT>] [--depends-on <KEY>...] [--burden <1-10>] [--tier <T1|T2>] [--priority <int>] [--twin-of <KEY>]`
-* **Semantics**: Validates the 3-section backlog card (`task.ValidateCardDescription` in `card.go`) via `--scope`/`--ac`/`--verify` or Markdown body. Auto-derives `burden` (`2-8`) when `--burden` is absent, stamps `project` from `nomos.yaml` or `--project`, and persists `INT-<N>` / `SUB-<N>` as `TODO`.
+### 4.2 `nomos task create` & `nomos task batch`
+* **Syntax**: `nomos task create <TITLE> --plane <intent|substrate> (--scope <TEXT> --ac <ITEM>... --verify <TEXT> | -F|--file <PATH|-> | -d|--desc <MARKDOWN>) [--paths <GLOB>...] [--obligations <TC-ID>...] [--key <KEY>] [--project <PROJECT>] [--depends-on <KEY>...] [--burden <1-10>] [--tier <T1|T2>] [--priority <int>] [--twin-of <KEY>] [--json]`
+* **Semantics**: Persists typed Agent-to-Agent IR fields (`scope_paths`, `obligations`, `acceptance_criteria`, `verify_cmd`) alongside the derived Markdown `description`. Auto-derives `burden` (`2-8`) when `--burden` is absent, stamps `project` from `nomos.yaml` or `--project`, and persists `INT-<N>` or `SUB-<N>` as `TODO`.
+* **Batch Subgraph Compiler**: `nomos task batch -F|--file <PATH|-> [--project <PROJECT>] [--json]` validates a `TaskBatchManifest` JSON subgraph and rejects DAG cycles. It resolves `$ref` keys across `depends_on` and `twin_of` and commits all nodes in one SQLite transaction.
 
 ### 4.3 `nomos task start`
-* **Syntax**: `nomos task start <KEY> [--edit] [--force-project]`
-* **Semantics**: Validates `<KEY>` and rejects foreign `project` tasks without `--force-project`. Verifies `main` trunk, creates `worktrees/<repo>-<KEY>` on `feature/<KEY>`, mints a CapBAC lease, and enters `PLAN` (or `EDIT` with `--edit`).
+* **Syntax**: `nomos task start <KEY> [--edit] [--force-project] [--json]`
+* **Semantics**: Validates `<KEY>` and rejects foreign `project` tasks without `--force-project`. Verifies `main` trunk, creates `worktrees/<repo>-<KEY>` on `feature/<KEY>`, mints a CapBAC lease, and enters `PLAN` (or `EDIT` with `--edit`). Emits a Turn-0 execution brief binding `scope_paths`, `obligations`, `verify_cmd`, and scoped `mneme.db` pitfalls.
 
 ### 4.4 `nomos task edit`
 * **Syntax**: `nomos task edit <KEY>`
@@ -300,11 +342,11 @@ type UpdateCheckCache struct {
 
 ### 4.10 `nomos task dag`
 * **Syntax**: `nomos task dag [-A|--all-projects] [--plane <intent|substrate>] [--tier <T1|T2>] [--project <PROJECT>] [--limit <N>] [--json]`
-* **Semantics**: Evaluates causal dependencies for the active `project` (or all projects with `-A, --all-projects`). Emits unblocked `WavefrontCandidate` records with plane, tier, project, and row-limit filters plus HATEOAS `Next Actions`.
+* **Semantics**: Evaluates causal dependencies for the active `project` (or all projects with `-A, --all-projects`). Emits unblocked `WavefrontCandidate` records including `scope_paths`, `obligations`, and `overlaps_active` MTPO collision flags against active `PLAN` or `EDIT` tasks.
 
 ### 4.11 `nomos task pair` / `chore` / `project` / `commit` / `show` & `nomos status`
-* **`nomos task pair <TITLE>`**: Atomically allocates twinned `INT-<N>` and `SUB-<N>` rows in `SQLiteTaskStore`, enforcing `#TaskCardInput` (`--scope` / `--int-scope` / `--sub-scope`, `--ac`, `--verify`, or `-F` / `-d`).
-* **`nomos task chore <TITLE>`**: Provisions a 1-step `SUB-<N>` (or `--plane intent` `INT-<N>`) task directly into an `EDIT` worktree (`burden: 1`) without card templates.
+* **`nomos task pair <TITLE>`**: Atomically allocates twinned `INT-<N>` and `SUB-<N>` rows in `SQLiteTaskStore`, enforcing `#TaskCardInput` (`--scope` / `--int-scope` / `--sub-scope`, `--paths`, `--obligations`, `--ac`, `--verify`, `--json`, or `-F` / `-d`).
+* **`nomos task chore <TITLE>`**: Provisions a 1-step `SUB-<N>` (or `--plane intent` `INT-<N>`) task directly into an `EDIT` worktree (`burden: 1`) with optional `--paths`, `--obligations`, and `--json`.
 * **`nomos task project <PROJECT> <KEY> [KEY...]`**: Updates `project` on one or more existing Living Ledger tasks through `SQLiteTaskStore` under the Database Encapsulation Invariant.
 * **`nomos task commit [KEY] (-m|--message <MSG>) [--rationale <TEXT>] [--mechanics <TEXT>] [-F|--file <PATH>]`**: Stages and commits worktree changes under `NOMOS_COMMIT_IN_PROGRESS=1` as a Golden Conventional Commit (`[<KEY>] <type>(<scope>): <summary>`) with rationale prose, `___` visual divider, and `Task:` / `Twin:` Git trailers.
 * **`nomos issue [TITLE] [--body <TEXT>] [--output <PATH>] [--clear] [--yes] [--web] [--json]`**: Collects scrubbed `IssueReport` diagnostics (`PRAGMA journal_mode`, `PRAGMA busy_timeout`, `PRAGMA wal_checkpoint`, `PRAGMA optimize` DB health) or clears cached anomalies.
@@ -373,6 +415,11 @@ type UpdateCheckCache struct {
 | `TC-TSK-15` | Law 4 (Multi-Repo Ledger Isolation) | `nomos task list` vs `nomos task list -A` | Scopes to active `project` unless `-A` passed; exit 0 |
 | `TC-TSK-16` | Law 7 (Cross-Project Start Guard) | `nomos task start SUB-99` (foreign `project`) | Rejects foreign task (`ERR_VALIDATION_FAILED`) without `--force-project`; exit 1 |
 | `TC-TSK-17` | Law 2 (Receipt-Trace Parity) | `nomos task sync SUB-99 -F walkthrough.md` (contradicts diff or hook trace) | Rejects walkthrough diff contradiction; degrades gracefully without hook trace |
+| `TC-TSK-18` | Law 4 (Structured IR Round-Trip) | `nomos task create "Title" --paths "substrate/cli/**" --obligations "TC-TSK-18" --scope "..." --ac "..." --verify "nomos verify" --json` | Persists typed IR fields and renders derived Markdown card |
+| `TC-TSK-19` | Law 6 & Law 7 (Atomic Subgraph Batch) | `nomos task batch -F - --json` with `$ref` edges vs cyclic `$ref` graph | Commits acyclic DAG subgraph atomically; rejects cycles (`ERR_VALIDATION_FAILED`) |
+| `TC-TSK-20` | Law 3 (Pre-Flight MTPO Overlap) | `nomos task dag --json` while active `EDIT` task shares `scope_paths` | Populates `overlaps_active` on colliding wavefront candidates |
+| `TC-TSK-21` | Law 1 (Turn-0 Handoff Brief) | `nomos task start SUB-99 --edit` on task with `scope_paths` and `obligations` | Emits Turn-0 execution brief with target paths and `TC-*` obligations |
+| `TC-TSK-22` | Law 2 & Law 7 (Hard Obligation Sync Gate) | `nomos task sync SUB-99 -m "..."` missing `@verifies` for task `obligations` | Rejects sync (`ERR_VALIDATION_FAILED`) naming unbound `TC-*` vector |
 | `TC-SYNC-020` | Law 2 (Pre-Verify Rebase & Receipt Cache) | `nomos task commit` -> `nomos task sync` | Rebases before verify; reuses clean tree+trunk receipts; invalidates on drift |
 | `TC-SYNC-021` | Law 5 & Law 7 (Walkthrough Airlock) | `nomos task sync` with `file://` home path or prohibited package literal | Scrubs workspace/home paths; rejects prohibited boundary literals before merge |
 | `TC-SYNC-022` | Law 4 & Law 7 (GoReleaser, Semver & Action Parity) | `nomos verify` on malformed `.goreleaser.yaml`, drifted `PKGBUILD` `pkgver`, or drifted root `action.yml` `go-version` | `ReleaseReceiptGate` rejects template syntax, semver pin, or Go toolchain pin drift |
@@ -436,7 +483,7 @@ type UpdateCheckCache struct {
 
 | Intent Lifecycle Contract | Compiled Go SSoT Path | Enforcing 7x3 Matrix Cell |
 | :--- | :--- | :--- |
-| Domain models & 2-plane key validation (`TaskRecord`) | `substrate/src/nomos/modules/task/task.go`, `card.go` | `Cell 6.3 (canonical_singularity)` |
+| Domain models, 2-plane key validation & batch IR (`TaskRecord`, `TaskBatchManifest`) | `substrate/src/nomos/modules/task/task.go`, `card.go`, `batch.go` | `Cell 6.3 (canonical_singularity)` |
 | Pure-Go SQLite ledger store (`SQLiteTaskStore`) | `substrate/src/nomos/modules/task/sqlite_store.go`, `project.go` | `Cell 1.2 (phase_discipline)`, `Cell 7.2 (unchecked_errors)` |
 | CapBAC task lease enforcement (`capbac.Lease`) | `substrate/src/nomos/core/capbac/lease.go` | `Cell 1.3 (capbac_lease)` |
 | Worktree lifecycle, 2PC sync & Git Notes receipts | `substrate/cli/cmd_task.go`, `substrate/cli/cmd_task_sync.go`, `substrate/src/nomos/modules/task/git_notes.go` | `Cell 3.2 (hermetic_worktree)`, `Cell 3.3 (release_receipt)` |
