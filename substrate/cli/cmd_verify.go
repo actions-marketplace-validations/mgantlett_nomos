@@ -17,6 +17,7 @@ import (
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/sensorsummary"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"github.com/spf13/cobra"
 )
@@ -196,6 +197,9 @@ func renderVerificationSummary(report *verify.PipelineReport) {
 	if report.Passed {
 		fmt.Printf("  %s\n", tui.UiSuccessStyle.Render(
 			fmt.Sprintf("✅ All Laws Enforced · %d/%d Gates Satisfied", report.GatesPassed, report.GatesTotal)))
+		if sLine := sensorsummary.FormatSensorSummaryLine(report.SensorSummary, report.UnindexedExtensions); sLine != "" {
+			fmt.Printf("  %s\n", tui.UiMutedStyle.Render("🔬 Sensor Coverage: "+sLine))
+		}
 	} else {
 		renderFailedGatesBlock(report)
 	}

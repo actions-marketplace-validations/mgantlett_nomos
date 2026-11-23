@@ -32,10 +32,18 @@ type SarifLog struct {
 	Runs    []SarifRun `json:"runs"`
 }
 
+// SarifProperties carries typed Nomos gate sensor execution and extension coverage metadata in SARIF property bags.
+type SarifProperties struct {
+	ExecutionScope      string         `json:"executionScope,omitempty"`
+	SensorSummary       map[string]int `json:"sensorSummary,omitempty"`
+	UnindexedExtensions []string       `json:"unindexedExtensions,omitempty"`
+}
+
 // SarifRun captures a single Nomos analysis run in SARIF format.
 type SarifRun struct {
-	Tool    SarifTool     `json:"tool"`
-	Results []SarifResult `json:"results"`
+	Tool       SarifTool        `json:"tool"`
+	Results    []SarifResult    `json:"results"`
+	Properties *SarifProperties `json:"properties,omitempty"`
 }
 
 // SarifTool identifies the analyzing tool driver inside a SARIF run.
@@ -57,14 +65,16 @@ type SarifRule struct {
 	Name             string           `json:"name,omitempty"`
 	ShortDescription SarifMessage     `json:"shortDescription"`
 	FullDescription  *SarifMessage    `json:"fullDescription,omitempty"`
+	Properties       *SarifProperties `json:"properties,omitempty"`
 }
 
 // SarifResult encodes a single finding emitted for GitHub Code Scanning ingestion.
 type SarifResult struct {
-	RuleID    string          `json:"ruleId"`
-	Level     string          `json:"level"`
-	Message   SarifMessage    `json:"message"`
-	Locations []SarifLocation `json:"locations,omitempty"`
+	RuleID     string           `json:"ruleId"`
+	Level      string           `json:"level"`
+	Message    SarifMessage     `json:"message"`
+	Locations  []SarifLocation  `json:"locations,omitempty"`
+	Properties *SarifProperties `json:"properties,omitempty"`
 }
 
 // SarifMessage wraps human-readable text inside a SARIF object.
@@ -155,7 +165,14 @@ func FromVerifyReport(rep *verify.PipelineReport, version string) *SarifLog {
 			}
 		}
 	}
-	return buildSarifLog(version, rules, results)
+	log := buildSarifLog(version, rules, results)
+	if rep != nil && (len(rep.SensorSummary) > 0 || len(rep.UnindexedExtensions) > 0) && len(log.Runs) > 0 {
+		log.Runs[0].Properties = &SarifProperties{
+			SensorSummary:       rep.SensorSummary,
+			UnindexedExtensions: rep.UnindexedExtensions,
+		}
+	}
+	return log
 }
 
 // MarshalIndent serializes a SarifLog as canonical formatted JSON.
@@ -190,6 +207,9 @@ func buildGateRule(ruleID string, res *vscope.GateResult) SarifRule {
 	if strings.TrimSpace(res.Remedy) != "" {
 		rule.FullDescription = &SarifMessage{Text: res.Remedy}
 	}
+	if strings.TrimSpace(res.ExecutionScope) != "" {
+		rule.Properties = &SarifProperties{ExecutionScope: res.ExecutionScope}
+	}
 	return rule
 }
 
@@ -198,12 +218,16 @@ func buildVerifyResult(ruleID string, res *vscope.GateResult) SarifResult {
 	if strings.TrimSpace(res.Remedy) != "" {
 		msg = fmt.Sprintf("%s (remedy: %s)", res.Message, res.Remedy)
 	}
-	return SarifResult{
+	out := SarifResult{
 		RuleID:    ruleID,
 		Level:     "error",
 		Message:   SarifMessage{Text: msg},
 		Locations: extractSarifLocations(res.Message),
 	}
+	if strings.TrimSpace(res.ExecutionScope) != "" {
+		out.Properties = &SarifProperties{ExecutionScope: res.ExecutionScope}
+	}
+	return out
 }
 
 func deriveGateRuleID(res *vscope.GateResult) string {

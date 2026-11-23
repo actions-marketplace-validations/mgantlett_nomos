@@ -218,6 +218,10 @@ func recordReleaseReceipt(repoRoot, wtPath, key, rawWalkthrough, now string, rep
 		WalkthroughContent: walkthroughContent,
 		SHA256Receipt:      receipt,
 	}
+	if report != nil {
+		payload.SensorSummary = report.SensorSummary
+		payload.UnindexedExtensions = report.UnindexedExtensions
+	}
 
 	if noteErr := task.RecordReleaseNote(repoRoot, "", payload); noteErr != nil {
 		fmt.Printf("⚠️  %s %v\n", tui.UiWarnStyle.Render("Warning: failed recording git note release receipt:"), noteErr)

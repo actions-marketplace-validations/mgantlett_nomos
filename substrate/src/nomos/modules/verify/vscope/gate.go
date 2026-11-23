@@ -21,6 +21,7 @@ type GateResult struct {
 	ProbeID        string `json:"probe_id,omitempty"`
 	Law            int    `json:"law,omitempty"`
 	Ring           string `json:"ring,omitempty"`
+	ExecutionScope string `json:"execution_scope,omitempty"`
 	Passed         bool   `json:"passed"`
 	Skipped        bool   `json:"skipped,omitempty"`
 	Message        string `json:"message"`

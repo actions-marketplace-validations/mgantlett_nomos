@@ -29,17 +29,19 @@ type ReleaseHookTrace struct {
 
 // ReleaseNotePayload encapsulates the non-repudiation release receipt in Git Notes (#ReleaseNotePayload).
 type ReleaseNotePayload struct {
-	TaskKey            string            `json:"task_key"`
-	CommitSHA          string            `json:"commit_sha"`
-	Timestamp          string            `json:"timestamp"`
-	Phase              string            `json:"phase"`
-	DoDGatesPassed     int               `json:"dod_gates_passed"`
-	CapBACTokenID      string            `json:"capbac_token_id"`
-	SessionID          string            `json:"session_id,omitempty"`
-	HookTrace          *ReleaseHookTrace `json:"hook_trace,omitempty"`
-	SpecDigests        map[string]string `json:"spec_digests,omitempty"`
-	WalkthroughContent string            `json:"walkthrough_content"`
-	SHA256Receipt      string            `json:"sha256_receipt"`
+	TaskKey             string            `json:"task_key"`
+	CommitSHA           string            `json:"commit_sha"`
+	Timestamp           string            `json:"timestamp"`
+	Phase               string            `json:"phase"`
+	DoDGatesPassed      int               `json:"dod_gates_passed"`
+	SensorSummary       map[string]int    `json:"sensor_summary,omitempty"`
+	UnindexedExtensions []string          `json:"unindexed_extensions,omitempty"`
+	CapBACTokenID       string            `json:"capbac_token_id"`
+	SessionID           string            `json:"session_id,omitempty"`
+	HookTrace           *ReleaseHookTrace `json:"hook_trace,omitempty"`
+	SpecDigests         map[string]string `json:"spec_digests,omitempty"`
+	WalkthroughContent  string            `json:"walkthrough_content"`
+	SHA256Receipt       string            `json:"sha256_receipt"`
 }
 
 // ValidateReleaseNote asserts that a ReleaseNotePayload satisfies structural invariants.

@@ -7,6 +7,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -17,9 +18,13 @@ const (
 )
 
 var (
-	cdPrefixRe        = regexp.MustCompile(`(?i)^\s*cd\s+\S+\s*&&\s*`)
-	metadataOnlyCmdRe = regexp.MustCompile(`(?i)^\s*(?:cd\s+\S+\s*&&\s*)?(?:\S+/)?(?:nomos|git\s+(?:status|diff|log|commit|branch|rev-parse|notes))\b`)
-	shellArgSplitRe   = regexp.MustCompile(`[\s"'` + "`" + `=;|&()<>]+`)
+	cdPrefixRe           = regexp.MustCompile(`(?i)^\s*cd\s+\S+\s*&&\s*`)
+	metadataOnlyCmdRe    = regexp.MustCompile(`(?i)^\s*(?:cd\s+\S+\s*&&\s*)?(?:\S+/)?(?:nomos\s+(?:handshake|status|verify|version|task|mem|directive|capabilities)|git\s+(?:status|diff|log|commit|branch|rev-parse|notes))\b`)
+	gitArbitraryFileRe   = regexp.MustCompile(`(?i)\s(?:--no-index|--ext-diff|--textconv)\b`)
+	commitMsgLiteralRe   = regexp.MustCompile(`(?:\s(?:-m|--message)(?:\s+|=)(?:"(?:\\.|[^"])*"|'(?:[^']*)'|\S+))`)
+	ansiCSingleQuotedRe  = regexp.MustCompile(`\$'((?:\\.|[^'])*)'`)
+	ansiCHexOctalTokenRe = regexp.MustCompile(`\\x([0-9a-fA-F]{2})|\\([0-7]{3})`)
+	shellArgSplitRe      = regexp.MustCompile(`[\s"'` + "`" + `=;|&()<>{},]+`)
 )
 
 // CredentialReadPolicy defines declarative PreToolUse host and workspace credential read restrictions.
@@ -235,7 +240,8 @@ func appendCommandReadCandidates(out []string, rawCmd string) []string {
 	if cmd == "" || isStandaloneMetadataOnlyCmd(cmd) {
 		return out
 	}
-	for _, tok := range shellArgSplitRe.Split(cmd, -1) {
+	expanded := expandANSICLiterals(cmd)
+	for _, tok := range shellArgSplitRe.Split(expanded, -1) {
 		if tok != "" && !strings.HasPrefix(tok, "-") {
 			out = append(out, tok)
 		}
@@ -243,11 +249,45 @@ func appendCommandReadCandidates(out []string, rawCmd string) []string {
 	return out
 }
 
+func expandANSICLiterals(cmd string) string {
+	if !strings.Contains(cmd, "$'") {
+		return cmd
+	}
+	return ansiCSingleQuotedRe.ReplaceAllStringFunc(cmd, func(m string) string {
+		inner := m[2 : len(m)-1]
+		return ansiCHexOctalTokenRe.ReplaceAllStringFunc(inner, decodeANSICEscape)
+	})
+}
+
+func decodeANSICEscape(seq string) string {
+	if strings.HasPrefix(seq, `\x`) && len(seq) == 4 {
+		if v, err := strconv.ParseUint(seq[2:], 16, 8); err == nil {
+			return string(byte(v))
+		}
+	}
+	if strings.HasPrefix(seq, `\`) && len(seq) == 4 {
+		if v, err := strconv.ParseUint(seq[1:], 8, 8); err == nil {
+			return string(byte(v))
+		}
+	}
+	return seq
+}
+
 func isStandaloneMetadataOnlyCmd(cmd string) bool {
-	if !metadataOnlyCmdRe.MatchString(cmd) {
+	if !metadataOnlyCmdRe.MatchString(cmd) || gitArbitraryFileRe.MatchString(cmd) {
 		return false
 	}
-	return !HasUnquotedShellChainingOrSub(stripLeadingCdPrefix(cmd))
+	core := stripLeadingCdPrefix(cmd)
+	if HasUnquotedShellChainingOrSub(core) {
+		return false
+	}
+	scrubbed := commitMsgLiteralRe.ReplaceAllString(core, " ")
+	for _, tok := range shellArgSplitRe.Split(scrubbed, -1) {
+		if tok != "" && !strings.HasPrefix(tok, "-") && IsHostCredentialStorePath(tok) {
+			return false
+		}
+	}
+	return true
 }
 
 func stripLeadingCdPrefix(cmd string) string {
