@@ -8,20 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [v4.31.0] - 2026-11-23
 
-> Add untyped DTO boundary read and phantom wire-key AST sensors to X-Ray and Law 4 verify; Add 8 skimmable Architectural Engine breakdowns to `CAPABILITIES.md`; Align two-tier root help, prohibited plugin discovery, and README CLI parity; Enrich all 42 GateResults and CellReports (Apache 2.0)
+> Catch silent JSON `snake_case` wire drift and untyped DTO escapes across Go, TypeScript, and Python; expose Page 0 capability discovery across stdio MCP, npm, PyPI, and `llms.txt` (Apache 2.0)
+
+### Agent Upgrade & New Surfaces
+- **Upgrade**: `npx -y @mgantlett/nomos@latest update --sync-workspace` (or `uvx --refresh nomos-cli xray . --json`).
+- **Active Surfaces**: `nomos verify`, `nomos xray`, `nomos mcp` (`nomos://capabilities/catalog`), `CAPABILITIES.md`.
 
 ### CLI, Distribution & Hooks (`nomos cli`, `README.md`)
-- **Align two-tier root help, prohibited plugin discovery, and README CLI parity (`INT-2242`, `SUB-3483`)**: Default nomos --help renders Cognitive Memory Commands without Agent Boot header or prohibited external plugins.
+- **Align two-tier root help, plugin boundary checks, and README CLI parity (`INT-2242`, `SUB-3483`)**: Default `nomos --help` renders Core Lifecycle and Cognitive Memory commands cleanly with full `README.md` flag parity.
 
-### Verification & Quality Gates (`nomos verify`)
-- **Enrich all 42 GateResults and CellReports (`SUB-3509`)**: Enriched all 42 PipelineReport GateResults and 21 CellReports with canonical ProbeID, Law, and Ring metadata and documented SUB-3493 sensors in `CAPABILITIES.md`.
-- **Scope Law 4 wire-boundary gate to modified worktree files in brownfield repos (`SUB-3495`)**: Scope Law 4 wire-boundary gate to modified worktree files in brownfield repos.
-- **Add untyped DTO boundary read and phantom wire-key AST sensors to X-Ray and Law 4 verify (`INT-2248`, `SUB-3493`)**: XrayReport and XrayHotspot track `untyped_boundary_reads` and `phantom_wire_keys` with JSON Schema parity.
+### Verification & Quality Gates (`nomos verify`, `nomos xray`)
+- **Catch untyped DTO boundary reads and phantom wire keys in X-Ray and Law 4 verify (`INT-2248`, `SUB-3493`)**: `XrayReport` and `XrayHotspot` surface `untyped_boundary_reads` (`Record<string, any|unknown>`, `dict[str, Any]`, `map[string]any`) and `phantom_wire_keys` (unmatched `snake_case` consumer reads) with JSON Schema parity.
+- **Scope Law 4 wire-boundary gate to modified worktree files in brownfield repos (`SUB-3495`)**: Diff-scoped ratcheting prevents legacy brownfield files outside the active diff from blocking unrelated PRs.
+- **Emit canonical `probe_id`, `law`, and `ring` metadata across all 42 `GateResults` and 21 `CellReports` (`SUB-3509`)**: Enables deterministic coding-agent self-repair directly from `nomos verify --json` output.
 
-### Release & Packaging (`README.md`)
-- **Add 8 skimmable Architectural Engine breakdowns to `CAPABILITIES.md` (`SUB-3505`)**: Added all 8 Architectural Engine breakdowns with Purpose, Mechanics, Formulas, Connections, and bijective TOC anchors to `CAPABILITIES.md`.
-- **Wire Page 0 capabilities across npm README, PyPI README, `SKILL.md`, and local MCP (`SUB-3502`)**: Wired Page 0 capabilities map and nomos://capabilities/catalog alias across npm README, PyPI README, `SKILL.md`, and local stdio MCP.
-- **Publish canonical `CAPABILITIES.md` reference and link from `README.md` and llms.txt (`SUB-3499`)**: Published canonical Page 0 `CAPABILITIES.md` SSoT and expanded `README.md` drawers and llms.txt.
+### Release & Packaging (`CAPABILITIES.md`, `nomos mcp`, `llms.txt`)
+- **Publish Page 0 `CAPABILITIES.md` with 8 skimmable Architectural Engine breakdowns (`SUB-3499`, `SUB-3505`)**: Documents Purpose, Mechanics, Formulas, Connections, and bijective TOC anchors across `CAPABILITIES.md`, `README.md`, and `llms.txt`.
+- **Expose `nomos://capabilities/catalog` across stdio MCP, npm, PyPI, and `SKILL.md` (`SUB-3502`)**: Coding agents discover all 42 AST sensor probes and CLI surfaces in a single MCP resource read.
 
 ---
 

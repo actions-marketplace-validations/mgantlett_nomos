@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # render-release-notes.sh - Compile hybrid GitHub Release notes from CHANGELOG.md and Git DAG history.
 #
-# Leads with the 1-line release summary (`> ...`) and the SHA-linked `[INT-*]` / `[SUB-*]` commit
-# ledger (`## Changelog`) grouped by the 6 canonical Open-Core areas, followed by collapsible
-# `<details>` disclosures for curated `CHANGELOG.md` architecture notes and automatic parent
+# Leads with the 1-line release summary (`> ...`) and the open `CHANGELOG.md` Agent Upgrade Brief,
+# followed by collapsible `<details>` disclosures for the SHA-linked `[INT-*]` / `[SUB-*]` 2PC
+# commit ledger (`## Changelog`) grouped by the 6 canonical Open-Core areas and automatic parent
 # `vX.Y.0` milestone rollups on patch releases.
 
 set -euo pipefail
@@ -193,18 +193,18 @@ if [ -n "$TAGLINE" ]; then
   emit_block "$TAGLINE"
 fi
 
+if [ -n "$DETAIL_BODY" ]; then
+  emit_block "$DETAIL_BODY"
+fi
+
 if [ -n "$COMMIT_LEDGER" ]; then
   GROUPED_LEDGER="$(printf '%s\n' "$COMMIT_LEDGER" | group_commit_ledger)"
   LEDGER_SECTION="$(printf '## Changelog\n\n%s' "$GROUPED_LEDGER")"
   if [ -n "$PREV_TAG" ]; then
     LEDGER_SECTION="$(printf '%s\n\n**Full Changelog**: https://github.com/%s/compare/%s...%s' "$LEDGER_SECTION" "$REPO_SLUG" "$PREV_TAG" "$TAG")"
   fi
-  emit_block "$LEDGER_SECTION"
-fi
-
-if [ -n "$DETAIL_BODY" ]; then
-  DETAILS_BLOCK="$(printf '<details>\n<summary><strong>Release Notes &amp; Architecture Details</strong></summary>\n\n%s\n\n</details>' "$DETAIL_BODY")"
-  emit_block "$DETAILS_BLOCK"
+  LEDGER_DETAILS="$(printf '<details>\n<summary><strong>Verified 2PC Commit Ledger</strong></summary>\n\n%s\n\n</details>' "$LEDGER_SECTION")"
+  emit_block "$LEDGER_DETAILS"
 fi
 
 if printf '%s\n' "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[1-9][0-9]*$'; then
