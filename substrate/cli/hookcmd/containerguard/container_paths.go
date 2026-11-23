@@ -15,7 +15,10 @@ import (
 	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 )
 
-const maxInspectedBinaryBytes = 2 * 1024 * 1024
+const (
+	maxInspectedBinaryBytes        = 2 * 1024 * 1024
+	externalSideEffectRemedySuffix = " Do NOT copy, wrap, or retry this blocked external side-effect; complete only the core workspace code."
+)
 
 type workspaceEscapeLink struct {
 	LinkPath   string
@@ -53,6 +56,7 @@ func evaluateContainerProtectedPathsGuard(p *shellguard.HookPayload, baseCwd str
 	}
 	roots := normalizeProtectedRoots(pol.ProtectedPaths, baseCwd)
 	symlinks := collectWorkspaceEscapingSymlinks(baseCwd, roots)
+	roots = appendEscapedSymlinkParentRoots(roots, symlinks)
 	if len(roots) == 0 && len(symlinks) == 0 {
 		return shellguard.AllowDecision()
 	}
@@ -61,13 +65,24 @@ func evaluateContainerProtectedPathsGuard(p *shellguard.HookPayload, baseCwd str
 	}
 	if !shellguard.IsReadOnlyTool(p.ToolName) && p.WrittenContent != "" {
 		if hit := matchProtectedReference(p.WrittenContent, roots, symlinks); hit != "" {
-			return shellguard.DenyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Path Boundary Violation (Law 3): Script payload references restricted path or alias '%s'.", hit))
+			return shellguard.DenyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Path Boundary Violation (Law 3): Script payload references restricted path or alias '%s'."+externalSideEffectRemedySuffix, hit))
 		}
 	}
 	if p.CommandLine != "" {
 		return checkShellCommandAgainstProtectedRoots(p.CommandLine, baseCwd, roots, symlinks)
 	}
 	return shellguard.AllowDecision()
+}
+
+func appendEscapedSymlinkParentRoots(roots []string, symlinks []workspaceEscapeLink) []string {
+	out := roots
+	for _, link := range symlinks {
+		dir := strings.TrimRight(filepath.ToSlash(filepath.Dir(filepath.FromSlash(link.RealTarget))), "/")
+		if dir != "" && dir != "/" && !isUnderAnyRoot(dir, out) {
+			out = append(out, dir)
+		}
+	}
+	return out
 }
 
 func checkTargetsAgainstProtectedRoots(p *shellguard.HookPayload, baseCwd string, roots []string, symlinks []workspaceEscapeLink) shellguard.HookDecision {
@@ -98,17 +113,38 @@ func matchWorkspaceEscapeLink(normPath string, symlinks []workspaceEscapeLink) (
 
 func checkShellCommandAgainstProtectedRoots(cmdLine, baseCwd string, roots []string, symlinks []workspaceEscapeLink) shellguard.HookDecision {
 	if hit := matchProtectedReference(cmdLine, roots, symlinks); hit != "" {
-		return shellguard.DenyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Path Boundary Violation (Law 3): Shell command references protected path or escaping alias '%s'.", hit))
+		return shellguard.DenyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Path Boundary Violation (Law 3): Shell command references protected path or escaping alias '%s'."+externalSideEffectRemedySuffix, hit))
 	}
 	for _, inv := range shellguard.ExtractAllContainerCommandInvocations(cmdLine) {
 		if hit := checkInvocationArgsProtected(inv, baseCwd, roots); hit != "" {
-			return shellguard.DenyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Path Boundary Violation (Law 3): Command argument resolves to protected path '%s'.", hit))
+			return shellguard.DenyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Path Boundary Violation (Law 3): Command argument resolves to protected path '%s'."+externalSideEffectRemedySuffix, hit))
 		}
-		if hit := checkNonStandardExeStaticEscape(inv.RawExe, baseCwd, roots, symlinks); hit != "" {
-			return shellguard.DenyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Capability Alias Violation (Law 3): Executable '%s' statically accesses protected target or alias '%s'.", inv.Exe, hit))
+		if exeTok, hit := findInvocationStaticBinaryEscape(inv, baseCwd, roots, symlinks); hit != "" {
+			return shellguard.DenyDecision(fmt.Sprintf("❌ [NOMOS INTERCEPT] Capability Alias Violation (Law 3): Executable '%s' statically accesses protected target or alias '%s'."+externalSideEffectRemedySuffix, exeTok, hit))
 		}
 	}
 	return shellguard.AllowDecision()
+}
+
+func findInvocationStaticBinaryEscape(inv shellguard.ShellCommandInvocation, baseCwd string, roots []string, symlinks []workspaceEscapeLink) (string, string) {
+	candidates := append([]string{inv.RawExe}, splitBinaryCandidateTokens(inv.Raw)...)
+	seen := make(map[string]bool, len(candidates))
+	for _, tok := range candidates {
+		if tok == "" || strings.HasPrefix(tok, "-") || seen[tok] {
+			continue
+		}
+		seen[tok] = true
+		if hit := checkNonStandardExeStaticEscape(tok, baseCwd, roots, symlinks); hit != "" {
+			return filepath.Base(tok), hit
+		}
+	}
+	return "", ""
+}
+
+func splitBinaryCandidateTokens(raw string) []string {
+	return strings.FieldsFunc(raw, func(r rune) bool {
+		return strings.ContainsRune(" \t\r\n\"'`,()[]{};|&<>=", r)
+	})
 }
 
 func checkInvocationArgsProtected(inv shellguard.ShellCommandInvocation, baseCwd string, roots []string) string {

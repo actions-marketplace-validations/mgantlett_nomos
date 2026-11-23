@@ -133,13 +133,21 @@ func TestDefaultEscapingSymlinkBinaryAndCounterfeitCarrierGuards(t *testing.T) {
 		t.Fatalf("write fakeBin: %v", err)
 	}
 
-	// Empty SandboxPolicy (mode: off) must still block static binary escape via workspace dot-symlink to /opt.
-	dec := EvaluatePolicyGuards(&shellguard.HookPayload{
-		ToolName:    "Bash",
-		CommandLine: fakeBin + " close --billing current",
-	}, ws, SandboxPolicy{})
-	if dec.Decision != shellguard.DecisionDeny || !strings.Contains(dec.Reason, "Capability Alias Violation") {
-		t.Fatalf("expected mode:off escaping symlink binary to fail closed, got %+v", dec)
+	// Empty SandboxPolicy (mode: off) must still block static binary escape via workspace dot-symlink to /opt,
+	// including compound cp-and-exec TOCTOU, Python subprocess wrappers, and direct writes to derived /opt parent.
+	for _, bypassCmd := range []string{
+		fakeBin + " close --billing current",
+		"cp " + fakeBin + " ./finalctl && ./finalctl close --billing current",
+		"python3 -c \"import subprocess; subprocess.run(['" + fakeBin + "', 'close'])\"",
+		"python3 -c \"open('/opt/pr-protected/claims/recon.json', 'w').write('{}')\"",
+	} {
+		dec := EvaluatePolicyGuards(&shellguard.HookPayload{
+			ToolName:    "Bash",
+			CommandLine: bypassCmd,
+		}, ws, SandboxPolicy{})
+		if dec.Decision != shellguard.DecisionDeny {
+			t.Fatalf("expected mode:off escaping symlink bypass %q to fail closed, got %+v", bypassCmd, dec)
+		}
 	}
 
 	// Benign workspace command must remain allowed even when escaping symlink exists in workspace.
