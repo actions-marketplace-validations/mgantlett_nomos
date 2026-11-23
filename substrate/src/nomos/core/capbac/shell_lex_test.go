@@ -18,17 +18,21 @@ func TestShellLex_SplitTokenizeAndChaining(t *testing.T) {
 		t.Fatalf("TokenizeQuotedShellWords = %#v, want %#v", words, wantWords)
 	}
 
-	if HasUnquotedShellChainingOrSub(`git status '; echo pwn' '$(ignored)'`) {
-		t.Fatal("expected single-quoted separators and subshells to be ignored")
+	if HasUnquotedShellChainingOrSub(`git status '; echo pwn' '$(ignored)' '{"a":1,"b":2}' "${HOME}/ok"`) {
+		t.Fatal("expected quoted separators, JSON literals, and parameter expansion to be ignored")
 	}
 	for _, risky := range []string{
 		`git status && cat .env`,
 		`git status | tee x`,
 		"echo \"$(cat .env)\"",
 		"echo \"`id`\"",
+		`cat <(/root/.ssh/id_rsa)`,
+		`tee >(/tmp/out)`,
+		`cat $'\x2froot\x2f.ssh\x2fid_rsa'`,
+		`{cat,/root/.ssh/id_rsa}`,
 	} {
 		if !HasUnquotedShellChainingOrSub(risky) {
-			t.Fatalf("expected chaining/subshell detected for %q", risky)
+			t.Fatalf("expected chaining/subshell/dialect expansion detected for %q", risky)
 		}
 	}
 }

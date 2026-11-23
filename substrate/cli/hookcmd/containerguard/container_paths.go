@@ -37,12 +37,25 @@ var standardContainerTools = map[string]bool{
 	"mkdir": true, "rm": true, "mv": true, "cp": true, "diff": true,
 }
 
+var (
+	defaultExternalMutableStateRoots = []string{
+		"/opt", "/var", "/srv", "/etc", "/root",
+	}
+	benignToolchainRootPrefixes = []string{
+		"/opt/nomos", "/opt/launch", "/opt/conda", "/opt/python",
+		"/opt/venv", "/opt/pipx", "/opt/homebrew", "/opt/hostedtoolcache",
+	}
+)
+
 func evaluateContainerProtectedPathsGuard(p *shellguard.HookPayload, baseCwd string, pol SandboxPolicy) shellguard.HookDecision {
-	if len(pol.ProtectedPaths) == 0 || p == nil {
+	if p == nil {
 		return shellguard.AllowDecision()
 	}
 	roots := normalizeProtectedRoots(pol.ProtectedPaths, baseCwd)
 	symlinks := collectWorkspaceEscapingSymlinks(baseCwd, roots)
+	if len(roots) == 0 && len(symlinks) == 0 {
+		return shellguard.AllowDecision()
+	}
 	if dec := checkTargetsAgainstProtectedRoots(p, baseCwd, roots, symlinks); dec.Decision == shellguard.DecisionDeny {
 		return dec
 	}
@@ -116,6 +129,7 @@ func collectWorkspaceEscapingSymlinks(baseCwd string, roots []string) []workspac
 	if baseCwd == "" {
 		return nil
 	}
+	cleanBase := strings.TrimRight(ResolveRealPathDeep(baseCwd, baseCwd), "/")
 	var out []workspaceEscapeLink
 	visited := 0
 	if wErr := filepath.WalkDir(baseCwd, func(path string, d fs.DirEntry, err error) error {
@@ -126,14 +140,14 @@ func collectWorkspaceEscapingSymlinks(baseCwd string, roots []string) []workspac
 		if visited > 600 {
 			return fs.SkipAll
 		}
-		if d.IsDir() && path != baseCwd && (d.Name() == ".git" || d.Name() == "node_modules") {
+		if d.IsDir() && path != baseCwd && isSkippedWorkspaceWalkDir(d.Name()) {
 			return filepath.SkipDir
 		}
 		if d.Type()&os.ModeSymlink == 0 {
 			return nil
 		}
 		target := ResolveRealPathDeep(path, baseCwd)
-		if isUnderAnyRoot(target, roots) {
+		if isEscapingProtectedOrStateSymlink(target, cleanBase, roots) {
 			out = append(out, workspaceEscapeLink{
 				LinkPath:   filepath.ToSlash(filepath.Clean(path)),
 				LinkBase:   filepath.Base(path),
@@ -145,6 +159,23 @@ func collectWorkspaceEscapingSymlinks(baseCwd string, roots []string) []workspac
 		return out
 	}
 	return out
+}
+
+func isSkippedWorkspaceWalkDir(name string) bool {
+	return name == ".git" || name == "node_modules" || name == ".venv" || name == "venv" || name == "__pycache__"
+}
+
+func isEscapingProtectedOrStateSymlink(target, cleanBase string, roots []string) bool {
+	if isUnderAnyRoot(target, roots) {
+		return true
+	}
+	if cleanBase != "" && (target == cleanBase || strings.HasPrefix(target, cleanBase+"/")) {
+		return false
+	}
+	if isUnderAnyRoot(target, benignToolchainRootPrefixes) {
+		return false
+	}
+	return isUnderAnyRoot(target, defaultExternalMutableStateRoots)
 }
 
 func checkNonStandardExeStaticEscape(exe, baseCwd string, roots []string, symlinks []workspaceEscapeLink) string {
@@ -224,17 +255,26 @@ func normalizeProtectedRoots(raw []string, baseCwd string) []string {
 	return out
 }
 
-// ResolveRealPathDeep resolves ancestor symlinks even when trailing path components do not exist yet.
+// ResolveRealPathDeep resolves symlinks (including dangling leaf symlinks to not-yet-created files)
+// even when trailing path components do not exist yet.
 func ResolveRealPathDeep(raw, baseCwd string) string {
+	return resolveRealPathBounded(raw, baseCwd, 8)
+}
+
+func resolveRealPathBounded(raw, baseCwd string, depth int) string {
 	norm := shellguard.NormalizeCanonicalPath(raw, baseCwd)
+	if depth <= 0 {
+		return norm
+	}
 	cur := filepath.FromSlash(norm)
 	suffix := make([]string, 0, 4)
 	for {
 		if real, err := filepath.EvalSymlinks(cur); err == nil {
-			for i := len(suffix) - 1; i >= 0; i-- {
-				real = filepath.Join(real, suffix[i])
-			}
-			return filepath.ToSlash(filepath.Clean(real))
+			return joinCleanSlashSuffix(real, suffix)
+		}
+		if linkDest, ok := readDanglingSymlinkTarget(cur); ok {
+			resolvedDest := resolveRealPathBounded(linkDest, filepath.ToSlash(filepath.Dir(cur)), depth-1)
+			return joinCleanSlashSuffix(filepath.FromSlash(resolvedDest), suffix)
 		}
 		parent := filepath.Dir(cur)
 		if parent == cur {
@@ -243,6 +283,26 @@ func ResolveRealPathDeep(raw, baseCwd string) string {
 		suffix = append(suffix, filepath.Base(cur))
 		cur = parent
 	}
+}
+
+func readDanglingSymlinkTarget(path string) (string, bool) {
+	fi, err := os.Lstat(path)
+	if err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		return "", false
+	}
+	dest, rErr := os.Readlink(path)
+	if rErr != nil || dest == "" {
+		return "", false
+	}
+	return filepath.ToSlash(dest), true
+}
+
+func joinCleanSlashSuffix(base string, revSuffix []string) string {
+	cur := base
+	for i := len(revSuffix) - 1; i >= 0; i-- {
+		cur = filepath.Join(cur, revSuffix[i])
+	}
+	return filepath.ToSlash(filepath.Clean(cur))
 }
 
 func isUnderAnyRoot(realPath string, roots []string) bool {

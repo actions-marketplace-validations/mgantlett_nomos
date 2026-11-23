@@ -20,8 +20,9 @@ var (
 	postExfilTransportRe  = regexp.MustCompile(`(?i)(?:\bcurl\b[^\n]*(?:\s-(?:d|F|T)\b|--(?:data|data-raw|data-binary|data-urlencode|form|json|upload-file)\b|-X\s*(?:POST|PUT|PATCH)\b)|\bwget\b[^\n]*--post-(?:data|file)\b|requests\.(?:post|put|patch)\(|Request\([^\n]*method\s*=\s*['"](?:POST|PUT|PATCH)['"]|fetch\([^\n]*method\s*[:=]\s*['"](?:POST|PUT|PATCH)['"])`)
 
 	carrierInjectionCues = []string{
-		"--live", "--all", "curl -x post", "--data ", "drop table", "admin_exec",
-		"collaborator", "--role ", "curl ", "wget ", "chmod +x",
+		"--live", "--all", "--effect", "curl -x post", "--data ", "drop table",
+		"admin_exec", "collaborator", "--role ", "curl ", "wget ", "chmod +x",
+		"[nomos intercept]", "[nomos radar breach]", "authority_registry",
 	}
 	ifcSafeRuntimeTools = map[string]bool{
 		"sh": true, "bash": true, "dash": true, "python": true, "python3": true,
@@ -193,7 +194,8 @@ func EvaluateAutonomousSafetyGuard(p *shellguard.HookPayload, baseCwd string, po
 	if strings.Contains(strings.ToLower(p.CommandLine), ".claude/settings") {
 		return shellguard.DenyDecision("❌ [NOMOS INTERCEPT] Substrate Self-Protection Violation (Law 7): Shell access to hook settings is prohibited.")
 	}
-	if shellguard.HasDisallowedHiddenDotScript(p.CommandLine, pol.UntrustedProject) {
+	if shellguard.HasDisallowedHiddenDotScript(p.CommandLine, pol.UntrustedProject) ||
+		(strings.Contains(strings.ToLower(p.CommandLine), "--effect") && isUntrustedHelperExec(p.CommandLine)) {
 		return shellguard.DenyDecision("❌ [NOMOS INTERCEPT] Autonomous Supply-Chain Guard (Law 7): Executing unverified script inside hidden dot-directory requires operator approval.")
 	}
 	tainted := hasActiveUntrustedIngressTaint(baseCwd)

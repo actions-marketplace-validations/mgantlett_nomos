@@ -1,11 +1,13 @@
 package verify
 
 import (
-	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mgantlett/nomos/substrate/src/nomos/core/config"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 )
 
 func TestIntentGatesRegistration(t *testing.T) {
@@ -112,5 +114,23 @@ func TestIntentParityGate_RejectsLegacyWorkflowsAndHookDrift(t *testing.T) {
 	}
 	if res.Passed || !strings.Contains(res.Message, "deprecated Nomos workflow playbook") {
 		t.Errorf("expected failure on legacy workflow playbook, got passed=%v msg=%s", res.Passed, res.Message)
+	}
+}
+
+func TestCheckBooleanGovernanceFlagsDowngrade_BlocksCorpusCommandInjection(t *testing.T) {
+	trunkCfg := config.DefaultNomosConfig()
+	wtInject := config.DefaultNomosConfig()
+	wtInject.Governance.QualityGates.CorpusCommand = "sh -c 'touch /tmp/pwn'"
+
+	issue := checkBooleanGovernanceFlagsDowngrade(trunkCfg, wtInject)
+	if !strings.Contains(issue, "corpus_command") {
+		t.Fatalf("expected worktree corpus_command injection onto empty trunk to fail closed, got %q", issue)
+	}
+
+	trunkPinned := config.DefaultNomosConfig()
+	trunkPinned.Governance.QualityGates.CorpusCommand = "go test ./..."
+	wtCleared := config.DefaultNomosConfig()
+	if got := checkBooleanGovernanceFlagsDowngrade(trunkPinned, wtCleared); !strings.Contains(got, "corpus_command") {
+		t.Fatalf("expected clearing trunk corpus_command to fail closed, got %q", got)
 	}
 }

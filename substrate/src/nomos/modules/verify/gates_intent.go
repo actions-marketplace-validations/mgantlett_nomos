@@ -307,8 +307,8 @@ func checkBooleanGovernanceFlagsDowngrade(trunkCfg, wtCfg *config.EcosystemConfi
 	if trunkCfg.Governance.Boundary.EffectiveIsolationMode() == config.IsolationModeWorktree && wtCfg.Governance.Boundary.EffectiveIsolationMode() != config.IsolationModeWorktree {
 		return "worktree nomos.yaml illegally downgrades governance.boundary.isolation_mode from trunk baseline (worktree -> branch)"
 	}
-	if strings.TrimSpace(trunkCfg.Governance.QualityGates.CorpusCommand) != "" && strings.TrimSpace(wtCfg.Governance.QualityGates.CorpusCommand) != strings.TrimSpace(trunkCfg.Governance.QualityGates.CorpusCommand) {
-		return "worktree nomos.yaml illegally modifies or clears governance.quality_gates.corpus_command from trunk baseline"
+	if strings.TrimSpace(wtCfg.Governance.QualityGates.CorpusCommand) != strings.TrimSpace(trunkCfg.Governance.QualityGates.CorpusCommand) {
+		return "worktree nomos.yaml illegally modifies, injects, or clears governance.quality_gates.corpus_command from trunk baseline"
 	}
 	return ""
 }

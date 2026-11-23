@@ -151,3 +151,40 @@ func TestCredentialReadAirlock_TaintOnlyCompatibility(t *testing.T) {
 	}
 }
 
+func TestCredentialReadAirlock_DifferentialNearMissAndOrdinaryWork(t *testing.T) {
+	ws := t.TempDir()
+	policy := capbac.CredentialReadPolicy{}
+
+	nearMissBlocked := []string{
+		"git diff --no-index /dev/null ~/.aws/credentials",
+		"git -c core.fsmonitor='cat ~/.ssh/id_rsa' status",
+		`cat $'\x2froot\x2f.ssh\x2fid_rsa'`,
+		"{cat,/root/.ssh/id_rsa}",
+		"cat <(/root/.ssh/id_rsa)",
+		"git log -- ~/.ssh/id_ed25519",
+	}
+	for _, cmd := range nearMissBlocked {
+		dec := capbac.EvaluateCredentialReadAirlock(ws, capbac.ToolFlowInvocation{
+			ToolName:    "Bash",
+			CommandLine: cmd,
+		}, nil, policy)
+		if dec.Allowed {
+			t.Fatalf("expected shell near-miss %q to be denied by CredentialReadAirlock", cmd)
+		}
+	}
+
+	ordinaryWorkAllowed := []capbac.ToolFlowInvocation{
+		{ToolName: "Bash", CommandLine: `sqlite3 /app/staging.sqlite3 "SELECT count(*) FROM contacts"`},
+		{ToolName: "Bash", CommandLine: "dbx refresh-cache"},
+		{ToolName: "Bash", CommandLine: "git diff HEAD~1 -- src/service.go"},
+		{ToolName: "Bash", CommandLine: `nomos task commit SUB-99 -m "docs: explain ~/.aws airlock"`},
+		{ToolName: "Read", TargetFile: filepath.Join(ws, "packages", "web", ".env.example")},
+	}
+	for _, inv := range ordinaryWorkAllowed {
+		dec := capbac.EvaluateCredentialReadAirlock(ws, inv, nil, policy)
+		if !dec.Allowed {
+			t.Fatalf("expected ordinary work %+v to pass unimpeded, got %+v", inv, dec)
+		}
+	}
+}
+
