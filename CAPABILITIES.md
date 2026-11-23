@@ -68,20 +68,93 @@ flowchart TD
 
 ---
 
-## 2. Index of the 8 Layer 2 Domain Specifications
+## 2. The 8 Architectural Engines & Layer 2 Domain Specifications
 
-Every compiled package in `substrate/` maps 1-to-1 onto one of the **8 Canonical Layer 2 Domain Specifications**:
+Every compiled package in `substrate/` maps 1-to-1 onto one of the **8 Architectural Engines** (`nomos capabilities --type engine`) and its canonical Layer 2 Domain Specification:
 
-| Domain # | Specification | Substrate Packages | Core Responsibility & Connections |
+| # | Architectural Engine (Jump Link) | Layer 2 Domain Specification | Primary `substrate/` Packages |
 | :---: | :--- | :--- | :--- |
-| **01** | [`go_ssot_and_json_schema_spec.md`](intent/architecture/specs/go_ssot_and_json_schema_spec.md) | `core/config`, `core/types` | Compiles `EcosystemConfig` as the single Go SSoT, synthesizes Draft 2020-12 [`nomos.schema.json`](nomos.schema.json), and formats HATEOAS `NomosError` fix recipes. |
-| **02** | [`nomos_hermetic_worktree_spec.md`](intent/architecture/specs/nomos_hermetic_worktree_spec.md) | `core/workspace`, `core/capbac`, `cli/hookcmd` | Governs Branch Guard (`feat/*`), isolated `worktrees/<repo>-<KEY>` sandboxes, `SafeGitCommand`, `CapBACLease` step budgets, `CapabilityFlowGraph` IFC taint tracking, and PreToolUse/Stop guards. |
-| **03** | [`task_lifecycle_cli_spec.md`](intent/architecture/specs/task_lifecycle_cli_spec.md) | `modules/task`, `core/storage`, `cli/*` | Implements the pure-Go SQLite WAL Living Ledger (`IDLE -> PLAN -> EDIT -> REVIEW -> SYNC -> LEARN`), `$ref` JSON batch DAGs, atomic 2PC trunk fast-forwards, Git Notes receipts, `nomos mcp`, `nomos issue`, and `nomos update`. |
-| **04** | [`nomos_intent_traceability_spec.md`](intent/architecture/specs/nomos_intent_traceability_spec.md) | `modules/verify/*`, `intentlint`, `wiredrift`, `prproof` | Enforces the `7x3=21` Invariant Cell / `42`-gate DoD matrix, `@intent` & `@verifies TC-*` 11-language obligation bindings, bijective struct parity, `architecture_boundaries`, `--mutate-diff`, and `PRProofReceipt` sealing. |
-| **05** | [`tree_sitter_ast_gate_spec.md`](intent/architecture/specs/tree_sitter_ast_gate_spec.md) | `modules/verify/treesitter`, `xray`, `ratchet` | Runs zero-CGO 11-language AST analysis (Go, TS/JS, Svelte, Python, Rust, Ruby, C/C++, Kotlin, plus pure-Go `wazero` WASM for Java and C#), `nomos xray` scoring, Type-2 clone hashing, and `nomos.baseline.json` ratcheting. |
-| **06** | [`mneme_memory_spec.md`](intent/architecture/specs/mneme_memory_spec.md) | `modules/mem` | Provides pure-Go SQLite episodic memory (`mneme.db`) with 64-dim SHA-256 subword feature hashing, Ebbinghaus decay, receipt-gated `pitfall`/`pattern` distillation, `ConsolidateConventionAxioms`, and `HotScopeReflex`. |
-| **07** | [`nomos_controlled_technical_english_spec.md`](intent/architecture/specs/nomos_controlled_technical_english_spec.md) | `modules/ncte`, `modules/handshake` | Enforces `NCTE-100` unambiguous prose rules (`IntentSteelmanGate`, `nomos directive --lint`), the 36-term canonical action lexicon, and 16 embedded phase-routed JIT playbooks (`nomos handshake`). |
-| **08** | [`software_physics_engine_spec.md`](intent/architecture/specs/software_physics_engine_spec.md) | `cli`, `modules/mtpo`, `modules/session`, `modules/telemetry` | Computes AST File Mass $M(f)$, Shannon/Rabin-Karp viscosity $\mu(f)$, Continuous Collision Detection (`GREEN`/`YELLOW`/`RED`), `MTPO` serializability, `SentinelScorecard` PRM scoring, and RLVR/DPO/SFT `nomos session export`. |
+| **01** | [Compiled Go SSoT and JSON Schema Engine](#engine-01-compiled-go-ssot-and-json-schema-engine) | [`go_ssot_and_json_schema_spec.md`](intent/architecture/specs/go_ssot_and_json_schema_spec.md) | `core/config`, `core/types` |
+| **02** | [Hermetic Worktree and CapBAC Security Engine](#engine-02-hermetic-worktree-and-capbac-security-engine) | [`nomos_hermetic_worktree_spec.md`](intent/architecture/specs/nomos_hermetic_worktree_spec.md) | `core/workspace`, `core/capbac`, `cli/hookcmd` |
+| **03** | [SQLite Persistence and Task Lifecycle Engine](#engine-03-sqlite-persistence-and-task-lifecycle-engine) | [`task_lifecycle_cli_spec.md`](intent/architecture/specs/task_lifecycle_cli_spec.md) | `core/storage`, `modules/task`, `cli/taskui` |
+| **04** | [DoD 7x3 Gate Matrix and Obligation Compiler](#engine-04-dod-7x3-gate-matrix-and-obligation-compiler) | [`nomos_intent_traceability_spec.md`](intent/architecture/specs/nomos_intent_traceability_spec.md) | `modules/verify`, `intentlint`, `wiredrift`, `prproof` |
+| **05** | [Polyglot Tree-sitter WASM AST and X-Ray Engine](#engine-05-polyglot-tree-sitter-wasm-ast-and-x-ray-engine) | [`tree_sitter_ast_gate_spec.md`](intent/architecture/specs/tree_sitter_ast_gate_spec.md) | `modules/verify/treesitter`, `xray`, `ratchet` |
+| **06** | [Nomos Mneme Receipt-Gated Memory Engine](#engine-06-nomos-mneme-receipt-gated-memory-engine) | [`mneme_memory_spec.md`](intent/architecture/specs/mneme_memory_spec.md) | `modules/mem` |
+| **07** | [NCTE-100 Controlled English and JIT Handshake](#engine-07-ncte-100-controlled-english-and-jit-handshake) | [`nomos_controlled_technical_english_spec.md`](intent/architecture/specs/nomos_controlled_technical_english_spec.md) | `modules/ncte`, `modules/handshake` |
+| **08** | [Software Physics and Sentinel PRM Engine](#engine-08-software-physics-and-sentinel-prm-engine) | [`software_physics_engine_spec.md`](intent/architecture/specs/software_physics_engine_spec.md) | `cli`, `modules/mtpo`, `modules/session`, `modules/telemetry` |
+
+### Engine 01: Compiled Go SSoT and JSON Schema Engine
+- **Spec Charter & Code Roots:** [`go_ssot_and_json_schema_spec.md`](intent/architecture/specs/go_ssot_and_json_schema_spec.md) · `substrate/src/nomos/core/config`, `substrate/src/nomos/core/types`, [`nomos.schema.json`](nomos.schema.json)
+- **Purpose:** Eliminates YAML/JSON configuration drift (Law 4) by compiling `config.EcosystemConfig` as the single Go struct SSoT and synthesizing Draft 2020-12 [`nomos.schema.json`](nomos.schema.json) via Go reflection (`additionalProperties: false`).
+- **Key Mechanics:**
+  - **Progressive Isolation & Ratchet Profiles:** Governs `isolation_mode` (`"branch"` default vs `"worktree"`), `strict_mode` (`true` greenfield vs `false` brownfield), and `ratchet_mode` (`"standard"` hotspot burndown vs `"upstream"` surgical external OSS PR mode).
+  - **10 Statutory Thresholds (`ThresholdsConfig`):** `max_file_loc: 400`, `max_func_loc: 60`, `max_cyclomatic_complexity: 15` (`10` Python/Ruby), `max_cognitive_debt_score: 45`, `max_func_params: 8`, `max_package_files: 40`, `min_clone_lines: 18`, `max_magic_string_duplication: 10`, `min_comment_density_pct: 10`, `min_test_coverage_pct: 55`.
+  - **HATEOAS Error Envelopes:** Formats every CLI and gate failure through `types.NomosError` + `ActionAffordance` so agents receive deterministic `file:line` fix recipes instead of raw stack traces.
+- **Subsystem Connections:** Feeds numeric budgets into **Engine 05** (`treesitter`/`ratchet`), boundary/egress rules into **Engine 02** (`capbac`), contract roots into **Engine 04** (`wiredrift`/`intentlint`), and anti-tampering locks into `ConfigImmutabilityGate` & `ThresholdIntegrityGate`.
+
+### Engine 02: Hermetic Worktree and CapBAC Security Engine
+- **Spec Charter & Code Roots:** [`nomos_hermetic_worktree_spec.md`](intent/architecture/specs/nomos_hermetic_worktree_spec.md) · `substrate/src/nomos/core/workspace`, `substrate/src/nomos/core/capbac`, `substrate/cli/hookcmd`
+- **Purpose:** Enforces physical `main` branch immutability (Law 3), step-budgeted capability leases (`CapBACLease`), and `~4ms` real-time tool/shell/MCP interception across Claude Code, Cursor, OpenCode, Gemini CLI, and Antigravity.
+- **Key Mechanics:**
+  - **Branch Guard vs. Hermetic Worktrees:** Default Branch Guard (`isolation_mode: "branch"`) blocks direct `main` edits and rubric tampering while verifying normal `feat/*` commits; Worktree mode (`--worktrees`) locks root `main` (`LockTrunk` / `UnlockTrunk`), confines edits to `worktrees/<repo>-<KEY>` (`<= 500` step `CapBACLease`), and routes all Git subprocesses through sanitized `workspace.SafeGitCommand`.
+  - **Compositional Information Flow Control (`CapabilityFlowGraph`):** Tracks session-level `TaintEdge` provenance across tool calls (`ToolFlowInvocation` -> `FlowDecision`) to block multi-step indirect prompt-injection exfiltration (`0.00%` ASR on `AgentDojo v1.2.2`).
+  - **Credential, Egress, Container & MCP Airlocks:** Blocks host credential reads (`~/.ssh`, `~/.aws`, `~/.kube`, `~/.gnupg`, `~/.config/gcloud`, `.netrc`, `.npmrc`, `.pypirc`), enforces `egress_mode` (`standard` metadata SSRF block, `allowlist`, `offline`), pins MCP server catalogs (`allowed_mcp_servers`, `mcp_catalog_pin`), blocks container benchmark snooping (`--container-sandbox`: `/tests`, `/verifier`, `/grading`, `/oracle`, `/proc/1/environ`), and halts 3-strike identical-failure loops (`--loop-strikes`).
+- **Subsystem Connections:** Consumes boundary policies from **Engine 01**, triggers `PostToolUse` fast-radar in **Engine 05** + **Engine 06** (`HotScopeReflex`), and seals `ReleaseHookTrace` into **Engine 03** at `2PC` sync.
+
+### Engine 03: SQLite Persistence and Task Lifecycle Engine
+- **Spec Charter & Code Roots:** [`task_lifecycle_cli_spec.md`](intent/architecture/specs/task_lifecycle_cli_spec.md) · `substrate/src/nomos/core/storage`, `substrate/src/nomos/modules/task`, `substrate/cli/taskui`
+- **Purpose:** Governs the pure-Go SQLite WAL Living Ledger (`modernc.org/sqlite`), 3-section task contracts, causal `INT-*`/`SUB-*` DAG wavefronts, and atomic Two-Phase Commit (`2PC`) trunk releases.
+- **Key Mechanics:**
+  - **Procedural 6-Phase State Machine:** Locks workspace mutability across `IDLE -> PLAN -> EDIT -> REVIEW -> SYNC -> LEARN` with canonical key singularity (`^(INT|SUB)-[0-9]+`).
+  - **1-Turn Chore & Symbolic `$ref` Batch Compiler:** `nomos task chore` provisions an `EDIT` sandbox in one turn; `nomos task batch` compiles multi-node `TaskBatchManifest` JSON subgraphs (`$ref`, `twin_of`) in a single atomic SQLite transaction with cycle rejection.
+  - **Atomic 2PC Sync & Non-Repudiation Receipts:** `nomos task sync` runs `42/42` gates + `MTPO` serializability, fast-forwards `main`, stamps `ReleaseNotePayload` (`SHA256Receipt`, `HookTrace`, `SpecDigests`) into `refs/notes/nomos/releases`, prunes the worktree, and runs bounded WAL/lease maintenance (`RuntimeMaintainReport`).
+- **Subsystem Connections:** Mints leases in **Engine 02**, allocates `MTPO` sequence numbers in **Engine 08**, triggers `42`-gate verification in **Engine 04**, and mints verified `pitfall`/`pattern` memories into **Engine 06**.
+
+### Engine 04: DoD 7x3 Gate Matrix and Obligation Compiler
+- **Spec Charter & Code Roots:** [`nomos_intent_traceability_spec.md`](intent/architecture/specs/nomos_intent_traceability_spec.md) · `substrate/src/nomos/modules/verify`, `intentlint`, `wiredrift`, `polygate`, `polyrun`, `prproof`, `impact`, `sarif`
+- **Purpose:** Evaluates `42` deterministic sensor probes in a bounded 6-goroutine pool (`~361ms` diff verify on `3.60M` LOC), structured as **7 Laws x 3 Defense Rings (`syntactic`, `dynamic`, `cryptographic`) = 21 Invariant Cells**.
+- **Key Mechanics:**
+  - **Architectural Obligation Proofs & 3-Pillar Wire-Drift:** Enforces `@intent` AST anchors, `@verifies TC-*` 11-language test bindings, bijective spec-to-AST struct parity (`strict_types`), SHA-256 `SpecDigests` taint checks, `<5ms` directional `architecture_boundaries`, frontend-backend DTO drift & `ui_anti_mask` (`contracts.membrane`), and `.env.example` / multi-seat port checks (`contracts.infra`).
+  - **Zero-Token Diff Micro-Mutation Oracle (`--mutate-diff`) & PR Receipts (`--pr`):** Mutates newly added conditionals/operators/returns across Go, TS/JS, and Python in ephemeral shadow copies to reject tautological tests, sealing `PRProofReceipt` + OASIS SARIF 2.1.0 (`--sarif`).
+  - **1-Hop Blast Radius & 3-Vector Mathematical Self-Proof:** `nomos verify --impact` maps reverse-dependency callers and paired tests; `nomos verify proof` attests `100%` mutant kill sensitivity, `0%` false-positive rate, and AST non-vacuity across all 42 `Evaluate()` methods.
+- **Subsystem Connections:** Invoked by Git `pre-commit`/`pre-push` hooks, `nomos task review | sync` (**Engine 03**), `action.yml` CI gates, and `nomos_verify_impact` in `nomos mcp`.
+
+### Engine 05: Polyglot Tree-sitter WASM AST and X-Ray Engine
+- **Spec Charter & Code Roots:** [`tree_sitter_ast_gate_spec.md`](intent/architecture/specs/tree_sitter_ast_gate_spec.md) · `substrate/src/nomos/modules/verify/treesitter`, `xray`, `ratchet`, `astdebt`
+- **Purpose:** Delivers zero-CGO (`CGO_ENABLED=0`) structural AST scanning, anti-shim return-path verification, Type-2 clone detection, and Day-0 brownfield ratcheting across **11 languages** (Go, TS/JS, Svelte, Python, Rust, Ruby, C/C++, Kotlin, plus linear-memory `wazero` WASM grammars for Java and C#).
+- **Key Mechanics & Formulas:**
+  - **Cyclomatic Complexity & Cognitive Debt Score (`CDS`):**
+    $$M(F) = 1 + \sum_{b \in F} \mathbb{I}(b \in \text{Branches}), \quad CDS(S) = \sum_{i=1}^k \left(\max(0, M(F_i)-10)\cdot 2.0 + \max(0, \text{LOC}(F_i)-30)\cdot 0.5\right) + \max(0, 100-\text{Density})\cdot 0.2$$
+  - **Zero-Write Brownfield Stethoscope (`nomos xray`):** Scans `git ls-files` in `~1.5s-4.3s` to compute the `0-100` `AI Hangover Score` (`Grade A-F`), clones, monoliths, hollow stubs, skipped tests, CWE sinks, and `InferCleanArchitectureBoundaries` rules.
+  - **Monotonic Day-0 Baseline Ratchet (`nomos.baseline.json`):** Freezes legacy file metrics on `nomos init` so untouched legacy files never fail while modified files enforce $\Delta\text{CDS} \le 0$, $\Delta V(G) \le 0$, $0$ new clones/swallowed errors, and non-decreasing coverage.
+- **Subsystem Connections:** Powers `nomos xray`, `nomos init --baseline`, `~15-24ms` `EvaluateFastFileRadar` (`PostToolUse`), **Engine 04** AST gates, `PRDebtDelta` in `--pr`, and `nomos_xray` in MCP.
+
+### Engine 06: Nomos Mneme Receipt-Gated Memory Engine
+- **Spec Charter & Code Roots:** [`mneme_memory_spec.md`](intent/architecture/specs/mneme_memory_spec.md) · `substrate/src/nomos/modules/mem`
+- **Purpose:** Prevents repeated agent mistakes across sessions without context bloat or unverified memory poisoning by gating statutory `trap -> fix` lessons behind `42/42` verified commits in pure-Go SQLite (`mneme.db`).
+- **Key Mechanics & Formulas:**
+  - **Statutory Write-Provenance Firewall:** Restricts manual CLI `nomos mem save` to advisory kinds (`reflection`, `axiom`, `decision`), while statutory kinds (`pitfall`, `pattern`, `release`, `task`, `commit`, `review`) are minted exclusively by verified `2PC` sync or `post-commit` hooks.
+  - **Zero-CGO 64-Dim Subword Hashing & Hybrid Recall (`<50ms`):** Projects `camelCase`/`snake_case`/path tokens and character 4-grams via domain-separated SHA-256 into unit vectors (with optional `LOCAL_EMBEDDING_URL` neural vectors), ranked by:
+    $$\text{Score} = (0.75 \cdot \text{CosineSimilarity} + 0.25 \cdot \text{LexicalOverlap}) \cdot e^{-\lambda \cdot \text{age}_{\text{days}}} \cdot \text{Reinforcement} \cdot \text{LocalityBoost}$$
+  - **Closed-Loop `HotScopeReflex` & Autonomic Hygiene:** When a directory reaches $\ge 3$ AST pitfalls (`access_count < 5`), `ResolveHotScopeReflex` tightens `PostToolUse` radar warnings in that scope from `80%` to `65%` and enables inline arity/error/anti-shim micro-probes until `5` clean recalls cool it back to `80%`. `ConsolidateConventionAxioms` promotes recurring multi-scope traps into repo-wide `axiom:<gate>` records, while `SweepRepoPitfallHygiene` (`os.Stat`) tombstones deleted scopes.
+- **Subsystem Connections:** Receives buffered `GateTrapEntry` records from **Engine 04** and verified receipts from **Engine 03**; injects scoped recalls into **Engine 07** (`handshake`), **Engine 02** (`PostToolUse`), **Engine 08** (`session export`), and `nomos_mem_recall` MCP.
+
+### Engine 07: NCTE-100 Controlled English and JIT Handshake
+- **Spec Charter & Code Roots:** [`nomos_controlled_technical_english_spec.md`](intent/architecture/specs/nomos_controlled_technical_english_spec.md) · `substrate/src/nomos/modules/ncte`, `substrate/src/nomos/modules/handshake`
+- **Purpose:** Compiles unambiguous English specifications (`SPEC-NCTE-100`) to eliminate specification hallucination and injects phase-routed Just-In-Time (`JIT`) playbooks (`16` embedded directives) on session boot.
+- **Key Mechanics:**
+  - **5 Deterministic Linguistic Rules (`ncte.Engine`):** Enforces descriptive sentences $\le 25$ words, procedural sentences $\le 20$ words, paragraphs $\le 6$ sentences, non-exempt table cells $\le 12$ words, active imperative voice (zero passive voice), zero ambiguous modals (`should`, `would`, `could`, `might`, `ideally`, `as needed`, `and/or`), atomic single-action steps, and the `36`-term canonical lexicon (`nomos directive --lexicon | --term | --lint`).
+  - **JIT Session Handshake (`nomos handshake`):** Self-heals `.git/info/exclude` & defense hooks, validates `CapBACLease` tokens, and injects active worktrees, ready DAG wavefront, top 2 repo `axiom`s, 3 `pitfall`s, 3 `pattern`s, and HATEOAS `Next Actions`.
+- **Subsystem Connections:** Audited during `nomos verify` via `IntentSteelmanGate` (`cell_4_1`), invoked automatically on `SessionStart` (**Engine 02**), and exposed over MCP via `nomos_handshake` and `nomos://directives`.
+
+### Engine 08: Software Physics and Sentinel PRM Engine
+- **Spec Charter & Code Roots:** [`software_physics_engine_spec.md`](intent/architecture/specs/software_physics_engine_spec.md) · `substrate/cli/physics.go`, `substrate/src/nomos/modules/mtpo`, `substrate/src/nomos/modules/session`, `substrate/src/nomos/modules/telemetry`
+- **Purpose:** Prevents semantic merge collisions across concurrent agent worktrees (`nomos physics` + `mtpo`) and grades agent process integrity for observability and RLVR/DPO/SFT dataset synthesis (`nomos session` + `SentinelScorecard`).
+- **Key Mechanics & Formulas:**
+  - **AST Kinematics & Viscosity (`nomos physics`):** Computes File Mass $M(f) = 0.1\cdot\text{LOC} + 2.0\cdot v(G) + 0.05\cdot|\text{AST}| + 1.5\cdot(\text{FanIn}+\text{FanOut})$, Shannon token entropy $H(f)$, and 10-token Rabin-Karp rolling-hash viscosity $\mu(f)$.
+  - **Continuous Collision Detection (`CCD`) & `MTPO` Serializability:** Sweeps `WorktreeHull` exported/imported symbol sets (`GREEN` disjoint, `YELLOW` file overlap, `RED` API symbol clash), allocates monotonic `Seq` numbers (`AllocateSequence`), emits `<25ms` write-time `[Nomos MTPO Advisory]` alerts, and blocks stale fast-forwards in `VerifySyncSerializability` when an earlier trajectory mutated a read symbol.
+  - **Multi-Provider Session Inspection & Sentinel PRM (`nomos session`):** Discovers sessions across AGY, Claude Code, OpenCode, Cursor, and Gemini CLI; infers 7-stage causal trajectories (`BOOT -> RELEASE`); measures `DeliberationMetrics` (thinking bytes, read streaks, deliberation-to-mutation ratio); scores process compliance via `SentinelScorecard` (`0-100`); and joins trajectories + `SHA256Receipt` + Mneme `PitfallsFixed`/`PatternsMinted` into **RLVR / DPO / SFT JSONL datasets** (`nomos session export`).
+- **Subsystem Connections:** Gates concurrent merges in **Engine 03** (`nomos task sync`), tracks `CapabilityMetrics` invocation counts in `nomos capabilities`, and joins **Engine 03** receipts with **Engine 06** learnings during `session export`.
 
 ---
 
@@ -195,24 +268,12 @@ Every `nomos verify` run evaluates **42 deterministic sensor probes** organized 
 
 ---
 
-## 6. Autonomic Physics, `HotScopeReflex`, `MTPO` & MCP Endpoints
-
-### 6.1 Closed-Loop Mneme Math & Adaptive `HotScopeReflex`
-- **Hybrid Recall Score (`nomos mem recall`):**
-  $$\text{Score} = (0.75 \cdot \text{CosineSimilarity} + 0.25 \cdot \text{LexicalOverlap}) \cdot e^{-\lambda \cdot \text{age}_{\text{days}}} \cdot \text{Reinforcement} \cdot \text{LocalityBoost}$$
-  Uses deterministic 64-dim domain-separated SHA-256 subword + character 4-gram unit vectors (`CGO_ENABLED=0`) with optional `LOCAL_EMBEDDING_URL` (`127.0.0.1:8081/v1/embeddings`) neural vectors, $1.25\times$ repository locality boost, and `ConsolidateConventionAxioms` multi-scope promotion.
-- **Adaptive `HotScopeReflex`:** When a directory accumulates $\ge 3$ AST pitfalls (`access_count < 5`), `PostToolUse` automatically tightens complexity/LOC early-warning thresholds in that directory from `80%` to `65%` and enables inline arity, unchecked-error, and anti-shim micro-probes until `5` consecutive clean tasks cool the scope back to `80%`.
-
-### 6.2 Software Physics & `MTPO` Serializability
-- **File Mass & Viscosity:** $M(f) = 0.1\cdot\text{LOC} + 2.0\cdot v(G) + 0.05\cdot|\text{AST}| + 1.5\cdot(\text{FanIn}+\text{FanOut})$, paired with Shannon token entropy $H(f)$ and 10-token Rabin-Karp rolling-hash viscosity $\mu(f)$.
-- **Monotonic Trajectory Pre-Order (`modules/mtpo`):** Assigns ascending `Seq` numbers on worktree start, tracks AST read/write symbol sets on every edit (`<25ms`), emits write-time `[Nomos MTPO Advisory]` warnings on overlapping symbols, and runs `VerifySyncSerializability` during `nomos task sync` to block stale fast-forwards when an earlier sibling trajectory mutated a read symbol.
-
-### 6.3 Local `stdio` MCP (`nomos mcp`) vs. Remote Streamable HTTP MCP (`sophialabs.ca/mcp`)
+## 6. Model Context Protocol (MCP) Surfaces: Local `stdio` vs. Remote HTTP
 
 | MCP Surface | Transport & Auth | Exposed Tools, Resources & Prompts |
 | :--- | :--- | :--- |
-| **Local Workspace MCP (`nomos mcp`)** | `stdio` JSON-RPC 2.0 (`0` network egress; supports `2026-07-28`, `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05`) | **7 Tools:** `nomos_handshake`, `nomos_status`, `nomos_task_dag`, `nomos_mem_recall`, `nomos_verify_impact`, `nomos_xray`, `nomos_capabilities`<br/>**3 Resources:** `nomos://status`, `nomos://capabilities`, `nomos://directives`<br/>**3 Prompts:** `xray-audit`, `verify-impact`, `recall-pitfalls` |
-| **Remote Portal MCP ([`server.json`](server.json))** | Streamable HTTP `POST https://sophialabs.ca/mcp` (`0` auth, stateless) | **7 Tools:** `xray_github_repo`, `inspect_dod_gates`, `diagnose_nomos_error`, `scaffold_nomos_config`, `recommend_adoption_plan`, `compare_governance_approaches`, `search_nomos_corpus`<br/>**6 Resources:** `nomos://capabilities/catalog` (this Page 0 SSoT), `nomos://corpus/overview`, `nomos://gates/catalog`, `nomos://cli/reference`, `nomos://compare/matrix`, `nomos://skills/bootstrap` + templates `nomos://specs/{slug}`, `nomos://handbook/{slug}`, `nomos://dispatches/{slug}` |
+| **Local Workspace MCP (`nomos mcp`)** | `stdio` JSON-RPC 2.0 (`0` network egress; supports `2026-07-28`, `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05`) | **7 Tools:** `nomos_handshake`, `nomos_status`, `nomos_task_dag`, `nomos_mem_recall`, `nomos_verify_impact`, `nomos_xray`, `nomos_capabilities`<br/>**3 Resources:** `nomos://status`, `nomos://capabilities` (alias: `nomos://capabilities/catalog`), `nomos://directives`<br/>**3 Prompts:** `xray-audit`, `verify-impact`, `recall-pitfalls` |
+| **Remote Portal MCP ([`server.json`](server.json))** | Streamable HTTP `POST https://sophialabs.ca/mcp` (`0` auth, stateless) | **7 Tools:** `xray_github_repo`, `inspect_dod_gates`, `diagnose_nomos_error`, `scaffold_nomos_config`, `recommend_adoption_plan`, `compare_governance_approaches`, `search_nomos_corpus`<br/>**6 Resources:** `nomos://capabilities/catalog` (alias: `nomos://capabilities`, this Page 0 SSoT), `nomos://corpus/overview`, `nomos://gates/catalog`, `nomos://cli/reference`, `nomos://compare/matrix`, `nomos://skills/bootstrap` + templates `nomos://specs/{slug}`, `nomos://handbook/{slug}`, `nomos://dispatches/{slug}` |
 
 ---
 
