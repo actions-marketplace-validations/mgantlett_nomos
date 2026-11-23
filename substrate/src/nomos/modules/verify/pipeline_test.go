@@ -12,7 +12,10 @@ type mockGate struct {
 	msg    string
 }
 
+// Name returns the mock gate display name.
 func (m *mockGate) Name() string { return m.name }
+
+// Evaluate returns the configured mock gate result.
 func (m *mockGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, error) {
 	return &vscope.GateResult{
 		GateName: m.name,
@@ -22,6 +25,7 @@ func (m *mockGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, erro
 	}, nil
 }
 
+// TestPipeline_Execute verifies baseline pipeline aggregation across passing mock gates.
 func TestPipeline_Execute(t *testing.T) {
 	gates := []vscope.Gate{
 		&mockGate{name: "Anti-Shim AST Invariant", probe: "anti_shim", passed: true, msg: "clean"},
@@ -53,6 +57,7 @@ func TestPipeline_Execute(t *testing.T) {
 	}
 }
 
+// TestPipeline_Execute_Failure verifies pipeline failure propagation when any gate fails.
 func TestPipeline_Execute_Failure(t *testing.T) {
 	gates := []vscope.Gate{
 		&mockGate{name: "Anti-Shim AST Invariant", probe: "anti_shim", passed: true, msg: "clean"},
@@ -72,5 +77,37 @@ func TestPipeline_Execute_Failure(t *testing.T) {
 	}
 	if rep.GatesPassed != 1 {
 		t.Errorf("expected 1 passed gate, got %d", rep.GatesPassed)
+	}
+}
+
+// TestPipeline_EnrichesAll42RegisteredGatesToCells verifies 42/42 ProbeID, Law, and Ring cell symmetry when gates omit ProbeID on pass.
+func TestPipeline_EnrichesAll42RegisteredGatesToCells(t *testing.T) {
+	baseGates := DefaultBaselineGates()
+	if len(baseGates) != 42 {
+		t.Fatalf("expected 42 registered baseline gates, got %d", len(baseGates))
+	}
+	mocks := make([]vscope.Gate, 0, len(baseGates))
+	for _, g := range baseGates {
+		mocks = append(mocks, &mockGate{name: g.Name(), probe: "", passed: true, msg: "ok"})
+	}
+	rep, err := NewPipeline(mocks).Execute(&vscope.VerifyContext{IsBaseline: true})
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	for _, gr := range rep.GateResults {
+		if gr.ProbeID == "" || gr.Law < 1 || gr.Law > 7 || gr.Ring == "" {
+			t.Fatalf("expected enriched ProbeID/Law/Ring on %q, got %+v", gr.GateName, gr)
+		}
+	}
+	totalProbes, passedProbes := 0, 0
+	for _, c := range rep.CellReports {
+		if len(c.Probes) != c.ProbeCount || c.PassedProbes != c.ProbeCount {
+			t.Fatalf("cell %s probe mismatch: len=%d passed=%d want=%d", c.ID, len(c.Probes), c.PassedProbes, c.ProbeCount)
+		}
+		totalProbes += len(c.Probes)
+		passedProbes += c.PassedProbes
+	}
+	if totalProbes != 42 || passedProbes != 42 {
+		t.Fatalf("expected 42/42 cell probes populated, got %d/%d", passedProbes, totalProbes)
 	}
 }
