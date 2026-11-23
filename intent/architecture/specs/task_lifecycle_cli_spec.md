@@ -217,6 +217,8 @@ type ReleaseNotePayload struct {
 	Timestamp          string            `json:"timestamp"`
 	Phase              string            `json:"phase"`
 	DoDGatesPassed     int               `json:"dod_gates_passed"`
+	EvidenceSummary    map[string]int    `json:"evidence_summary,omitempty"`
+	UnparsedExtensions []string          `json:"unparsed_extensions,omitempty"`
 	CapBACTokenID      string            `json:"capbac_token_id"`
 	SessionID          string            `json:"session_id,omitempty"`
 	HookTrace          *ReleaseHookTrace `json:"hook_trace,omitempty"`
@@ -435,6 +437,7 @@ type UpdateCheckCache struct {
 | `TC-DBNOTE-002` | Law 2 (Hook Trace Attestation) | `ReleaseHookTrace{ToolCallsCount: 4, TestCommandsCount: 1}` | Embeds verified hook trace inside `ReleaseNotePayload` |
 | `TC-DBNOTE-003` | Law 4 (Spec Digest Stamping) | `ReleaseNotePayload.SpecDigests` populated at `SUB-*` sync | Stamps 64-hex SHA-256 digests per referenced spec |
 | `TC-DBNOTE-004` | Law 7 (Tampered Receipt Detection) | Mismatched `SHA256Receipt` in `refs/notes/nomos/releases` | `ReleaseReceiptGate` rejects tampered release receipt |
+| `TC-DBNOTE-005` | Law 2 & Law 4 (Epistemic Receipt & SARIF Scope) | `ReleaseNotePayload` and `sarif.FromVerifyReport` hydrated from `PipelineReport` | Preserves `EvidenceSummary`, `UnparsedExtensions`, and SARIF `claimScope` properties |
 | `TC-SQL-01` | Law 4 (Pure-Go SQLite WAL) | `storage.OpenDB(dbPath)` (`modernc.org/sqlite`) | Initializes `tasks`, `leases`, and `telemetry_capabilities` with WAL mode |
 | `TC-SQL-02` | Law 7 (Foreign Key Integrity) | `InitSchema(db)` applies `PRAGMA foreign_keys = ON` | Enforces cascading foreign-key constraints on `leases` |
 | `TC-SQL-03` | Law 1 (Runtime Storage Maintenance) | `MaintainRuntimeStorage(true)` | Prunes expired leases, checkpoints WAL, and rotates oversized logs |

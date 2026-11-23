@@ -189,6 +189,7 @@ type GateResult struct {
 	ProbeID        string `json:"probe_id,omitempty"`
 	Law            int    `json:"law,omitempty"`
 	Ring           string `json:"ring,omitempty"`
+	ClaimScope     string `json:"claim_scope,omitempty"`
 	Passed         bool   `json:"passed"`
 	Skipped        bool   `json:"skipped,omitempty"`
 	Message        string `json:"message"`
@@ -226,13 +227,15 @@ type PipelineDeclaration struct {
 
 // PipelineReport encapsulates the complete verification results across all gates, cells, and laws (#PipelineReport).
 type PipelineReport struct {
-	Passed         bool          `json:"passed"`
-	DurationMicros int64         `json:"duration_micros"`
-	GatesTotal     int           `json:"gates_total"`
-	GatesPassed    int           `json:"gates_passed"`
-	GateResults    []*GateResult `json:"gate_results"`
-	LawReports     []*LawReport  `json:"law_reports"`
-	CellReports    []*CellReport `json:"cell_reports"`
+	Passed             bool           `json:"passed"`
+	DurationMicros     int64          `json:"duration_micros"`
+	GatesTotal         int            `json:"gates_total"`
+	GatesPassed        int            `json:"gates_passed"`
+	EvidenceSummary    map[string]int `json:"evidence_summary,omitempty"`
+	UnparsedExtensions []string       `json:"unparsed_extensions,omitempty"`
+	GateResults        []*GateResult  `json:"gate_results"`
+	LawReports         []*LawReport   `json:"law_reports"`
+	CellReports        []*CellReport  `json:"cell_reports"`
 }
 
 // ProofReport summarizes the outcomes of the Three Mathematical Proofs of Gate Integrity (#ProofReport).
@@ -426,6 +429,12 @@ func FormatPRProofMarkdownForRepo(receipt *PRProofReceipt, targetDir string) str
 12. **Worktree Numeric-Threshold Ratchet Integrity (`TC-COV-007`):**
    - `ThresholdIntegrityGate` compares worktree `ThresholdsConfig` values against pinned trunk `nomos.yaml` bounds.
    - If a worktree raises upper caps or lowers minimum floors in `ThresholdsConfig` relative to trunk, verification fails closed.
+13. **Diff-Ratcheted Unguarded Fixture & Example Guard (`TC-AGT-11`):**
+   - `AntiShimGate` audits modified files in `testdata/`, `fixtures/`, `conformance/`, and `examples/` (or full-repo under `--strict`).
+   - Any fixture unreferenced by basename, `go:embed` pattern, or parent directory in tests or CI fails closed.
+14. **Epistemic Claim-Scope & Polyglot Coverage Classification (`TC-DOD-07`):**
+   - `Pipeline.Execute` classifies each `GateResult.ClaimScope` (`ast_verified`, `runtime_verified`, `structural_verified`, `bounded_heuristic`, `no_files_in_scope`, `config_disabled`).
+   - `PipelineReport` aggregates `EvidenceSummary` counts and lists tracked code extensions outside AST parser grammars in `UnparsedExtensions`.
 
 ---
 
@@ -464,6 +473,7 @@ func FormatPRProofMarkdownForRepo(receipt *PRProofReceipt, targetDir string) str
 | `TC-DOD-04` | `GateSpec` | Declarative gate registry lookup | Resolves gate constructor and law/ring coordinates | Law 4 |
 | `TC-DOD-05` | `ToolchainGate` | Polyglot runner execution in isolated worktree | Executes language toolchain with `GOWORK=off` isolation | Law 2 & Law 3 |
 | `TC-DOD-06` | `BrownfieldRatchet` | Modified file evaluated in brownfield ratchet mode | Blocks new regressions while permitting legacy baseline | Law 7 |
+| `TC-DOD-07` | `PipelineReport`, `GateResult` | Workspace evaluated with active, out-of-scope, and unparsed extension files | Populates `ClaimScope`, `EvidenceSummary`, and `UnparsedExtensions` cleanly | Law 2 & Law 4 |
 | `TC-COV-001` | `CoverageGate` | Statement coverage meets or exceeds `min_test_coverage_pct` | Passes `Cell 2.2 (coverage)` verification | Law 2 |
 | `TC-COV-002` | `CoverageGate` | Statement coverage drops below `55%` statutory floor | Fails closed with test coverage remedy | Law 2 & Law 7 |
 | `TC-COV-003` | `ThresholdIntegrityGate` | Worktree `nomos.yaml` relaxes `max_cyclomatic_complexity > 15` | Rejects threshold relaxation under `strict_mode: true` | Law 7 |
@@ -479,6 +489,7 @@ func FormatPRProofMarkdownForRepo(receipt *PRProofReceipt, targetDir string) str
 | `TC-AGT-08` | `ForbiddenLiteralsGate` | Source file contains hardcoded workstation home path | Fails closed on forbidden path literal | Law 5 |
 | `TC-AGT-09` | `ContractParityGate` | Zero canonical assets discovered during parity check | Fails closed rejecting vacuous asset discovery | Law 4 |
 | `TC-AGT-10` | `AntiShimGate` (`AntiShimDTO`) | Function body consists solely of `panic("TODO")` stub | Fails closed with `IsPanicShim == true` | Law 2 & Law 7 |
+| `TC-AGT-11` | `AntiShimGate` (`ScanUnguardedFixtures`) | Worktree adds unreferenced vs test-referenced file in `testdata/` or `examples/` | Rejects unreferenced fixture; passes referenced or walked directory fixtures | Law 2 & Law 7 |
 | `TC-MUT-01` | `EvaluateDiffMutations` | Modified Go function tested only by tautological `true` check | Mutant survives and fails `nomos verify --mutate-diff` | Law 2 & Law 7 |
 | `TC-PR-01` | `BuildPRProofReceipt` | `nomos verify --pr` evaluates clean branch against `main` | Seals 42-gate posture, debt delta, and SHA-256 digest | Law 2 & Law 4 |
 | `TC-PR-02` | `FormatPRProofMarkdown` | `PRProofReceipt` rendered via `--pr` and `--pr-output` | Writes deterministic Markdown table without workstation literals | Law 4 & Law 5 |
