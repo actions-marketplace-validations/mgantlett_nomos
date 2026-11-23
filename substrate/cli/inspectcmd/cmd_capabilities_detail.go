@@ -16,29 +16,49 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// CapabilityDetail models single-item capability and gate remediation drill-down (#CapabilityDetail).
+// CapabilityDetail models single-item capability, gate, and contract drill-down (#CapabilityDetail).
+// @intent software_physics_engine_spec.md #CapabilityDetail
 type CapabilityDetail struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Type        string   `json:"type"`
-	Plane       string   `json:"plane"`
-	Status      string   `json:"status"`
-	Law         int      `json:"law,omitempty"`
-	Ring        string   `json:"ring,omitempty"`
-	Domain      string   `json:"domain,omitempty"`
-	Invocation  string   `json:"invocation"`
-	Description string   `json:"description"`
-	Remedy      string   `json:"remedy,omitempty"`
-	ProbeIDs    []string `json:"probe_ids,omitempty"`
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	Type        string         `json:"type"`
+	Plane       string         `json:"plane"`
+	Status      string         `json:"status"`
+	Law         int            `json:"law,omitempty"`
+	Ring        string         `json:"ring,omitempty"`
+	Domain      string         `json:"domain,omitempty"`
+	Invocation  string         `json:"invocation"`
+	Description string         `json:"description"`
+	Remedy      string         `json:"remedy,omitempty"`
+	ProbeIDs    []string       `json:"probe_ids,omitempty"`
+	Contract    *ContractSlice `json:"contract,omitempty"`
 }
 
-// ResolveCapabilityDetail resolves a capability, invariant cell, or subordinate gate probe ID.
-// @intent INT-842 #CapabilityDetail
+// ResolveCapabilityDetail resolves a capability, invariant cell, gate probe ID, or contract target.
+// @intent software_physics_engine_spec.md #CapabilityDetail
 func ResolveCapabilityDetail(catalog CapabilitiesCatalog, query string) (*CapabilityDetail, error) {
+	repoRoot := ""
+	if wd, err := os.Getwd(); err == nil {
+		repoRoot = resolveInspectRepoRoot(wd)
+	}
+	return ResolveCapabilityDetailForRepo(repoRoot, catalog, query)
+}
+
+// ResolveCapabilityDetailInDir builds the capability catalog for repoRoot and resolves query in detail.
+// @intent software_physics_engine_spec.md #CapabilityDetail
+func ResolveCapabilityDetailInDir(repoRoot, query string) (*CapabilityDetail, error) {
+	cleanRoot := resolveInspectRepoRoot(repoRoot)
+	catalog := collectAllCapabilities(nil, cleanRoot)
+	return ResolveCapabilityDetailForRepo(cleanRoot, catalog, query)
+}
+
+// ResolveCapabilityDetailForRepo resolves query against gates, catalog items, and repository intent contracts.
+// @intent software_physics_engine_spec.md #CapabilityDetail
+func ResolveCapabilityDetailForRepo(repoRoot string, catalog CapabilitiesCatalog, query string) (*CapabilityDetail, error) {
 	target := strings.ToLower(strings.TrimSpace(query))
 	if target == "" {
 		return nil, types.NewNomosError(types.ErrCodeValidationFailed, "capability identifier cannot be empty").
-			WithRemedy("run 'nomos capabilities' to list valid capability, cell, and gate probe IDs")
+			WithRemedy("run 'nomos capabilities' to list valid capability, cell, probe, or #Contract IDs")
 	}
 
 	if cellDetail := matchGateOrProbeDetail(target); cellDetail != nil {
@@ -49,8 +69,26 @@ func ResolveCapabilityDetail(catalog CapabilitiesCatalog, query string) (*Capabi
 		return itemDetail, nil
 	}
 
+	if contractDetail := ResolveContractCapabilityDetail(repoRoot, query); contractDetail != nil {
+		return contractDetail, nil
+	}
+
 	return nil, types.NewNomosError(types.ErrCodeValidationFailed, "capability or gate probe %q not found", query).
-		WithRemedy("run 'nomos capabilities' or 'nomos capabilities --type=gate' to list valid IDs")
+		WithRemedy("run 'nomos capabilities', 'nomos capabilities --type=gate', or pass '#StructName' / 'TC-*'")
+}
+
+// resolveInspectRepoRoot resolves rawDir to the enclosing repository root when outside worktrees.
+func resolveInspectRepoRoot(rawDir string) string {
+	clean := filepath.ToSlash(strings.TrimSpace(rawDir))
+	if clean == "" {
+		return ""
+	}
+	if !strings.Contains(clean, "/worktrees/") && !strings.HasPrefix(clean, "worktrees/") {
+		if rRoot, err := workspace.FindRepoRoot(rawDir); err == nil && rRoot != "" {
+			return rRoot
+		}
+	}
+	return rawDir
 }
 
 func matchGateOrProbeDetail(target string) *CapabilityDetail {
@@ -115,19 +153,14 @@ func matchCatalogItemDetail(catalog CapabilitiesCatalog, target string) *Capabil
 }
 
 func executeCapabilityDetail(cmd *cobra.Command, query string, jsonOutput bool) error {
-	repoRoot, err := os.Getwd()
+	wd, err := os.Getwd()
 	if err != nil {
 		return types.NewNomosError(types.ErrCodeBoundary, "failed resolving working directory: %v", err)
 	}
-	clean := filepath.ToSlash(repoRoot)
-	if !strings.Contains(clean, "/worktrees/") && !strings.HasPrefix(clean, "worktrees/") {
-		if rRoot, rErr := workspace.FindRepoRoot(repoRoot); rErr == nil && rRoot != "" {
-			repoRoot = rRoot
-		}
-	}
+	repoRoot := resolveInspectRepoRoot(wd)
 
 	catalog := collectAllCapabilities(cmd, repoRoot)
-	detail, dErr := ResolveCapabilityDetail(catalog, query)
+	detail, dErr := ResolveCapabilityDetailForRepo(repoRoot, catalog, query)
 	if dErr != nil {
 		return dErr
 	}
@@ -171,5 +204,26 @@ func renderCapabilityDetailCard(cmd *cobra.Command, d *CapabilityDetail) {
 	if d.Remedy != "" {
 		fmt.Fprintln(out, tui.KvLine("Remedy", 11, tui.UiWarnStyle.Render(d.Remedy)))
 	}
+	renderContractSliceFields(out, d.Contract)
 	fmt.Fprintln(out, tui.UiRule(tui.RuleNarrow))
+}
+
+// renderContractSliceFields prints resolved ContractSlice fields inside the capability detail card.
+func renderContractSliceFields(out interface{ Write([]byte) (int, error) }, c *ContractSlice) {
+	if c == nil {
+		return
+	}
+	fmt.Fprintln(out, tui.KvLine("Spec File", 11, tui.UiValueStyle.Render(c.SpecFile)))
+	if len(c.SpecSHA256) >= 16 {
+		fmt.Fprintln(out, tui.KvLine("SHA-256", 11, tui.UiMutedStyle.Render(c.SpecSHA256[:16]+"...")))
+	}
+	if len(c.SourceFiles) > 0 {
+		fmt.Fprintln(out, tui.KvLine("Sources", 11, tui.UiValueStyle.Render(strings.Join(c.SourceFiles, ", "))))
+	}
+	if len(c.VerifyingTests) > 0 {
+		fmt.Fprintln(out, tui.KvLine("Tests", 11, tui.UiSuccessStyle.Render(strings.Join(c.VerifyingTests, ", "))))
+	}
+	if c.ContractBlock != "" {
+		fmt.Fprintf(out, "\n%s\n", c.ContractBlock)
+	}
 }

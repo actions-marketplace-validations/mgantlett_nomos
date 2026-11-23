@@ -43,7 +43,7 @@ Zero trust in conversational claims; non-verbal proof via AST and compilation ex
 				return runFastFileRadar(targetDir, fastFile, strict)
 			}
 			if impactOnly {
-				return runImpactMap(targetDir)
+				return runImpactMap(cmd.OutOrStdout(), targetDir, jsonOutput)
 			}
 			if prFlags.sarifMode && (jsonOutput || prFlags.prMode) {
 				return types.NewNomosError(types.ErrCodeValidationFailed, "cannot combine --sarif with --json or --pr on nomos verify").
@@ -357,16 +357,39 @@ func runFastFileRadar(targetDir, fastFile string, strict bool) error {
 	return nil
 }
 
-func runImpactMap(targetDir string) error {
-	items := impact.ComputeWorkspaceImpact(targetDir, nil)
-	fmt.Println(tui.RenderBrandTitle("🧭 Nomos 1-Hop AST Blast-Radius & Impact Map"))
-	fmt.Println(tui.UiRule(tui.RuleStandard))
-	if len(items) == 0 {
-		fmt.Printf("  %s\n", tui.UiMutedStyle.Render("No modified source files detected in workspace."))
+func runImpactMap(out io.Writer, targetDir string, jsonOutput bool) error {
+	rep := impact.ComputeWorkspaceImpactReport(targetDir, nil)
+	if jsonOutput {
+		data, err := json.MarshalIndent(rep, "", "  ")
+		if err != nil {
+			return types.NewNomosError(types.ErrCodeCore, "failed marshaling impact report: %v", err)
+		}
+		fmt.Fprintln(out, string(data))
 		return nil
 	}
-	for _, item := range items {
-		fmt.Printf("  %s %s\n", tui.UiSubstrateStyle.Render("•"), tui.UiValueStyle.Render(item))
+	fmt.Fprintln(out, tui.RenderBrandTitle("🧭 Nomos 1-Hop AST Blast-Radius & Impact Map"))
+	fmt.Fprintln(out, tui.UiRule(tui.RuleStandard))
+	if len(rep.ImpactedPackages) == 0 && len(rep.IndirectBoundaries) == 0 {
+		fmt.Fprintf(out, "  %s\n", tui.UiMutedStyle.Render("No modified source files detected in workspace."))
+		return nil
 	}
+	for _, item := range rep.ImpactedPackages {
+		fmt.Fprintf(out, "  %s %s\n", tui.UiSubstrateStyle.Render("•"), tui.UiValueStyle.Render(item))
+	}
+	renderIndirectImpactBoundaries(out, rep.IndirectBoundaries)
 	return nil
+}
+
+func renderIndirectImpactBoundaries(out io.Writer, boundaries []impact.IndirectBoundarySignal) {
+	if len(boundaries) == 0 {
+		return
+	}
+	fmt.Fprintf(out, "  %s\n", tui.UiWarnStyle.Render("⚡ Indirect Coupling Boundaries (Runtime / Wire / Non-AST):"))
+	for _, b := range boundaries {
+		syms := ""
+		if len(b.Symbols) > 0 {
+			syms = " [" + strings.Join(b.Symbols, ", ") + "]"
+		}
+		fmt.Fprintf(out, "    • [%s] %s — %s%s\n", tui.UiLabelStyle.Render(b.Category), tui.UiBoldValueStyle.Render(b.File), tui.UiMutedStyle.Render(b.Summary), tui.UiValueStyle.Render(syms))
+	}
 }

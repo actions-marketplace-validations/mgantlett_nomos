@@ -36,7 +36,7 @@ func ReadOnlyTools() []MCPToolDescriptor {
 	tools = append(tools, buildSessionToolDescriptors(ro, dirProp)...)
 	tools = append(tools, buildLedgerToolDescriptors(ro, dirProp)...)
 	tools = append(tools, buildAnalysisToolDescriptors(ro, dirProp)...)
-	tools = append(tools, capabilitiesToolDescriptor(ro))
+	tools = append(tools, capabilitiesToolDescriptor(ro, dirProp))
 	return tools
 }
 
@@ -151,13 +151,16 @@ func execMemRecallTool(args map[string]any) (string, bool) {
 
 func execVerifyImpactTool(args map[string]any) (string, bool) {
 	targetDir := resolveTargetDir(stringArg(args, "dir"))
-	impacted := impact.ComputeWorkspaceImpact(targetDir, nil)
-	if impacted == nil {
-		impacted = []string{}
+	rep := impact.ComputeWorkspaceImpactReport(targetDir, nil)
+	boundaries := rep.IndirectBoundaries
+	if boundaries == nil {
+		boundaries = []impact.IndirectBoundarySignal{}
 	}
 	return marshalToolJSON(map[string]any{
-		"dir":               targetDir,
-		"impacted_packages": impacted,
+		"dir":                 targetDir,
+		"modified_files":      rep.ModifiedFiles,
+		"impacted_packages":   rep.ImpactedPackages,
+		"indirect_boundaries": boundaries,
 	})
 }
 

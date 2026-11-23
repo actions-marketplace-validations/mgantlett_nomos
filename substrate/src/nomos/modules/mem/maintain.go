@@ -104,7 +104,7 @@ func (s *Store) Maintain(opts MaintainOptions) (*MaintainReport, error) {
 
 	rep := &MaintainReport{}
 	rep.DuplicatesSuperseded = s.deduplicateActiveClonesLocked(all)
-	rep.InactivePurged = s.purgeExpiredInactiveLocked(retentionDays)
+	rep.InactivePurged = s.purgeExpiredInactiveLocked(all, retentionDays)
 	minVac := opts.MinVacuumBytes
 	if minVac <= 0 {
 		minVac = defaultMinMemVacuumBytes
@@ -153,20 +153,30 @@ func (s *Store) markCloneSupersededLocked(dupID, canonicalID int) bool {
 	return rErr == nil && n > 0
 }
 
-func (s *Store) purgeExpiredInactiveLocked(retentionDays int) int {
-	cutoff := time.Now().UTC().Add(-time.Duration(retentionDays) * 24 * time.Hour).Format(time.RFC3339)
-	res, err := s.db.Exec(
-		`DELETE FROM memories WHERE status IN (?, ?) AND created_at != '' AND created_at < ?`,
-		string(StatusSuperseded), string(StatusTombstoned), cutoff,
-	)
+func (s *Store) purgeExpiredInactiveLocked(all []*Memory, retentionDays int) int {
+	cutoffTime := time.Now().UTC().Add(-time.Duration(retentionDays) * 24 * time.Hour)
+	protected := isProtectedEvolvedLineageIDSet(all)
+	purged := 0
+	for _, rec := range all {
+		if rec == nil || rec.CreatedAt.IsZero() || !rec.CreatedAt.Before(cutoffTime) {
+			continue
+		}
+		if rec.Status == StatusTombstoned || (rec.Status == StatusSuperseded && !protected[rec.ID]) {
+			if s.deleteMemoryRowLocked(rec.ID) {
+				purged++
+			}
+		}
+	}
+	return purged
+}
+
+func (s *Store) deleteMemoryRowLocked(id int) bool {
+	res, err := s.db.Exec(`DELETE FROM memories WHERE id = ?`, id)
 	if err != nil {
-		return 0
+		return false
 	}
 	n, rErr := res.RowsAffected()
-	if rErr != nil {
-		return 0
-	}
-	return int(n)
+	return rErr == nil && n > 0
 }
 
 func (s *Store) checkpointAndOptimizeLocked() bool {

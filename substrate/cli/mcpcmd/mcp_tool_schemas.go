@@ -121,8 +121,10 @@ func buildAnalysisToolDescriptors(ro, dirProp map[string]any) []MCPToolDescripto
 			OutputSchema: map[string]any{
 				propTypeKey: schemaTypeObject,
 				keyProperties: map[string]any{
-					"dir":               map[string]any{propTypeKey: schemaTypeString, propDescKey: "Resolved repository root path."},
-					"impacted_packages": map[string]any{propTypeKey: "array", propDescKey: "Impacted package paths.", "items": map[string]any{propTypeKey: schemaTypeString}},
+					"dir":                 map[string]any{propTypeKey: schemaTypeString, propDescKey: "Resolved repository root path."},
+					"modified_files":      map[string]any{propTypeKey: "array", propDescKey: "Modified workspace-relative files.", "items": map[string]any{propTypeKey: schemaTypeString}},
+					"impacted_packages":   map[string]any{propTypeKey: "array", propDescKey: "Impacted package paths.", "items": map[string]any{propTypeKey: schemaTypeString}},
+					"indirect_boundaries": map[string]any{propTypeKey: "array", propDescKey: "Advisory runtime, SQL, wire-tag, CLI flag, and non-AST boundaries.", "items": map[string]any{propTypeKey: schemaTypeObject}},
 				},
 				"required": []string{"dir", "impacted_packages"},
 			},
@@ -146,17 +148,18 @@ func buildAnalysisToolDescriptors(ro, dirProp map[string]any) []MCPToolDescripto
 	}
 }
 
-func capabilitiesToolDescriptor(ro map[string]any) MCPToolDescriptor {
+func capabilitiesToolDescriptor(ro, dirProp map[string]any) MCPToolDescriptor {
 	return MCPToolDescriptor{
 		Name:  "nomos_capabilities",
-		Title: "Inspect Compiled DoD Gates, Hooks & Directives",
-		Description: "Inspect compiled Nomos Definition of Done quality gates, ambient Git/session hooks, embedded phase directives, or remediation guidance for a specific gate ID. " +
-			"Use when looking up gate invariants, hook behavior, or how to fix a specific gate ID. Do NOT use when searching project-specific historical decisions in Mneme (use nomos_mem_recall instead) or scanning live source files (use nomos_xray instead).",
+		Title: "Inspect Compiled DoD Gates, Hooks, Directives & Intent Contracts",
+		Description: "Inspect compiled Nomos Definition of Done quality gates, ambient Git/session hooks, embedded phase directives, or resolve a specific gate ID, #StructName contract, TC-* obligation, or ERR_* error code. " +
+			"Use when looking up gate invariants, hook behavior, or slicing a bijective specification contract and its verifying tests. Do NOT use when searching project-specific historical decisions in Mneme (use nomos_mem_recall instead) or scanning live source files (use nomos_xray instead).",
 		InputSchema: objectSchema(map[string]any{
+			"dir": dirProp,
 			"id": map[string]any{
 				propTypeKey: schemaTypeString,
-				propDescKey: "Optional capability, gate, or directive identifier to inspect in detail.",
-				"examples":  []string{"plane_separation", "anti_shim"},
+				propDescKey: "Optional capability, gate, #StructName contract, TC-* obligation, ERR_* code, or spec filename to inspect.",
+				"examples":  []string{"plane_separation", "#GateResult", "TC-DOD-07"},
 			},
 			"type": map[string]any{
 				propTypeKey: schemaTypeString,
