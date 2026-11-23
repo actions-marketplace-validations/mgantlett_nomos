@@ -9,6 +9,7 @@ import (
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/intentlint"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/wiredrift"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -82,6 +83,14 @@ func (g *ContractParityGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateRe
 			GateName: g.Name(), Passed: false,
 			Message: fmt.Sprintf("contract schema verification failed: 0 polyglot backend files discovered in roots %v", contracts.BackendRoots),
 			Remedy:  "ensure backend roots contain polyglot source files",
+		}, nil
+	}
+
+	if wireIssue := wiredrift.VerifyCorpusWireBoundary(root); wireIssue != "" {
+		return &vscope.GateResult{
+			GateName: g.Name(), Passed: false,
+			Message: fmt.Sprintf("contract schema verification failed: %s", wireIssue),
+			Remedy:  "replace Record<string, any|unknown>, dict[str, Any], and map[string]any DTO escape hatches with typed contracts and align snake_case wire keys to compiled json tags (Law 4)",
 		}, nil
 	}
 

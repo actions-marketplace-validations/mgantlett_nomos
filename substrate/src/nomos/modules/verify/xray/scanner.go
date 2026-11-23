@@ -16,6 +16,7 @@ import (
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/treesitter"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/wiredrift"
 )
 
 const maxScannableFileBytes = 1024 * 1024
@@ -241,6 +242,7 @@ func finalizeScanReport(absRoot string, topLimit int, start time.Time, acc *scan
 	acc.report.MagicStringGroups = verify.CountCorpusMagicStringGroups(
 		acc.nonTestSources, verify.DefaultXrayMagicStringThreshold,
 	)
+	applyBoundaryDriftFindings(wiredrift.ScanCorpusBoundaryWireDrift(acc.nonTestSources), acc.report, acc.hotspotsByFile)
 	acc.report.InferredBoundaries = len(impact.InferCleanArchitectureBoundariesForFiles(absRoot, nonTestSourcePaths(acc.nonTestSources)))
 	acc.report.HangoverScore = computeHangoverScore(acc.report)
 	acc.report.Grade = computeHangoverGrade(acc.report.HangoverScore)

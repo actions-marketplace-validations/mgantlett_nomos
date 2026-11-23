@@ -8,6 +8,7 @@ import (
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/treesitter"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/wiredrift"
 )
 
 func summarizeFunctionBounds(funcs []treesitter.FunctionMetric, th treesitter.EngineThresholds) (int, int, int) {
@@ -108,6 +109,27 @@ func applyCloneCountsToHotspots(groups []astdebt.CloneGroup, hotspots map[string
 	}
 }
 
+func applyBoundaryDriftFindings(findings []wiredrift.BoundaryDriftFinding, rep *XrayReport, hotspots map[string]*XrayHotspot) {
+	for _, f := range findings {
+		hs := hotspots[f.File]
+		if f.Kind == wiredrift.KindPhantomWireKey {
+			rep.PhantomWireKeys++
+			if hs != nil {
+				hs.PhantomWireKeys++
+			}
+			continue
+		}
+		rep.UntypedBoundaryReads++
+		if hs != nil {
+			hs.UntypedBoundaryReads++
+		}
+	}
+	for _, hs := range hotspots {
+		hs.Reasons = appendCountReason(hs.Reasons, "untyped_boundary_reads", hs.UntypedBoundaryReads)
+		hs.Reasons = appendCountReason(hs.Reasons, "phantom_wire_keys", hs.PhantomWireKeys)
+	}
+}
+
 func computeHangoverScore(rep *XrayReport) int {
 	if rep.FilesScanned == 0 {
 		return 0
@@ -122,7 +144,9 @@ func computeHangoverScore(rep *XrayReport) int {
 		rep.UncheckedErrors*5 +
 		rep.SecretPathLeaks*12 +
 		rep.MagicStringGroups*4 +
-		rep.SecuritySinks*14
+		rep.SecuritySinks*14 +
+		rep.UntypedBoundaryReads*6 +
+		rep.PhantomWireKeys*8
 	if faults == 0 {
 		return 0
 	}
@@ -154,7 +178,7 @@ func computeHangoverGrade(score int) string {
 
 func hotspotRankWeight(h *XrayHotspot) int {
 	return h.CDS*3 + h.MaxComplexity*4 + h.Clones*25 + h.Stubs*20 +
-		h.UncheckedErrors*15 + h.SecretLeaks*30 + h.LOC/10
+		h.UncheckedErrors*15 + h.SecretLeaks*30 + h.UntypedBoundaryReads*15 + h.PhantomWireKeys*25 + h.LOC/10
 }
 
 func selectTopHotspots(byFile map[string]*XrayHotspot, limit int) []XrayHotspot {

@@ -256,3 +256,31 @@ func TestScanRepository_JavaAndCSharpHotspotsAndStubs(t *testing.T) {
 		t.Fatalf("expected Java/C# hotspots, >=3 stubs, 2 skipped tests, got %+v", rep)
 	}
 }
+
+// TestScanRepository_UntypedBoundaryAndPhantomWireKey verifies TC-XRAY-03 in xray.ScanRepository.
+// @verifies TC-XRAY-03
+func TestScanRepository_UntypedBoundaryAndPhantomWireKey(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "boundary-drift")
+	mustWrite := func(rel, body string) {
+		full := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustWrite("backend/report.go", "package backend\ntype ScanReport struct {\n\tHotspots []string `json:\"hotspots\"`\n}\n")
+	mustWrite("web/client.ts", "export interface PublicScanResult {\n\treport: Record<string, unknown>;\n}\nexport function formatTop(res: PublicScanResult): unknown {\n\tconst r = res.report;\n\treturn r.top_hotspots;\n}\n")
+
+	rep, err := xray.ScanRepository(root, xray.DefaultScanOptions())
+	if err != nil {
+		t.Fatalf("ScanRepository failed: %v", err)
+	}
+	if rep.UntypedBoundaryReads != 1 || rep.PhantomWireKeys != 1 {
+		t.Fatalf("expected UntypedBoundaryReads=1 and PhantomWireKeys=1, got %+v", rep)
+	}
+	if len(rep.Hotspots) == 0 || !strings.Contains(strings.Join(rep.Hotspots[0].Reasons, ","), "phantom_wire_keys=1") {
+		t.Fatalf("expected hotspot reason phantom_wire_keys=1, got %+v", rep.Hotspots)
+	}
+}

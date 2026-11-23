@@ -72,6 +72,8 @@ func FormatMarkdown(rep *XrayReport) string {
 		{"Swallowed / Unchecked Errors", rep.UncheckedErrors},
 		{"Secret / Host-Path Leaks", rep.SecretPathLeaks},
 		{"Security Sinks (`CWE-89` / `CWE-22`)", rep.SecuritySinks},
+		{"Untyped DTO Boundary Escapes", rep.UntypedBoundaryReads},
+		{"Phantom Wire Keys", rep.PhantomWireKeys},
 		{"Inferred Clean Architecture Rules", rep.InferredBoundaries},
 	} {
 		sb.WriteString(fmt.Sprintf("| %s | `%d` |\n", row.label, row.val))
