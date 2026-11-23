@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/astdebt"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/ratchet"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/sensorsummary"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"go/ast"
 	"go/parser"
@@ -180,13 +181,14 @@ func (g *AntiShimGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, 
 	if err != nil {
 		return nil, types.NewNomosError(types.ErrCodeCore, "failed walking scope for anti-shim: %v", err)
 	}
+	violations = append(violations, sensorsummary.ScanOrphanedFixtures(ctx, root)...)
 
 	if len(violations) > 0 {
 		return &vscope.GateResult{
 			GateName: g.Name(),
 			Passed:   false,
 			Message:  fmt.Sprintf("detected %d anti-shim violation(s): %s", len(violations), strings.Join(violations, "; ")),
-			Remedy:   "implement real algorithmic logic; eliminate panic shims, empty functions, and forbidden shim markers",
+			Remedy:   "implement real algorithmic logic, eliminate panic/empty shims, and bind every testdata/examples fixture to a test or go:embed consumer",
 		}, nil
 	}
 

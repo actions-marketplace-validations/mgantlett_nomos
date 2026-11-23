@@ -2,6 +2,7 @@
 package verify
 
 import (
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/sensorsummary"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
 	"runtime"
 	"sync"
@@ -44,13 +45,15 @@ type PipelineDeclaration struct {
 
 // PipelineReport encapsulates the complete verification results across all gates, cells, and laws.
 type PipelineReport struct {
-	Passed         bool                 `json:"passed"`
-	DurationMicros int64                `json:"duration_micros"`
-	GatesTotal     int                  `json:"gates_total"`
-	GatesPassed    int                  `json:"gates_passed"`
-	GateResults    []*vscope.GateResult `json:"gate_results"`
-	LawReports     []*LawReport         `json:"law_reports"`
-	CellReports    []*CellReport        `json:"cell_reports"`
+	Passed              bool                 `json:"passed"`
+	DurationMicros      int64                `json:"duration_micros"`
+	GatesTotal          int                  `json:"gates_total"`
+	GatesPassed         int                  `json:"gates_passed"`
+	SensorSummary       map[string]int       `json:"sensor_summary,omitempty"`
+	UnindexedExtensions []string             `json:"unindexed_extensions,omitempty"`
+	GateResults         []*vscope.GateResult `json:"gate_results"`
+	LawReports          []*LawReport         `json:"law_reports"`
+	CellReports         []*CellReport        `json:"cell_reports"`
 }
 
 // Pipeline executes an ordered suite of Definition of Done quality gates.
@@ -82,15 +85,21 @@ func (p *Pipeline) Execute(ctx *vscope.VerifyContext) (*PipelineReport, error) {
 	elapsed := time.Since(start).Microseconds()
 	cellReports := buildCellReports(results)
 	lawReports := buildLawReports(cellReports)
+	scanRoot := ctx.WorktreePath
+	if scanRoot == "" {
+		scanRoot = ctx.RepoRoot
+	}
 
 	return &PipelineReport{
-		Passed:         overallPassed,
-		DurationMicros: elapsed,
-		GatesTotal:     len(results),
-		GatesPassed:    countPassed(results),
-		GateResults:    results,
-		LawReports:     lawReports,
-		CellReports:    cellReports,
+		Passed:              overallPassed,
+		DurationMicros:      elapsed,
+		GatesTotal:          len(results),
+		GatesPassed:         countPassed(results),
+		SensorSummary:       sensorsummary.SummarizeSensors(results),
+		UnindexedExtensions: sensorsummary.ScanUnindexedExtensions(scanRoot),
+		GateResults:         results,
+		LawReports:          lawReports,
+		CellReports:         cellReports,
 	}, nil
 }
 
@@ -203,6 +212,7 @@ func enrichCanonicalProbeMetadata(results []*vscope.GateResult) {
 				r.Ring = c.ring
 			}
 		}
+		r.ExecutionScope = sensorsummary.ClassifyGateExecutionScope(r, sensorsummary.SensorForProbeID(r.ProbeID, r.Ring))
 	}
 }
 
