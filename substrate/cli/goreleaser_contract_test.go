@@ -350,7 +350,7 @@ func TestPolyglotDistributionManifestContracts(t *testing.T) {
 		{"flake.nix", "packaging/nix/hashes.json"},
 		{"packaging/nix/hashes.json", "x86_64-linux"},
 		{"Dockerfile", "FROM scratch"},
-		{"action.yml", "branding:"},
+		{"action.yml", "icon: 'shield'"},
 	} {
 		data, rErr := os.ReadFile(filepath.Join(repoRoot, rel.file))
 		if rErr != nil || !strings.Contains(string(data), rel.token) {
