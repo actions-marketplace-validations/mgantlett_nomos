@@ -95,6 +95,10 @@ brew install --cask mgantlett/tap/nomos
 npx --yes @mgantlett/nomos xray .
 uvx nomos-cli xray .
 
+# NixOS / Nix Flakes & Multi-Arch OCI Container (GitLab CI / Buildkite / Dagger):
+nix run github:mgantlett/nomos -- xray .
+docker run --rm -v "$PWD:/repo" -w /repo ghcr.io/mgantlett/nomos:v4 xray .
+
 # Arch Linux / Omarchy (verified PKGBUILD):
 (tmp="$(mktemp -d)" && cd "$tmp" && curl -fsSLO https://raw.githubusercontent.com/mgantlett/nomos/main/packaging/aur/PKGBUILD && makepkg -si && rm -rf "$tmp")
 
@@ -105,6 +109,7 @@ GOTOOLCHAIN=auto CGO_ENABLED=0 go install github.com/mgantlett/nomos/substrate/c
 npx skills add mgantlett/nomos
 claude mcp add --transport http nomos https://sophialabs.ca/mcp
 # Or inside Claude Code: /plugin marketplace add mgantlett/nomos && /plugin install nomos
+# pre-commit / prek (.pre-commit-config.yaml): repo: https://github.com/mgantlett/nomos (hooks: nomos-verify, nomos-xray)
 ```
 
 Update or cleanly uninstall anytime:

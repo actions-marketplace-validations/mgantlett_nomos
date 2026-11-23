@@ -18,9 +18,21 @@ type strictGoReleaserV2Config struct {
 	Builds        []strictGoReleaserBuild        `yaml:"builds"`
 	Archives      []strictGoReleaserArchive      `yaml:"archives"`
 	Checksum      strictGoReleaserChecksum       `yaml:"checksum"`
+	DockersV2     []strictGoReleaserDockerV2     `yaml:"dockers_v2"`
 	HomebrewCasks []strictGoReleaserHomebrewCask `yaml:"homebrew_casks"`
 	AURs          []strictGoReleaserAUR          `yaml:"aurs"`
 	Changelog     strictGoReleaserChangelog      `yaml:"changelog"`
+}
+
+type strictGoReleaserDockerV2 struct {
+	ID         string            `yaml:"id"`
+	Dockerfile string            `yaml:"dockerfile"`
+	IDs        []string          `yaml:"ids"`
+	Images     []string          `yaml:"images"`
+	Tags       []string          `yaml:"tags"`
+	Platforms  []string          `yaml:"platforms"`
+	ExtraFiles []string          `yaml:"extra_files"`
+	Labels     map[string]string `yaml:"labels"`
 }
 
 type strictGoReleaserBefore struct {
@@ -311,4 +323,38 @@ func TestReleaseNotesSubpackageScopeRouting(t *testing.T) {
 		"[SUB-3169]",
 		"\n### Release & Packaging\n",
 	)
+}
+
+// @verifies TC-REL-016
+func TestPolyglotDistributionManifestContracts(t *testing.T) {
+	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("resolve repo root: %v", err)
+	}
+	rawGr, err := os.ReadFile(filepath.Join(repoRoot, ".goreleaser.yaml"))
+	if err != nil {
+		t.Fatalf("read .goreleaser.yaml: %v", err)
+	}
+	cfg, err := decodeStrictGoReleaserV2(rawGr)
+	if err != nil {
+		t.Fatalf("decode .goreleaser.yaml: %v", err)
+	}
+	if len(cfg.DockersV2) != 1 || cfg.DockersV2[0].Images[0] != "ghcr.io/mgantlett/nomos" {
+		t.Fatalf("expected dockers_v2 ghcr.io/mgantlett/nomos target, got %+v", cfg.DockersV2)
+	}
+	for _, rel := range []struct {
+		file  string
+		token string
+	}{
+		{".pre-commit-hooks.yaml", "id: nomos-verify"},
+		{"flake.nix", "packaging/nix/hashes.json"},
+		{"packaging/nix/hashes.json", "x86_64-linux"},
+		{"Dockerfile", "FROM scratch"},
+		{"action.yml", "branding:"},
+	} {
+		data, rErr := os.ReadFile(filepath.Join(repoRoot, rel.file))
+		if rErr != nil || !strings.Contains(string(data), rel.token) {
+			t.Fatalf("manifest %s missing %q (err=%v)", rel.file, rel.token, rErr)
+		}
+	}
 }

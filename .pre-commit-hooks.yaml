@@ -1,0 +1,15 @@
+- id: nomos-verify
+  name: Nomos Deterministic Quality Gates (42 Gates)
+  description: Evaluate diff-scoped Nomos Definition of Done AST and boundary invariants before commit.
+  entry: bash -c 'command -v nomos >/dev/null 2>&1 && exec nomos verify || exec npx --yes @mgantlett/nomos verify'
+  language: system
+  pass_filenames: false
+  stages: [pre-commit, pre-push, manual]
+
+- id: nomos-xray
+  name: Nomos Read-Only Codebase X-Ray
+  description: Run zero-init brownfield structural debt, clone, and wire-drift X-Ray diagnostics.
+  entry: bash -c 'command -v nomos >/dev/null 2>&1 && exec nomos xray . || exec npx --yes @mgantlett/nomos xray .'
+  language: system
+  pass_filenames: false
+  stages: [manual, pre-push]
