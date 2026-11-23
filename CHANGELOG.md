@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v4.31.0] - 2026-11-23
+
+> Add untyped DTO boundary read and phantom wire-key AST sensors to X-Ray and Law 4 verify; Add 8 skimmable Architectural Engine breakdowns to `CAPABILITIES.md`; Align two-tier root help, prohibited plugin discovery, and README CLI parity; Enrich all 42 GateResults and CellReports (Apache 2.0)
+
+### CLI, Distribution & Hooks (`nomos cli`, `README.md`)
+- **Align two-tier root help, prohibited plugin discovery, and README CLI parity (`INT-2242`, `SUB-3483`)**: Default nomos --help renders Cognitive Memory Commands without Agent Boot header or prohibited external plugins.
+
+### Verification & Quality Gates (`nomos verify`)
+- **Enrich all 42 GateResults and CellReports (`SUB-3509`)**: Enriched all 42 PipelineReport GateResults and 21 CellReports with canonical ProbeID, Law, and Ring metadata and documented SUB-3493 sensors in `CAPABILITIES.md`.
+- **Scope Law 4 wire-boundary gate to modified worktree files in brownfield repos (`SUB-3495`)**: Scope Law 4 wire-boundary gate to modified worktree files in brownfield repos.
+- **Add untyped DTO boundary read and phantom wire-key AST sensors to X-Ray and Law 4 verify (`INT-2248`, `SUB-3493`)**: XrayReport and XrayHotspot track `untyped_boundary_reads` and `phantom_wire_keys` with JSON Schema parity.
+
+### Release & Packaging (`README.md`)
+- **Add 8 skimmable Architectural Engine breakdowns to `CAPABILITIES.md` (`SUB-3505`)**: Added all 8 Architectural Engine breakdowns with Purpose, Mechanics, Formulas, Connections, and bijective TOC anchors to `CAPABILITIES.md`.
+- **Wire Page 0 capabilities across npm README, PyPI README, `SKILL.md`, and local MCP (`SUB-3502`)**: Wired Page 0 capabilities map and nomos://capabilities/catalog alias across npm README, PyPI README, `SKILL.md`, and local stdio MCP.
+- **Publish canonical `CAPABILITIES.md` reference and link from `README.md` and llms.txt (`SUB-3499`)**: Published canonical Page 0 `CAPABILITIES.md` SSoT and expanded `README.md` drawers and llms.txt.
+
+---
+
 ## [v4.30.0] - 2026-11-22
 
 > Upgrade Living Ledger DAG and 4-Layer Compiler to Agent-to-Agent Handoff IR; Scope subdir git ls-files, target Go; Scope IntentTraceability, IPLeak, and brownfield; Add hotspot AST symbol outlines and 22-read search circuit breaker (Apache 2.0)
