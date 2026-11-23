@@ -76,6 +76,7 @@ func (p *Pipeline) Execute(ctx *vscope.VerifyContext) (*PipelineReport, error) {
 	if gateErr != nil {
 		return nil, gateErr
 	}
+	enrichCanonicalProbeMetadata(results)
 	overallPassed := allGatesPassed(results)
 
 	elapsed := time.Since(start).Microseconds()
@@ -164,6 +165,45 @@ func countPassed(results []*vscope.GateResult) int {
 		}
 	}
 	return passed
+}
+
+type probeCellCoord struct {
+	law  int
+	ring string
+}
+
+// buildProbeCellCoords indexes each canonical ProbeID to its statutory Law and Ring.
+func buildProbeCellCoords() map[string]probeCellCoord {
+	cells := DefaultBaselineCells()
+	coords := make(map[string]probeCellCoord, len(CanonicalGateOrder))
+	for _, c := range cells {
+		for _, pid := range c.ProbeIDs {
+			coords[pid] = probeCellCoord{law: c.Law, ring: c.Ring}
+		}
+	}
+	return coords
+}
+
+// enrichCanonicalProbeMetadata backfills missing ProbeID, Law, and Ring fields from the canonical registry.
+func enrichCanonicalProbeMetadata(results []*vscope.GateResult) {
+	nameToID := GateNameToIDMap()
+	coords := buildProbeCellCoords()
+	for _, r := range results {
+		if r == nil {
+			continue
+		}
+		if r.ProbeID == "" {
+			r.ProbeID = nameToID[r.GateName]
+		}
+		if c, ok := coords[r.ProbeID]; ok {
+			if r.Law == 0 {
+				r.Law = c.law
+			}
+			if r.Ring == "" {
+				r.Ring = c.ring
+			}
+		}
+	}
 }
 
 // buildCellReports maps gate results into the 21 canonical invariant cells.

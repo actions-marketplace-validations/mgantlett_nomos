@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v4.31.0] - 2026-11-23
+
+> Catch silent JSON `snake_case` wire drift and untyped DTO escapes across Go, TypeScript, and Python; expose Page 0 capability discovery across stdio MCP, npm, PyPI, and `llms.txt` (Apache 2.0)
+
+### Agent Upgrade & New Surfaces
+- **Upgrade**: `npx -y @mgantlett/nomos@latest update --sync-workspace` (or `uvx --refresh nomos-cli xray . --json`).
+- **Active Surfaces**: `nomos verify`, `nomos xray`, `nomos mcp` (`nomos://capabilities/catalog`), `CAPABILITIES.md`.
+
+### CLI, Distribution & Hooks (`nomos cli`, `README.md`)
+- **Align two-tier root help, plugin boundary checks, and README CLI parity (`INT-2242`, `SUB-3483`)**: Default `nomos --help` renders Core Lifecycle and Cognitive Memory commands cleanly with full `README.md` flag parity.
+
+### Verification & Quality Gates (`nomos verify`, `nomos xray`)
+- **Catch untyped DTO boundary reads and phantom wire keys in X-Ray and Law 4 verify (`INT-2248`, `SUB-3493`)**: `XrayReport` and `XrayHotspot` surface `untyped_boundary_reads` (`Record<string, any|unknown>`, `dict[str, Any]`, `map[string]any`) and `phantom_wire_keys` (unmatched `snake_case` consumer reads) with JSON Schema parity.
+- **Scope Law 4 wire-boundary gate to modified worktree files in brownfield repos (`SUB-3495`)**: Diff-scoped ratcheting prevents legacy brownfield files outside the active diff from blocking unrelated PRs.
+- **Emit canonical `probe_id`, `law`, and `ring` metadata across all 42 `GateResults` and 21 `CellReports` (`SUB-3509`)**: Enables deterministic coding-agent self-repair directly from `nomos verify --json` output.
+
+### Release & Packaging (`CAPABILITIES.md`, `nomos mcp`, `llms.txt`)
+- **Publish Page 0 `CAPABILITIES.md` with 8 skimmable Architectural Engine breakdowns (`SUB-3499`, `SUB-3505`)**: Documents Purpose, Mechanics, Formulas, Connections, and bijective TOC anchors across `CAPABILITIES.md`, `README.md`, and `llms.txt`.
+- **Expose `nomos://capabilities/catalog` across stdio MCP, npm, PyPI, and `SKILL.md` (`SUB-3502`)**: Coding agents discover all 42 AST sensor probes and CLI surfaces in a single MCP resource read.
+
+---
+
 ## [v4.30.0] - 2026-11-22
 
 > Upgrade Living Ledger DAG and 4-Layer Compiler to Agent-to-Agent Handoff IR; Scope subdir git ls-files, target Go; Scope IntentTraceability, IPLeak, and brownfield; Add hotspot AST symbol outlines and 22-read search circuit breaker (Apache 2.0)

@@ -49,6 +49,31 @@ archives:
 checksum:
   name_template: 'checksums.txt'
 
+dockers_v2:
+  - id: nomos-ghcr
+    dockerfile: Dockerfile
+    ids:
+      - nomos
+    images:
+      - "ghcr.io/mgantlett/nomos"
+    tags:
+      - "{{ .Version }}"
+      - "v{{ .Major }}"
+      - "latest"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    extra_files:
+      - LICENSE
+      - NOTICE
+      - THIRD_PARTY_NOTICES.md
+    labels:
+      "org.opencontainers.image.title": "Nomos"
+      "org.opencontainers.image.description": "Deterministic engineering substrate and 42-gate AST verification layer between coding agents and Git"
+      "org.opencontainers.image.source": "https://github.com/mgantlett/nomos"
+      "org.opencontainers.image.licenses": "Apache-2.0"
+      "org.opencontainers.image.version": "{{ .Version }}"
+
 homebrew_casks:
   - name: nomos
     binaries:

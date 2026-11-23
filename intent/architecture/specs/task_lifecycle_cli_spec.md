@@ -376,6 +376,7 @@ type UpdateCheckCache struct {
 * **Hermetic Worktree Graduation (`--worktrees`)**: Scaffolds `isolation_mode: "worktree"`, provisions `worktrees/`, merges full `templates/AGENTS.md`, seeds `mneme.db`, and stages governance commits when `--local` is false.
 * **Two-Tier Root Help (`--help-agent`)**: Default `nomos --help` displays core developer commands under `Cognitive Memory Commands:` and prints a `--help-agent` footer. External plugin discovery omits entries listed in `boundary.prohibited_commands`. Passing `nomos --help-agent` or `nomos help --help-agent` unhides internal agent RPCs under `Agent Boot & Cognitive Memory Commands:` with zero Cobra aliases.
 * **Thin Binary Bootstrapper Manifests (`skills/nomos/SKILL.md`, `.claude-plugin/`, `packaging/npm/`, `packaging/pypi/`)**: Root skill, plugin, npm (`@mgantlett/nomos`), and PyPI (`nomos-cli`) launchers verify SHA-256 digests and carry zero prompt-pack rules. Ongoing enforcement delegates strictly to compiled Go hooks. `ScanLockedDependencyMutations` permits zero-dependency `packaging/*/pyproject.toml` manifests declaring `dependencies = []`.
+* **Polyglot Ecosystem Manifests (`.pre-commit-hooks.yaml`, `flake.nix`, `Dockerfile`)**: Root `.pre-commit-hooks.yaml` exposes `nomos-verify` and `nomos-xray` hooks (`pass_filenames: false`). Root `flake.nix` builds the static Go substrate binary cleanly under Nix flakes (`nix run github:mgantlett/nomos`). Root `Dockerfile` and `.goreleaser.yaml` (`dockers_v2`) publish scratch multi-arch `ghcr.io/mgantlett/nomos` OCI images (`linux/amd64`, `linux/arm64`), and `action.yml` declares GitHub Marketplace `branding`.
 
 ### 4.16 Zero-Init Brownfield X-Ray & Baseline Lock (`nomos xray` & `nomos init --baseline`)
 * **`nomos xray [dir] [--json] [--markdown] [--top <N>]`**: Scans any directory across 11 languages without writing files or mutating SQLite stores. Emits `HangoverScore` (`0-100`), `Grade`, clones, monoliths, stubs, skipped tests, and `XrayHotspot` outputs.
@@ -476,6 +477,7 @@ type UpdateCheckCache struct {
 | `TC-REL-013` | Law 6 (Pure Open-Core Commit Scope) | `commit_scope` purity audit | Contains zero sovereign UI directory special cases |
 | `TC-REL-014` | Law 4 (GoReleaser AUR Target) | `.goreleaser.yaml` AUR `nomos-bin` audit | Publishes static binary AUR package definition |
 | `TC-REL-015` | Law 4 (Arch PKGBUILD Contract) | `packaging/aur/PKGBUILD` static binary audit | Verifies Arch and Omarchy `PKGBUILD` target integrity |
+| `TC-REL-016` | Law 4 & Law 6 (Polyglot Distribution) | `.pre-commit-hooks.yaml`, `flake.nix`, `Dockerfile`, `.goreleaser.yaml`, and `action.yml` audit | Verifies `pre-commit`, Nix flake, multi-arch `ghcr.io` image, and Marketplace branding |
 
 ---
 

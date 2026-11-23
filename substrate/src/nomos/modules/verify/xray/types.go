@@ -33,9 +33,11 @@ type XrayHotspot struct {
 	MaxNesting      int      `json:"max_nesting,omitempty"`
 	Clones          int      `json:"clones,omitempty"`
 	Stubs           int      `json:"stubs,omitempty"`
-	UncheckedErrors int      `json:"unchecked_errors,omitempty"`
-	SecretLeaks     int      `json:"secret_leaks,omitempty"`
-	Reasons         []string `json:"reasons,omitempty"`
+	UncheckedErrors      int      `json:"unchecked_errors,omitempty"`
+	SecretLeaks          int      `json:"secret_leaks,omitempty"`
+	UntypedBoundaryReads int      `json:"untyped_boundary_reads,omitempty"`
+	PhantomWireKeys      int      `json:"phantom_wire_keys,omitempty"`
+	Reasons              []string `json:"reasons,omitempty"`
 }
 
 // XrayBaselineEnvelope records observed upper-bound structural metrics for baseline locking (#XrayBaselineEnvelope).
@@ -70,8 +72,10 @@ type XrayReport struct {
 	UncheckedErrors    int                  `json:"unchecked_errors"`
 	SecretPathLeaks    int                  `json:"secret_path_leaks"`
 	MagicStringGroups  int                  `json:"magic_string_groups"`
-	SecuritySinks      int                  `json:"security_sinks"`
-	InferredBoundaries int                  `json:"inferred_boundaries"`
+	SecuritySinks        int                  `json:"security_sinks"`
+	UntypedBoundaryReads int                  `json:"untyped_boundary_reads"`
+	PhantomWireKeys      int                  `json:"phantom_wire_keys"`
+	InferredBoundaries   int                  `json:"inferred_boundaries"`
 	Hotspots           []XrayHotspot        `json:"hotspots,omitempty"`
 	BaselineEnvelope   XrayBaselineEnvelope `json:"baseline_envelope"`
 	NextCommand        string               `json:"next_command"`

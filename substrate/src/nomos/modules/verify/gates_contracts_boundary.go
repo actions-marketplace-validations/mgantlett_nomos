@@ -9,6 +9,7 @@ import (
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/impact"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/intentlint"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/wiredrift"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -85,7 +86,26 @@ func (g *ContractParityGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateRe
 		}, nil
 	}
 
+	if wireIssue := evaluateScopedContractWireDrift(ctx, root); wireIssue != "" {
+		return &vscope.GateResult{
+			GateName: g.Name(), Passed: false,
+			Message: fmt.Sprintf("contract schema verification failed: %s", wireIssue),
+			Remedy:  "replace Record<string, any|unknown>, dict[str, Any], and map[string]any DTO escape hatches with typed contracts and align snake_case wire keys to compiled json tags (Law 4)",
+		}, nil
+	}
+
 	return evaluateEngineParity(g.Name(), ctx, root, len(schemaFiles), backendCount)
+}
+
+func evaluateScopedContractWireDrift(ctx *vscope.VerifyContext, root string) string {
+	modified := vscope.GetModifiedFilesInScope(ctx, root)
+	if len(modified) > 0 {
+		return wiredrift.VerifyCorpusWireBoundary(root, modified...)
+	}
+	if ctx != nil && !ctx.Strict && vscope.FileExists(filepath.Join(root, "nomos.baseline.json")) {
+		return ""
+	}
+	return wiredrift.VerifyCorpusWireBoundary(root)
 }
 
 func resolveContractSchemaFiles(root string, configured []string) []string {

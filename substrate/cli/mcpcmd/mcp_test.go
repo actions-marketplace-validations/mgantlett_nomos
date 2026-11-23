@@ -295,10 +295,14 @@ func TestMCPVersionNegotiationResourcesPromptsAndCapabilities(t *testing.T) {
 		`{"jsonrpc":"2.0","id":10,"method":"resources/read","params":{"uri":"nomos://unknown"}}`,
 		`{"jsonrpc":"2.0","id":11,"method":"server/discover"}`,
 		`{"jsonrpc":"2.0","id":12,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"1999-01-01"}}}`,
+		`{"jsonrpc":"2.0","id":13,"method":"resources/read","params":{"uri":"nomos://capabilities/catalog"}}`,
 	}
 	resps := runMCPSession(t, frames)
 	if len(resps) != len(frames) {
 		t.Fatalf("expected %d responses, got %d", len(frames), len(resps))
+	}
+	if resps[12].Error != nil {
+		t.Fatalf("expected nomos://capabilities/catalog read to succeed, got %+v", resps[12].Error)
 	}
 	assertModernMCPResponses(t, resps)
 	assertStatelessDiscoverAndMeta(t, resps[10], resps[11])

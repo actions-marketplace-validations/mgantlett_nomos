@@ -1,0 +1,7 @@
+{
+  "version": "4.31.0",
+  "x86_64-linux": "9fbefe0df1a6c1116c36eaa40ec40e121db876c6e995e6ecba30b41b2c7dcfb2",
+  "aarch64-linux": "de279a27da736597d4671809ce167d5542b413961f5ef4f0374ac9bca7c430ed",
+  "x86_64-darwin": "450a995a86ce80b3277697e2f4dcbf8a368bbf0699dadfc5665b1145ffb52853",
+  "aarch64-darwin": "fd64735d0bef0f3b6a1bbdc121caa70f391034efaac4b28a321eabf5f349950a"
+}

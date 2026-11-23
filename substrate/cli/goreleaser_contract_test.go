@@ -18,9 +18,21 @@ type strictGoReleaserV2Config struct {
 	Builds        []strictGoReleaserBuild        `yaml:"builds"`
 	Archives      []strictGoReleaserArchive      `yaml:"archives"`
 	Checksum      strictGoReleaserChecksum       `yaml:"checksum"`
+	DockersV2     []strictGoReleaserDockerV2     `yaml:"dockers_v2"`
 	HomebrewCasks []strictGoReleaserHomebrewCask `yaml:"homebrew_casks"`
 	AURs          []strictGoReleaserAUR          `yaml:"aurs"`
 	Changelog     strictGoReleaserChangelog      `yaml:"changelog"`
+}
+
+type strictGoReleaserDockerV2 struct {
+	ID         string            `yaml:"id"`
+	Dockerfile string            `yaml:"dockerfile"`
+	IDs        []string          `yaml:"ids"`
+	Images     []string          `yaml:"images"`
+	Tags       []string          `yaml:"tags"`
+	Platforms  []string          `yaml:"platforms"`
+	ExtraFiles []string          `yaml:"extra_files"`
+	Labels     map[string]string `yaml:"labels"`
 }
 
 type strictGoReleaserBefore struct {
@@ -183,7 +195,7 @@ func TestReleaseWorkflowPatchNotesRollup(t *testing.T) {
 		"## Changelog",
 		"[SUB-1858]",
 		"**Full Changelog**: https://github.com/mgantlett/nomos/compare/v4.10.0...v4.10.1",
-		"<summary><strong>Release Notes &amp; Architecture Details</strong></summary>",
+		"<summary><strong>Verified 2PC Commit Ledger</strong></summary>",
 		"GoReleaser v2 `config.AUR` Schema Parity",
 		"<summary><strong>Included <code>v4.10.0</code> Milestone Features</strong></summary>",
 		".opencode/plugins/nomos.ts",
@@ -192,7 +204,7 @@ func TestReleaseWorkflowPatchNotesRollup(t *testing.T) {
 			t.Errorf("expected v4.10.1 notes to contain %q, got:\n%s", want, patchNotes)
 		}
 	}
-	assertOrderedSubstrings(t, patchNotes, "> GoReleaser v2 AUR Schema Alignment", "## Changelog", "<details>", "Included <code>v4.10.0</code> Milestone Features")
+	assertOrderedSubstrings(t, patchNotes, "> GoReleaser v2 AUR Schema Alignment", "GoReleaser v2 `config.AUR` Schema Parity", "<details>", "## Changelog", "Included <code>v4.10.0</code> Milestone Features")
 }
 
 func assertOrderedSubstrings(t *testing.T, doc string, tokens ...string) {
@@ -217,7 +229,7 @@ func TestReleaseNotesHybridLedgerAndFailClosed(t *testing.T) {
 	if mErr != nil {
 		t.Fatalf("render v4.12.0 release notes failed: %v (%s)", mErr, minorNotes)
 	}
-	assertOrderedSubstrings(t, minorNotes, "> Zero-Config Brownfield Auto-Detection", "## Changelog", "[INT-1913]", "[SUB-1914]", "<details>", "Zero-Config Brownfield Onboarding")
+	assertOrderedSubstrings(t, minorNotes, "> Zero-Config Brownfield Auto-Detection", "Zero-Config Brownfield Onboarding", "<details>", "## Changelog", "[INT-1913]", "[SUB-1914]")
 	if !strings.Contains(minorNotes, "compare/v4.11.0...v4.12.0") {
 		t.Errorf("expected compare link v4.11.0...v4.12.0 in v4.12.0 notes")
 	}
@@ -226,13 +238,13 @@ func TestReleaseNotesHybridLedgerAndFailClosed(t *testing.T) {
 	if vErr != nil {
 		t.Fatalf("render v4.13.0 release notes failed: %v (%s)", vErr, v413Notes)
 	}
-	assertOrderedSubstrings(t, v413Notes, "> 11-Language Polyglot Architectural Obligation Proofs", "## Changelog", "compare/v4.12.1...v4.13.0", "<details>", "architecture_boundaries")
+	assertOrderedSubstrings(t, v413Notes, "> 11-Language Polyglot Architectural Obligation Proofs", "architecture_boundaries", "<details>", "## Changelog", "compare/v4.12.1...v4.13.0")
 
 	v4131Notes, p1Err := runRenderReleaseNotes(t, repoRoot, "v4.13.1")
 	if p1Err != nil {
 		t.Fatalf("render v4.13.1 release notes failed: %v (%s)", p1Err, v4131Notes)
 	}
-	assertOrderedSubstrings(t, v4131Notes, "> Zero-Ceremony Multi-Agent Onboarding Invisibility", "## Changelog", "[SUB-2133]", "compare/v4.13.0...v4.13.1", "<details>", "Included <code>v4.13.0</code> Milestone Features")
+	assertOrderedSubstrings(t, v4131Notes, "> Zero-Ceremony Multi-Agent Onboarding Invisibility", "<summary><strong>Verified 2PC Commit Ledger</strong></summary>", "\n## Changelog\n", "* 7ad6bc17eaad5266d9488ba80ba713ea0855bc92 [SUB-2133]", "compare/v4.13.0...v4.13.1", "Included <code>v4.13.0</code> Milestone Features")
 
 	v414Notes, v414Err := runRenderReleaseNotes(t, repoRoot, "v4.14.0")
 	if v414Err != nil {
@@ -242,16 +254,16 @@ func TestReleaseNotesHybridLedgerAndFailClosed(t *testing.T) {
 		t,
 		v414Notes,
 		"> 5-Provider Ambient Lifecycle Parity",
-		"## Changelog",
-		"### Intent & Specifications",
-		"### CLI, Distribution & Hooks",
-		"[SUB-2188]",
-		"### Verification & Quality Gates",
-		"### Task, Memory & Session",
-		"### Release & Packaging",
-		"compare/v4.13.2...v4.14.0",
-		"<details>",
 		"brew install --cask mgantlett/tap/nomos",
+		"<summary><strong>Verified 2PC Commit Ledger</strong></summary>",
+		"\n## Changelog\n",
+		"\n### Intent & Specifications\n",
+		"\n### CLI, Distribution & Hooks\n",
+		"[SUB-2188]",
+		"\n### Verification & Quality Gates\n",
+		"\n### Task, Memory & Session\n",
+		"\n### Release & Packaging\n",
+		"compare/v4.13.2...v4.14.0",
 	)
 
 	genesisNotes, gErr := runRenderReleaseNotes(t, repoRoot, "v4.0.0")
@@ -283,19 +295,18 @@ func TestReleaseNotesSubpackageScopeRouting(t *testing.T) {
 		t,
 		v424Notes,
 		"> Add polyglot design-slop",
-		"## Changelog",
-		"### Intent & Specifications",
+		"<summary><strong>Verified 2PC Commit Ledger</strong></summary>",
+		"\n## Changelog\n",
+		"\n### Intent & Specifications\n",
 		"[INT-2126]",
-		"### CLI, Distribution & Hooks",
-		"[SUB-3201]",
-		"[SUB-3235]",
-		"### Verification & Quality Gates",
+		"\n### CLI, Distribution & Hooks\n",
+		"* 4a4f2b76fbd252492555de63ae253e81f3d8e02a [SUB-3201]",
+		"* 088d565dbec99d315d17c2715b7a9aaa83c3f02e [SUB-3235]",
+		"\n### Verification & Quality Gates\n",
 		"[SUB-3241]",
-		"### Release & Packaging",
+		"\n### Release & Packaging\n",
 		"[SUB-3202]",
 		"compare/v4.23.0...v4.24.0",
-		"<details>",
-		"<summary><strong>Release Notes &amp; Architecture Details</strong></summary>",
 	)
 
 	v4221Notes, v4221Err := runRenderReleaseNotes(t, repoRoot, "v4.22.1")
@@ -305,10 +316,45 @@ func TestReleaseNotesSubpackageScopeRouting(t *testing.T) {
 	assertOrderedSubstrings(
 		t,
 		v4221Notes,
-		"## Changelog",
-		"### CLI, Distribution & Hooks",
-		"### Verification & Quality Gates",
+		"<summary><strong>Verified 2PC Commit Ledger</strong></summary>",
+		"\n## Changelog\n",
+		"\n### CLI, Distribution & Hooks\n",
+		"\n### Verification & Quality Gates\n",
 		"[SUB-3169]",
-		"### Release & Packaging",
+		"\n### Release & Packaging\n",
 	)
+}
+
+// @verifies TC-REL-016
+func TestPolyglotDistributionManifestContracts(t *testing.T) {
+	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("resolve repo root: %v", err)
+	}
+	rawGr, err := os.ReadFile(filepath.Join(repoRoot, ".goreleaser.yaml"))
+	if err != nil {
+		t.Fatalf("read .goreleaser.yaml: %v", err)
+	}
+	cfg, err := decodeStrictGoReleaserV2(rawGr)
+	if err != nil {
+		t.Fatalf("decode .goreleaser.yaml: %v", err)
+	}
+	if len(cfg.DockersV2) != 1 || cfg.DockersV2[0].Images[0] != "ghcr.io/mgantlett/nomos" {
+		t.Fatalf("expected dockers_v2 ghcr.io/mgantlett/nomos target, got %+v", cfg.DockersV2)
+	}
+	for _, rel := range []struct {
+		file  string
+		token string
+	}{
+		{".pre-commit-hooks.yaml", "id: nomos-verify"},
+		{"flake.nix", "packaging/nix/hashes.json"},
+		{"packaging/nix/hashes.json", "x86_64-linux"},
+		{"Dockerfile", "FROM scratch"},
+		{"action.yml", "icon: 'shield'"},
+	} {
+		data, rErr := os.ReadFile(filepath.Join(repoRoot, rel.file))
+		if rErr != nil || !strings.Contains(string(data), rel.token) {
+			t.Fatalf("manifest %s missing %q (err=%v)", rel.file, rel.token, rErr)
+		}
+	}
 }

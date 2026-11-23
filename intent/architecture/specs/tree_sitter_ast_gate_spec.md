@@ -315,9 +315,11 @@ type XrayHotspot struct {
 	MaxNesting      int      `json:"max_nesting,omitempty"`
 	Clones          int      `json:"clones,omitempty"`
 	Stubs           int      `json:"stubs,omitempty"`
-	UncheckedErrors int      `json:"unchecked_errors,omitempty"`
-	SecretLeaks     int      `json:"secret_leaks,omitempty"`
-	Reasons         []string `json:"reasons,omitempty"`
+	UncheckedErrors      int      `json:"unchecked_errors,omitempty"`
+	SecretLeaks          int      `json:"secret_leaks,omitempty"`
+	UntypedBoundaryReads int      `json:"untyped_boundary_reads,omitempty"`
+	PhantomWireKeys      int      `json:"phantom_wire_keys,omitempty"`
+	Reasons              []string `json:"reasons,omitempty"`
 }
 
 // XrayBaselineEnvelope records observed upper-bound structural metrics for baseline locking (#XrayBaselineEnvelope).
@@ -352,8 +354,10 @@ type XrayReport struct {
 	UncheckedErrors    int                  `json:"unchecked_errors"`
 	SecretPathLeaks    int                  `json:"secret_path_leaks"`
 	MagicStringGroups  int                  `json:"magic_string_groups"`
-	SecuritySinks      int                  `json:"security_sinks"`
-	InferredBoundaries int                  `json:"inferred_boundaries"`
+	SecuritySinks        int                  `json:"security_sinks"`
+	UntypedBoundaryReads int                  `json:"untyped_boundary_reads"`
+	PhantomWireKeys      int                  `json:"phantom_wire_keys"`
+	InferredBoundaries   int                  `json:"inferred_boundaries"`
 	Hotspots           []XrayHotspot        `json:"hotspots,omitempty"`
 	BaselineEnvelope   XrayBaselineEnvelope `json:"baseline_envelope"`
 	NextCommand        string               `json:"next_command"`
@@ -396,6 +400,12 @@ Sibling clone normalization maps receiver calls deterministically alongside lite
 
 `DetectPolyglotDesignSlop` also rejects modules repeating four-plus `isinstance` or `typeof` early-return guards instead of table-driven dispatch. `detectCWE89SQLSink` exempts identifier-quoted DDL queries while rejecting interpolated value literals and unquoted table names. `walkExplicitRelativeFiles` skips intermediate `.venv`, `venv`, `node_modules`, and `.tmp` directory segments during worktree scans.
 
+### 4.7 Untyped DTO Boundary Escape & Cross-Language Phantom Wire-Key Sensors (`substrate/src/nomos/modules/verify/astdebt/boundary_wire_drift.go`)
+`ScanCorpusBoundaryWireDrift` scans non-test Go, TypeScript, Svelte, and Python files for wire-schema drift (`#BoundaryDriftFinding`).
+
+1. **Untyped DTO Boundary Escapes (`untyped_boundary_read`):** Exported `*Result`, `*Response`, `*Payload`, `*Snapshot`, `*Report`, and `*DTO` contracts reject untyped domain maps. Rejected types include `Record<string, any>`, `Record<string, unknown>`, `dict[str, Any]`, `map[string]any`, and `map[string]interface{}`. Explicit open-schema bags (`inputSchema`, `outputSchema`, `structuredContent`, `schema`, `metadata`, `headers`, `params`, `args`, `arguments`, `extra`) remain exempt.
+2. **Phantom Wire Keys (`phantom_wire_key`):** The scanner indexes Go `json:"..."` tags plus TypeScript and Python contract fields. Consumer `snake_case` member reads on untyped variables must match at least one declared wire key. When zero keys match and a stem suffix matches (`r.top_hotspots` vs `hotspots`), `ScanRepository` and `ContractParityGate` reject the mismatch.
+
 ---
 
 ## 5. Table-Driven Verification Vectors
@@ -436,6 +446,7 @@ The following table-driven verification vectors validate the Tree-sitter AST Gat
 | `TC-TS-24` | `polyglot` | Four-plus `isinstance`/`typeof` return guards, quoted DDL, and `.venv` symlinks | Return guards, SQL quoting, intermediate paths | Sprawl flagged; quoted DDL and `.venv` pass | `FAIL` | Return-guard sprawl rejected while quoted DDL and `.venv` pass |
 | `TC-XRAY-01` | `polyglot` | Uninitialized Go, Python, and TS fixture with clones and stubs | `xray.ScanRepository` aggregates polyglot metrics and hotspots | Non-zero `HangoverScore` and `BaselineEnvelope` | `PASS` | Read-only scan writes zero files or SQLite rows |
 | `TC-XRAY-02` | `polyglot` | `XrayReport` serialized via JSON and Markdown formatters | Relative hotspot paths emitted | Zero host home-directory literals | `PASS` | Law 5 path scrubbing holds across `XrayReport` outputs |
+| `TC-XRAY-03` | `polyglot` | Exported `*Result` DTO using `Record<string, unknown>` plus `r.top_hotspots` read | `ScanCorpusBoundaryWireDrift` flags untyped DTO escape and phantom wire key | `UntypedBoundaryReads == 1`, `PhantomWireKeys == 1`, tag `hotspots` | `FAIL` | Law 4 rejects untyped DTO escapes and phantom wire keys |
 | `TC-MUT-02` | `go` | Modified Go function tested with boundary assertions | `prproof.EvaluateDiffMutations` flips AST operators | `KillScorePct == 100` | `PASS` | Boundary tests kill every diff AST mutant |
 
 ---

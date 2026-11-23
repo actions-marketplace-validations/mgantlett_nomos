@@ -1,0 +1,5 @@
+FROM scratch
+ARG TARGETPLATFORM
+COPY LICENSE NOTICE THIRD_PARTY_NOTICES.md /
+COPY $TARGETPLATFORM/nomos /usr/local/bin/nomos
+ENTRYPOINT ["/usr/local/bin/nomos"]
