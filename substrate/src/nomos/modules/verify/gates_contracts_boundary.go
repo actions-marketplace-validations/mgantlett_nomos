@@ -86,7 +86,7 @@ func (g *ContractParityGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateRe
 		}, nil
 	}
 
-	if wireIssue := wiredrift.VerifyCorpusWireBoundary(root); wireIssue != "" {
+	if wireIssue := evaluateScopedContractWireDrift(ctx, root); wireIssue != "" {
 		return &vscope.GateResult{
 			GateName: g.Name(), Passed: false,
 			Message: fmt.Sprintf("contract schema verification failed: %s", wireIssue),
@@ -95,6 +95,17 @@ func (g *ContractParityGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateRe
 	}
 
 	return evaluateEngineParity(g.Name(), ctx, root, len(schemaFiles), backendCount)
+}
+
+func evaluateScopedContractWireDrift(ctx *vscope.VerifyContext, root string) string {
+	modified := vscope.GetModifiedFilesInScope(ctx, root)
+	if len(modified) > 0 {
+		return wiredrift.VerifyCorpusWireBoundary(root, modified...)
+	}
+	if ctx != nil && !ctx.Strict && vscope.FileExists(filepath.Join(root, "nomos.baseline.json")) {
+		return ""
+	}
+	return wiredrift.VerifyCorpusWireBoundary(root)
 }
 
 func resolveContractSchemaFiles(root string, configured []string) []string {

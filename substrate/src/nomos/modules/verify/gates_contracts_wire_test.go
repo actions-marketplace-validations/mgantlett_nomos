@@ -8,6 +8,7 @@ import (
 
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/config"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/wiredrift"
 )
 
 // TestContractParityGate_RejectsUntypedBoundaryAndPhantomWireKey verifies TC-XRAY-03 in Law 4.
@@ -61,5 +62,11 @@ governance:
 	}
 	if !strings.Contains(res.Message, "untyped_boundary_read") || !strings.Contains(res.Message, "closest wire tag: hotspots") {
 		t.Fatalf("expected untyped_boundary_read and closest wire tag hotspots in message, got: %s", res.Message)
+	}
+	if scoped := wiredrift.VerifyCorpusWireBoundary(tempDir, "substrate/src/nomos/report.go"); scoped != "" {
+		t.Fatalf("expected untouched legacy web/view.ts to be excluded when diff only modifies report.go, got: %s", scoped)
+	}
+	if scoped := wiredrift.VerifyCorpusWireBoundary(tempDir, "web/view.ts"); scoped == "" {
+		t.Fatal("expected modified web/view.ts to fail VerifyCorpusWireBoundary")
 	}
 }

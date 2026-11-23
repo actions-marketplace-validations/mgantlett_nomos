@@ -1,6 +1,8 @@
 package wiredrift_test
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -114,5 +116,16 @@ export function readClean(r: ScanReportPayload): number {
 				t.Fatalf("expected closest wire tag %q in %v", tc.wantClosest, formatted)
 			}
 		})
+	}
+
+	tmp := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmp, "dto.go"), []byte("package p\ntype BadPayload struct {\n\tBody map[string]any `json:\"body\"`\n}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if got := wiredrift.VerifyCorpusWireBoundary(tmp, "other.go"); got != "" {
+		t.Fatalf("expected empty scoped result on unmodified file, got %q", got)
+	}
+	if got := wiredrift.VerifyCorpusWireBoundary(tmp, "dto.go"); got == "" {
+		t.Fatal("expected non-empty scoped result on modified dto.go")
 	}
 }

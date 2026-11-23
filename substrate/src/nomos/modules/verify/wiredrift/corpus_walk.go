@@ -20,10 +20,10 @@ var skippedContractDirs = map[string]bool{
 	".svelte-kit": true, "testdata": true, "__tests__": true, "tests": true, "test": true,
 }
 
-// VerifyCorpusWireBoundary scans root for untyped DTO escapes and phantom wire keys (@intent tree_sitter_ast_gate_spec.md #BoundaryDriftFinding).
-func VerifyCorpusWireBoundary(root string) string {
+// VerifyCorpusWireBoundary scans root for untyped DTO escapes and phantom wire keys, scoping failures to modifiedRel when non-empty (@intent tree_sitter_ast_gate_spec.md #BoundaryDriftFinding).
+func VerifyCorpusWireBoundary(root string, modifiedRel ...string) string {
 	sources := collectContractCorpusSources(root)
-	findings := ScanCorpusBoundaryWireDrift(sources)
+	findings := filterFindingsByScope(ScanCorpusBoundaryWireDrift(sources), modifiedRel)
 	if len(findings) == 0 {
 		return ""
 	}
@@ -36,6 +36,23 @@ func VerifyCorpusWireBoundary(root string) string {
 		parts = append(parts, FormatBoundaryDriftFinding(findings[i]))
 	}
 	return fmt.Sprintf("detected %d wire-boundary contract drift violation(s): %s", len(findings), strings.Join(parts, "; "))
+}
+
+func filterFindingsByScope(findings []BoundaryDriftFinding, modifiedRel []string) []BoundaryDriftFinding {
+	if len(modifiedRel) == 0 || len(findings) == 0 {
+		return findings
+	}
+	allowed := make(map[string]bool, len(modifiedRel))
+	for _, rel := range modifiedRel {
+		allowed[filepath.ToSlash(rel)] = true
+	}
+	var out []BoundaryDriftFinding
+	for _, f := range findings {
+		if allowed[filepath.ToSlash(f.File)] {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 func collectContractCorpusSources(root string) map[string][]byte {
