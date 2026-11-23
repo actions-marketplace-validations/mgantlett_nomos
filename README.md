@@ -88,16 +88,21 @@ Every single-repository governance capability ships locally in the open-source `
 # Linux, macOS & WSL2 (SHA-256 verified release binary):
 curl -fsSL https://sophialabs.ca/install | bash
 
-# macOS & Linux (Homebrew):
+# macOS & Linux (Homebrew) or Windows (Scoop):
 brew install --cask mgantlett/tap/nomos
+scoop bucket add mgantlett https://github.com/mgantlett/scoop-bucket && scoop install nomos
+
+# Polyglot Tool Version Managers (mise / aqua):
+mise use -g aqua:mgantlett/nomos
 
 # Zero-install Node.js / Python Cloud Agent Sandbox Launchers (SHA-256 verified):
 npx --yes @mgantlett/nomos xray .
 uvx nomos-cli xray .
 
-# NixOS / Nix Flakes & Multi-Arch OCI Container (GitLab CI / Buildkite / Dagger):
+# NixOS / Nix Flakes, Dev Containers & Multi-Arch OCI Container (Codespaces / GitLab CI / Dagger):
 nix run github:mgantlett/nomos -- xray .
 docker run --rm -v "$PWD:/repo" -w /repo ghcr.io/mgantlett/nomos:v4 xray .
+# Devcontainer Feature (.devcontainer/devcontainer.json): "ghcr.io/mgantlett/devcontainer-features/nomos:1": {}
 
 # Arch Linux / Omarchy (verified PKGBUILD):
 (tmp="$(mktemp -d)" && cd "$tmp" && curl -fsSLO https://raw.githubusercontent.com/mgantlett/nomos/main/packaging/aur/PKGBUILD && makepkg -si && rm -rf "$tmp")

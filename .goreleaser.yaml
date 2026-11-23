@@ -94,6 +94,42 @@ homebrew_casks:
             run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/nomos"]
           end
 
+scoops:
+  - name: nomos
+    directory: bucket
+    homepage: "https://github.com/mgantlett/nomos"
+    description: "Deterministic engineering substrate and 42-gate AST verification layer between coding agents and Git"
+    license: "Apache-2.0"
+    repository:
+      owner: mgantlett
+      name: scoop-bucket
+      branch: main
+      token: '{{ .Env.SCOOP_BUCKET_GITHUB_TOKEN }}'
+    skip_upload: '{{ if index .Env "SCOOP_BUCKET_GITHUB_TOKEN" }}auto{{ else }}true{{ end }}'
+
+winget:
+  - name: nomos
+    publisher: "Mark Gantlett"
+    package_identifier: mgantlett.nomos
+    short_description: "Deterministic Go substrate and 42-gate AST verification layer for coding agents"
+    description: "Deterministic engineering substrate and 42-gate AST verification layer between coding agents and Git"
+    homepage: "https://github.com/mgantlett/nomos"
+    license: "Apache-2.0"
+    license_url: "https://github.com/mgantlett/nomos/blob/main/LICENSE"
+    release_notes_url: "https://github.com/mgantlett/nomos/releases/tag/{{ .Tag }}"
+    tags:
+      - coding-agents
+      - ast
+      - verification
+      - mcp
+      - cli
+    repository:
+      owner: mgantlett
+      name: winget-pkgs
+      branch: "nomos-{{ .Version }}"
+      token: '{{ .Env.WINGET_GITHUB_TOKEN }}'
+    skip_upload: '{{ if index .Env "WINGET_GITHUB_TOKEN" }}auto{{ else }}true{{ end }}'
+
 aurs:
   - name: nomos-bin
     homepage: "https://github.com/mgantlett/nomos"

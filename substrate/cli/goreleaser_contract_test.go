@@ -20,8 +20,31 @@ type strictGoReleaserV2Config struct {
 	Checksum      strictGoReleaserChecksum       `yaml:"checksum"`
 	DockersV2     []strictGoReleaserDockerV2     `yaml:"dockers_v2"`
 	HomebrewCasks []strictGoReleaserHomebrewCask `yaml:"homebrew_casks"`
+	Scoops        []strictGoReleaserScoop        `yaml:"scoops"`
+	Winget        []strictGoReleaserWinget       `yaml:"winget"`
 	AURs          []strictGoReleaserAUR          `yaml:"aurs"`
 	Changelog     strictGoReleaserChangelog      `yaml:"changelog"`
+}
+
+type strictGoReleaserScoopRepo struct {
+	Owner, Name, Branch, Token string
+}
+
+type strictGoReleaserScoop struct {
+	Name, Directory, Homepage, Description, License string
+	SkipUpload                                      string `yaml:"skip_upload"`
+	Repository                                      strictGoReleaserScoopRepo
+}
+
+type strictGoReleaserWinget struct {
+	Name, Publisher, Description, Homepage, License string
+	PackageIdentifier                               string `yaml:"package_identifier"`
+	ShortDescription                                string `yaml:"short_description"`
+	LicenseURL                                      string `yaml:"license_url"`
+	ReleaseNotesURL                                 string `yaml:"release_notes_url"`
+	Tags                                            []string
+	SkipUpload                                      string `yaml:"skip_upload"`
+	Repository                                      strictGoReleaserScoopRepo
 }
 
 type strictGoReleaserDockerV2 struct {
@@ -341,6 +364,9 @@ func TestPolyglotDistributionManifestContracts(t *testing.T) {
 	}
 	if len(cfg.DockersV2) != 1 || cfg.DockersV2[0].Images[0] != "ghcr.io/mgantlett/nomos" {
 		t.Fatalf("expected dockers_v2 ghcr.io/mgantlett/nomos target, got %+v", cfg.DockersV2)
+	}
+	if len(cfg.Scoops) != 1 || cfg.Scoops[0].Repository.Name != "scoop-bucket" || len(cfg.Winget) != 1 || cfg.Winget[0].PackageIdentifier != "mgantlett.nomos" {
+		t.Fatalf("expected scoops (scoop-bucket) and winget (mgantlett.nomos) targets, got scoops=%+v winget=%+v", cfg.Scoops, cfg.Winget)
 	}
 	for _, rel := range []struct {
 		file  string
