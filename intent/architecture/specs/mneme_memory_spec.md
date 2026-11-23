@@ -96,11 +96,20 @@ type SearchOptions struct {
 	ReadOnly         bool
 }
 
-// SearchResult pairs a matched Memory record with its hybrid relevance score (#SearchResult).
+// RecallGuardrail summarizes a superseded ancestor or topic dead-end warning attached during recall (#RecallGuardrail).
+type RecallGuardrail struct {
+	MemoryID int        `json:"memory_id"`
+	Kind     MemoryKind `json:"kind"`
+	Relation string     `json:"relation"`
+	Summary  string     `json:"summary"`
+}
+
+// SearchResult pairs a matched Memory record with its hybrid relevance score and lineage guardrails (#SearchResult).
 type SearchResult struct {
-	Memory  *Memory `json:"memory"`
-	Score   float64 `json:"score"`
-	Snippet string  `json:"snippet"`
+	Memory     *Memory           `json:"memory"`
+	Score      float64           `json:"score"`
+	Snippet    string            `json:"snippet"`
+	Guardrails []RecallGuardrail `json:"guardrails,omitempty"`
 }
 
 // GateTrapEntry records a buffered quality gate failure during a task session (#GateTrapEntry).
@@ -209,6 +218,7 @@ $$\text{Score} = (0.75 \times \text{CosineSimilarity} + 0.25 \times \text{Lexica
 - **Dual-Gate Filesystem Grounding & Convention Consolidation (`SweepRepoPitfallHygiene`, `ConsolidateConventionAxioms`)**: Sweeps and read-time `os.Stat` checks suppress missing scopes, absent `Trap` or `dead_end` files, and healed ceilings. Sweeps tombstone bare headers and polyglot runner assertions (`24h` TTL) while retiring cooled `1x` guardrails (`> 14d`) and `dead_end` notes (`> 7d`). Convention pitfalls across two scopes or three hits consolidate into scrubbed `axiom:<gate>` records and retire `pattern:habit:*` clones. Zero-recall directory pattern overflows beyond three per scope retire after `30d`.
 - **Repository Axiom Handshake Recall (`RecallRepoAxioms`)**: Handshake and task inception surface up to two active repository-scoped `axiom` records ranked by query similarity and reinforcement. Active task sessions reinforce recalled axioms at most once per `(task_id, memory_id)`.
 - **JIT Post-Edit Pitfall Recall & Trunk Pacing (`nomos hook post-tool`)**: First worktree mutation in `relDir` recalls matching directory pitfalls once via `RecallRepoPitfallsForTask` and records `relDir` in session trace. Trunk sessions (`wtRoot == ""`, `SessionID != ""`) track consecutive exploratory reads per session and emit pacing advisories at configured thresholds.
+- **Lineage & Dead-End Recall Guardrails (`RecallGuardrail`)**: `SearchWithOptions` attaches up to three `RecallGuardrail` warnings onto recalled `decision`, `axiom`, `architecture`, and `pattern` matches. Guardrails surface non-duplicate `SupersededBy` ancestors (`superseded_lineage`) and active same-topic `dead_end` or `pitfall` entries (`topic_dead_end`). `Store.Maintain` preserves non-duplicate `superseded` ancestors linked to active successors beyond the 30-day retention window while purging duplicate clones and `tombstoned` rows.
 
 ---
 
@@ -281,12 +291,14 @@ $$\text{Score} = (0.75 \times \text{CosineSimilarity} + 0.25 \times \text{Lexica
 | `TC-MEM-17` | Clean-streak homeostatic cooling | Head pitfall reaches `access_count >= 5` consecutive clean recalls | Cools `ResolveHotScopeReflex` to `nil` and suppresses `graduation_candidates` nagging. |
 | `TC-MEM-18` | Built-in AST banner suppression | Built-in AST pitfall recurs `>= 2` times during handshake | Excluded from `nomos.yaml` graduation banners; policy pitfalls remain surfaced. |
 | `TC-MEM-19` | Dual-gate suppression & `dismiss --stale` | Deleted pattern scope recalled before sync, then `nomos mem dismiss --stale` | Suppressed immediately via `os.Stat` and tombstoned with receipts on `--stale`. |
+| `TC-MEM-20` | Lineage & dead-end recall guardrails | `SearchWithOptions` recalls evolved `decision` with ancestor and same-topic `dead_end` | Attaches `superseded_lineage` and `topic_dead_end` guardrails; skips duplicate clones. |
+| `TC-MEM-21` | Evolved lineage retention in `Maintain` | `Store.Maintain` evaluates `> 30d` evolved ancestor, clone, and `tombstoned` row | Preserves evolved `SupersededBy` ancestor; purges expired clones and `tombstoned` rows. |
 
 ---
 
 ## 7. Cross-Plane Traceability & DoD Verification
 
-- **Intent Lineage**: `INT-735`, `INT-855`, `INT-899`, `INT-926`, `INT-927`, `INT-1944`, `INT-1956`, `INT-1962`, `INT-1984`, `INT-2055`, `INT-2192`, `INT-2206`, `INT-2208`.
-- **Substrate SSoT**: `SUB-1213`, `SUB-1524`, `SUB-1680`, `SUB-2157`, `SUB-2203`, `SUB-2211`, `SUB-2279`, `SUB-3099`, `SUB-3383`, `SUB-3404`, `SUB-3407` (`substrate/src/nomos/modules/mem/*.go`, `substrate/src/nomos/modules/verify/fast_radar.go`, `substrate/cli/maintenance_hook.go`, `substrate/cli/inspectcmd/cmd_mem_dismiss.go`).
+- **Intent Lineage**: `INT-735`, `INT-855`, `INT-899`, `INT-926`, `INT-927`, `INT-1944`, `INT-1956`, `INT-1962`, `INT-1984`, `INT-2055`, `INT-2192`, `INT-2206`, `INT-2208`, `INT-2260`.
+- **Substrate SSoT**: `SUB-1213`, `SUB-1524`, `SUB-1680`, `SUB-2157`, `SUB-2203`, `SUB-2211`, `SUB-2279`, `SUB-3099`, `SUB-3383`, `SUB-3404`, `SUB-3407`, `SUB-3533` (`substrate/src/nomos/modules/mem/*.go`, `substrate/src/nomos/modules/verify/fast_radar.go`, `substrate/cli/maintenance_hook.go`, `substrate/cli/inspectcmd/cmd_mem_dismiss.go`).
 - **Canonical 7x3 Matrix Coordinates**: `Cell 1.1 (boundary)`, `Cell 4.1 (intent_traceability)`, `Cell 6.2 (zero_alias)`.
 - **Deterministic Verification**: `nomos verify` executes unit tests across `substrate/src/nomos/modules/mem/` and validates Database Encapsulation and CLI zero-alias invariants with exit code `0`.
