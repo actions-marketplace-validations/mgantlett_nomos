@@ -21,7 +21,7 @@ const (
 	mcpMetaVersionKey           = "io.modelcontextprotocol/protocolVersion"
 	rpcErrInvalidParams         = -32602
 	rpcErrUnsupportedVersion    = -32022
-	mcpServerInstructions       = "Read-only local Nomos MCP server. Use nomos_handshake, nomos_xray, nomos_verify_impact, nomos_capabilities, and nomos_mem_recall to inspect repository governance without mutating files."
+	mcpServerInstructions       = "Read-only local Nomos MCP server. Use nomos_capabilities (or resource nomos://capabilities / nomos://capabilities/catalog, canonical map: https://sophialabs.ca/docs/specs/capabilities.md), nomos_handshake, nomos_xray, nomos_verify_impact, and nomos_mem_recall to inspect repository governance without mutating files."
 )
 
 func supportedMCPVersions() []string {
@@ -234,7 +234,7 @@ func handleResourceRead(req MCPRequest) MCPResponse {
 			return errorResponse(req.ID, rpcErrInvalidParams, raw)
 		}
 		text = raw
-	case "nomos://capabilities":
+	case "nomos://capabilities", "nomos://capabilities/catalog":
 		raw, isErr := execCapabilitiesTool(nil)
 		if isErr {
 			return errorResponse(req.ID, rpcErrInvalidParams, raw)

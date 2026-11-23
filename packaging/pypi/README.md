@@ -13,6 +13,9 @@ uvx nomos-cli init --local
 
 # Launch the local read-only stdio MCP server:
 uvx nomos-cli mcp
+
+# Inspect all 66 compiled capabilities, 8 engines, and 42 gate ProbeIDs (--json):
+uvx nomos-cli capabilities
 ```
 
 Or install `nomos` onto your Python environment `PATH`:
@@ -27,6 +30,13 @@ Or attach directly to the zero-install remote Streamable HTTP MCP endpoint:
 ```bash
 claude mcp add --transport http nomos https://sophialabs.ca/mcp
 ```
+
+## Complete Capabilities & Subsystem Map (Page 0 SSoT)
+
+- **Developer Docs (Interactive Diagram & TOC):** [https://sophialabs.ca/docs/specs/capabilities](https://sophialabs.ca/docs/specs/capabilities)
+- **AI Agent Raw Markdown (`text/markdown`):** [https://sophialabs.ca/docs/specs/capabilities.md](https://sophialabs.ca/docs/specs/capabilities.md)
+- **GitHub Canonical Source:** [`CAPABILITIES.md`](https://github.com/mgantlett/nomos/blob/main/CAPABILITIES.md)
+- **MCP Resource URI (Local `stdio` & Remote HTTP):** `nomos://capabilities/catalog` (`nomos://capabilities`)
 
 ## SHA-256 Integrity Verification
 
