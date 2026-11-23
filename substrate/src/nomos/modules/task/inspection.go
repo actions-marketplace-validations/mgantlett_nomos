@@ -9,37 +9,45 @@ import (
 
 // TaskInspectionRecord defines the DTO contract emitted by nomos task show (#TaskInspectionRecord).
 type TaskInspectionRecord struct {
-	Key          string   `json:"key"`
-	Title        string   `json:"title"`
-	Status       Status   `json:"status"`
-	Plane        string   `json:"plane"`
-	Project      string   `json:"project,omitempty"`
-	Tier         Tier     `json:"tier"`
-	Priority     int      `json:"priority"`
-	TwinKey      string   `json:"twin_key,omitempty"`
-	BlockedBy    []string `json:"blocked_by,omitempty"`
-	Blocks       []string `json:"blocks,omitempty"`
-	WorktreePath string   `json:"worktree_path,omitempty"`
-	BranchName   string   `json:"branch_name,omitempty"`
-	Description  string   `json:"description"`
+	Key                string   `json:"key"`
+	Title              string   `json:"title"`
+	Status             Status   `json:"status"`
+	Plane              string   `json:"plane"`
+	Project            string   `json:"project,omitempty"`
+	Tier               Tier     `json:"tier"`
+	Priority           int      `json:"priority"`
+	TwinKey            string   `json:"twin_key,omitempty"`
+	ScopePaths         []string `json:"scope_paths,omitempty"`
+	Obligations        []string `json:"obligations,omitempty"`
+	AcceptanceCriteria []string `json:"acceptance_criteria,omitempty"`
+	VerifyCmd          string   `json:"verify_cmd,omitempty"`
+	BlockedBy          []string `json:"blocked_by,omitempty"`
+	Blocks             []string `json:"blocks,omitempty"`
+	WorktreePath       string   `json:"worktree_path,omitempty"`
+	BranchName         string   `json:"branch_name,omitempty"`
+	Description        string   `json:"description"`
 }
 
 // BuildInspectionRecord constructs a complete TaskInspectionRecord.
 func BuildInspectionRecord(task TaskRecord, blockedBy, blocks []string, worktreePath, branchName string) TaskInspectionRecord {
 	return TaskInspectionRecord{
-		Key:          task.Key,
-		Title:        task.Title,
-		Status:       task.Status,
-		Plane:        task.Plane,
-		Project:      task.Project,
-		Tier:         task.Tier,
-		Priority:     task.Priority,
-		TwinKey:      task.TwinKey,
-		BlockedBy:    blockedBy,
-		Blocks:       blocks,
-		WorktreePath: worktreePath,
-		BranchName:   branchName,
-		Description:  task.Description,
+		Key:                task.Key,
+		Title:              task.Title,
+		Status:             task.Status,
+		Plane:              task.Plane,
+		Project:            task.Project,
+		Tier:               task.Tier,
+		Priority:           task.Priority,
+		TwinKey:            task.TwinKey,
+		ScopePaths:         task.ScopePaths,
+		Obligations:        task.Obligations,
+		AcceptanceCriteria: task.AcceptanceCriteria,
+		VerifyCmd:          task.VerifyCmd,
+		BlockedBy:          blockedBy,
+		Blocks:             blocks,
+		WorktreePath:       worktreePath,
+		BranchName:         branchName,
+		Description:        task.Description,
 	}
 }
 

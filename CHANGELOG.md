@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v4.30.0] - 2026-11-22
+
+> Upgrade Living Ledger DAG and 4-Layer Compiler to Agent-to-Agent Handoff IR; Scope subdir git ls-files, target Go; Scope IntentTraceability, IPLeak, and brownfield; Add hotspot AST symbol outlines and 22-read search circuit breaker (Apache 2.0)
+
+### CLI, Distribution & Hooks (`nomos cli`, `nomos hook`)
+- **Upgrade Living Ledger DAG and 4-Layer Compiler to Agent-to-Agent Handoff IR (`INT-2226`, `SUB-3456`)**: Structured TaskRecord IR fields (`scope_paths`, obligations, `acceptance_criteria`, `verify_cmd`) persist in SQLite while auto-rendering read-only Markdown Description.
+- **Add hotspot AST symbol outlines and 22-read search circuit breaker (`INT-2218`, `SUB-3433`)**: Append Tree-sitter function line-range outlines on >=500-LOC hotspot reads and pause broad Grep/Glob/list_dir calls at >=22 consecutive zero-edit reads in active worktrees/branches.
+
+### Verification & Quality Gates (`nomos verify`)
+- **Scope IntentTraceability, IPLeak, and brownfield (`SUB-3428`)**: Scope IntentTraceability, IPLeak, and brownfield env secret checks to O(diff).
+- **Parallelize xray scanner, eliminate O(repo) diff walks, and surface 1-hop seam radar for 1M+ LOC monorepos (`INT-2214`, `SUB-3424`)**: Parallelize multi-million-LOC AST scanning, index git 1-hop impact lookups, and enable branch-mode seam radar.
+
+### Release & Packaging (`README.md`, `nomos hook`, `.github/workflows/ci.yaml`)
+- **Align Sovereign table row in `README.md` with Sophia & Nomos and Sophia Flight Deck (`SUB-3462`)**: Align Sovereign table with Sophia & Nomos and Sophia Flight Deck.
+- **Lead with text pitch and quickstart above split-terminal graphic (`SUB-3443`)**: Lead with text pitch and quickstart above split-terminal graphic.
+- **Add 3.6M-LOC monorepo scaling & 24-episode benchmark receipts (`SUB-3431`)**: Add 3.6M-LOC monorepo scaling & 30-episode benchmark receipts.
+- **Scope subdir git ls-files, target Go (`INT-2216`, `SUB-3430`)**: Scope subdir git ls-files, target Go reverse imports, and emit monorepo 1-hop seam read hints.
+- **Harmonize README 6-badge hero Title Case and high-contrast #0284C7 palette (`SUB-3427`)**: Harmonize 6-badge hero Title Case and high-contrast #0284C7 palette.
+- **Swap static Web X-Ray shield in `README.md` to live self-scanning Nomos X-Ray SVG badge (`SUB-3425`)**: Swap static Web X-Ray shield to live self-scanning Nomos X-Ray SVG badge.
+- **Tighten README hero badges to single-row high-signal bar and relocate Marketplace and DOI links (`SUB-3423`)**: Tighten hero badges to single-row bar and relocate Marketplace and DOI links.
+- **Link sophialabs.ca/system/analytics badge and dogfooding velocity row in `README.md` (`SUB-3421`)**: Link sophialabs.ca/system/analytics badge and dogfooding velocity row.
+- **Fix npm publish working directory in CI `sync_registries` job (`SUB-3414`)**: Cd into packaging/npm before npm publish in `sync_registries`.
+
+---
+
 ## [v4.29.0] - 2026-11-21
 
 > Unify convention-family axiom consolidation, scrub axiom stack traces, and ground KindDeadEnd hygiene in open-core mem; Fail-closed CommitSchemaGate twin preflight and Go const/SQL DML surface fingerprinting; Add zero-dependency PyPI nomos-cli thin binary launcher for uvx and pip; Skip non-shell heredoc stdin lines during trunk (Apache 2.0)

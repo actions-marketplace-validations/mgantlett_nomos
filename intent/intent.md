@@ -27,6 +27,8 @@ Nomos resolves both failure modes by self-hosting a **4-Layer Progressive Intent
 3. **Layer 2 (`intent/architecture/specs/*_spec.md`)**: Maintains 8 canonical domain specifications containing compiled Go contracts and `TC-*` obligation tables.
 4. **Layer 3 (`worktrees/<repo>-SUB-<N>` & `refs/notes/nomos/releases`)**: Verifies `@verifies TC-*` tests inside isolated worktrees and seals SHA-256 release receipts.
 
+Humans steer Layer 0 intent and approve 2PC release receipts while coding agents compile Layer 2 specifications and `TaskBatchManifest` DAG subgraphs.
+
 ```mermaid
 flowchart TD
     L0["Layer 0: North Star Charter<br/>(intent/intent.md - 7 Laws & 8 Domains)"]
@@ -69,7 +71,7 @@ Instead of scattered task notes, `intent/architecture/specs/` maintains **8 Cano
 | :---: | :--- | :--- | :--- |
 | **1** | `go_ssot_and_json_schema_spec.md` | `core/config`, `core/types` | `EcosystemConfig`, `QualityGatesConfig`, `ThresholdsConfig`, `JSONSchemaNode`, `NomosError`, `ActionAffordance`, `PhaseState`, `PolyglotWorkspaceManifest` |
 | **2** | `nomos_hermetic_worktree_spec.md` | `core/workspace`, `core/capbac`, `modules/verify` | `Manager`, `WorktreeSession`, `EmbeddedAsset`, `ParityAuditReport`, `CapBACLease`, `CapabilityFlowGraph`, `CredentialReadPolicy`, `MCPInvocation`, `CommitSchemaGate` |
-| **3** | `task_lifecycle_cli_spec.md` | `modules/task`, `core/storage`, `cli/*` | `TaskRecord`, `TaskCardInput`, `WavefrontCandidate`, `ReleaseNotePayload`, `ReleaseHookTrace`, `RuntimeMaintainReport`, `IssueReport`, `UpdateReport`, `UpdateCheckCache` |
+| **3** | `task_lifecycle_cli_spec.md` | `modules/task`, `core/storage`, `cli/*` | `TaskRecord`, `TaskCardInput`, `TaskBatchNode`, `TaskBatchManifest`, `TaskBatchResult`, `WavefrontCandidate`, `ReleaseNotePayload`, `ReleaseHookTrace`, `RuntimeMaintainReport`, `IssueReport`, `UpdateReport`, `UpdateCheckCache` |
 | **4** | `nomos_intent_traceability_spec.md` | `modules/verify/*`, `core/config` | `ContractsConfig`, `ArchitectureBoundaryRule`, `StaleSpecObligation`, `CanonicalMatrixModel`, `InvariantCellSpec`, `GateSpec`, `PipelineReport`, `ProofReport`, `AntiShimDTO` |
 | **5** | `tree_sitter_ast_gate_spec.md` | `modules/verify/treesitter`, `modules/verify/xray` | `FunctionMetric`, `FileMetric`, `GateEvaluationReport`, `EngineThresholds`, `SCMQuerySpec`, `WazeroTreeSitterEngine`, `XrayScanOptions`, `XrayHotspot`, `XrayBaselineEnvelope`, `XrayReport`, `XrayBaselineManifest` |
 | **6** | `mneme_memory_spec.md` | `modules/mem` | `Memory`, `MemoryKind`, `MemoryStatus`, `MemoryFilter`, `SearchOptions`, `SearchResult`, `GateTrapEntry`, `PitfallHygieneReport`, `MaintainReport` |

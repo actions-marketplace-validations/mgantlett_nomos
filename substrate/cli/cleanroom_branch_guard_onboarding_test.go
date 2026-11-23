@@ -281,6 +281,9 @@ func TestRootCmd_TwoTierHelpAndHelpAgentSurface(t *testing.T) {
 	if dErr != nil {
 		t.Fatalf("nomos --help failed: %v", dErr)
 	}
+	if !strings.Contains(defaultOut, "Cognitive Memory Commands:") || strings.Contains(defaultOut, "Agent Boot & Cognitive Memory Commands:") {
+		t.Errorf("TC-HELP-01: expected default help to render 'Cognitive Memory Commands:' without Agent Boot prefix, got:\n%s", defaultOut)
+	}
 	for _, visible := range []string{"init", "status", "task", "verify", "xray", "mem", "issue", "update", "version", "--help-agent"} {
 		if !strings.Contains(defaultOut, visible) {
 			t.Errorf("TC-HELP-01: expected default help to include %q, got:\n%s", visible, defaultOut)
@@ -292,13 +295,18 @@ func TestRootCmd_TwoTierHelpAndHelpAgentSurface(t *testing.T) {
 		}
 	}
 
-	agentOut, aErr := runRootCLIForTest(t, "", "--help-agent")
-	if aErr != nil {
-		t.Fatalf("nomos --help-agent failed: %v", aErr)
-	}
-	for _, revealed := range []string{"handshake", "hook", "directive", "capabilities", "physics", "session", "mcp"} {
-		if !strings.Contains(agentOut, "\n  "+revealed+" ") {
-			t.Errorf("TC-HELP-01: expected --help-agent to list %q in command list, got:\n%s", revealed, agentOut)
+	for _, args := range [][]string{{"--help-agent"}, {"help", "--help-agent"}} {
+		agentOut, aErr := runRootCLIForTest(t, "", args...)
+		if aErr != nil {
+			t.Fatalf("nomos %v failed: %v", args, aErr)
+		}
+		if !strings.Contains(agentOut, "Agent Boot & Cognitive Memory Commands:") {
+			t.Errorf("TC-HELP-01: expected %v to render 'Agent Boot & Cognitive Memory Commands:', got:\n%s", args, agentOut)
+		}
+		for _, revealed := range []string{"handshake", "hook", "directive", "capabilities", "physics", "session", "mcp"} {
+			if !strings.Contains(agentOut, "\n  "+revealed+" ") {
+				t.Errorf("TC-HELP-01: expected %v to list %q in command list, got:\n%s", args, revealed, agentOut)
+			}
 		}
 	}
 }

@@ -33,6 +33,7 @@ across lifecycle phases: IDLE -> PLAN -> EDIT -> REVIEW -> SYNC -> LEARN.`,
 
 	cmd.AddCommand(newTaskCreateCmd())
 	cmd.AddCommand(newTaskPairCmd())
+	cmd.AddCommand(newTaskBatchCmd())
 	cmd.AddCommand(newTaskChoreCmd())
 	cmd.AddCommand(taskui.NewTaskProjectCmd())
 	cmd.AddCommand(newTaskStartCmd())
@@ -174,11 +175,15 @@ func renderWavefront(out io.Writer, wf []task.WavefrontCandidate) {
 		if strings.HasPrefix(strings.ToUpper(cand.Key), "INT-") {
 			dot = tui.UiIntentStyle.Render("◈")
 		}
+		meta := fmt.Sprintf("(%s, %s)", cand.Plane, cand.Tier)
+		if len(cand.OverlapsActive) > 0 {
+			meta += fmt.Sprintf(" [MTPO overlap: %s]", strings.Join(cand.OverlapsActive, ", "))
+		}
 		fmt.Fprintf(out, "  %s [%s] %s %s\n",
 			dot,
 			tui.StyleTaskKey(cand.Key),
 			tui.UiBoldValueStyle.Render(cand.Title),
-			tui.UiMutedStyle.Render(fmt.Sprintf("(%s, %s)", cand.Plane, cand.Tier)))
+			tui.UiMutedStyle.Render(meta))
 	}
 	fmt.Fprintln(out, tui.UiRule(tui.RuleStandard))
 }
@@ -255,11 +260,7 @@ func executeTaskPair(store task.TaskStore, title string, opts taskPairOpts) erro
 	if err := tui.MaterializeCardStdin(opts.stdin, &opts.card); err != nil {
 		return tui.AttachCardRemedy(err, "pair", title, "substrate")
 	}
-	intBody, intBurden, err := tui.ResolveCardBodyAndBurden(nil, "pair", title, "intent", opts.card, opts.card.IntScope)
-	if err != nil {
-		return err
-	}
-	subBody, subBurden, err := tui.ResolveCardBodyAndBurden(nil, "pair", title, "substrate", opts.card, opts.card.SubScope)
+	intIR, subIR, err := resolvePairCardIRs(title, opts.card)
 	if err != nil {
 		return err
 	}
@@ -275,32 +276,34 @@ func executeTaskPair(store task.TaskStore, title string, opts taskPairOpts) erro
 	if err != nil {
 		return err
 	}
-
 	project := taskui.ResolveActiveTaskProject(opts.card.Project)
-	intTask := task.TaskRecord{
-		Key: intKey, Plane: "intent", Project: project, SchemaType: task.SchemaIntent,
-		Title: title, Description: intBody, Status: task.StatusTodo,
-		Tier: task.Tier(opts.tier), Priority: opts.priority, TwinKey: subKey,
-		Dependencies: deps, Burden: intBurden,
+	intTask := buildPairedRecordFromSpec(pairedRecordBuildSpec{key: intKey, plane: "intent", twinKey: subKey, project: project, title: title}, opts, intIR, deps)
+	subTask := buildPairedRecordFromSpec(pairedRecordBuildSpec{key: subKey, plane: "substrate", twinKey: intKey, project: project, title: title}, opts, subIR, deps)
+	if err := persistTwinnedPair(store, intTask, subTask); err != nil {
+		return err
 	}
-	subTask := task.TaskRecord{
-		Key: subKey, Plane: "substrate", Project: project, SchemaType: task.SchemaSubstrate,
-		Title: title, Description: subBody, Status: task.StatusTodo,
-		Tier: task.Tier(opts.tier), Priority: opts.priority, TwinKey: intKey,
-		Dependencies: deps, Burden: subBurden,
-	}
-
-	if err := store.CreateTask(intTask); err != nil {
-		return fmt.Errorf("failed creating intent task %s: %w", intKey, err)
-	}
-	if err := store.CreateTask(subTask); err != nil {
-		return fmt.Errorf("failed creating substrate task %s: %w", subKey, err)
-	}
-	if err := store.BindTwin(intKey, subKey); err != nil {
-		return fmt.Errorf("failed binding twins %s <-> %s: %w", intKey, subKey, err)
+	if opts.card.JSONOut {
+		return emitStructuredJSON(os.Stdout, []task.TaskRecord{intTask, subTask})
 	}
 	renderTaskPairSuccess(intKey, subKey, title)
 	return nil
+}
+
+func resolvePairCardIRs(title string, card tui.TaskCardFlags) (*tui.ResolvedCardIR, *tui.ResolvedCardIR, error) {
+	intCard := card
+	if card.IntScope != "" {
+		intCard.Scope = card.IntScope
+	}
+	intIR, err := tui.ResolveCardIR(nil, "pair", title, "intent", intCard)
+	if err != nil {
+		return nil, nil, err
+	}
+	subCard := card
+	if card.SubScope != "" {
+		subCard.Scope = card.SubScope
+	}
+	subIR, err := tui.ResolveCardIR(nil, "pair", title, "substrate", subCard)
+	return intIR, subIR, err
 }
 
 func renderTaskPairSuccess(intKey, subKey, title string) {

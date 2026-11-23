@@ -56,7 +56,7 @@ func newTaskCreateCmd() *cobra.Command {
 
 func executeTaskCreate(title string, opts taskCreateOpts) error {
 	opts.plane = tui.NormalizePlaneInput(opts.plane, opts.customKey)
-	body, burden, err := tui.ResolveCardBodyAndBurden(opts.stdin, "create", title, opts.plane, opts.card, "")
+	ir, err := tui.ResolveCardIR(opts.stdin, "create", title, opts.plane, opts.card)
 	if err != nil {
 		return err
 	}
@@ -81,9 +81,11 @@ func executeTaskCreate(title string, opts taskCreateOpts) error {
 
 	t := task.TaskRecord{
 		Key: key, Plane: opts.plane, Project: taskui.ResolveActiveTaskProject(opts.card.Project),
-		SchemaType: task.SchemaType(opts.plane), Title: title, Description: body,
+		SchemaType: task.SchemaType(opts.plane), Title: title, Description: ir.Body,
+		ScopePaths: ir.ScopePaths, Obligations: ir.Obligations,
+		AcceptanceCriteria: ir.AcceptanceCriteria, VerifyCmd: ir.VerifyCmd,
 		Status: task.StatusTodo, Tier: task.Tier(opts.tier), Priority: opts.priority,
-		TwinKey: twinOf, Dependencies: deps, Burden: burden,
+		TwinKey: twinOf, Dependencies: deps, Burden: ir.Burden,
 	}
 	if err := store.CreateTask(t); err != nil {
 		return err
@@ -92,12 +94,22 @@ func executeTaskCreate(title string, opts taskCreateOpts) error {
 		if err := store.BindTwin(key, twinOf); err != nil {
 			return fmt.Errorf("failed linking twin %s: %w", twinOf, err)
 		}
+	}
+	if opts.card.JSONOut {
+		return emitStructuredJSON(os.Stdout, t)
+	}
+	renderCreatedTaskSummary(key, opts.plane, title, twinOf, deps)
+	return nil
+}
+
+func renderCreatedTaskSummary(key, plane, title, twinOf string, deps []string) {
+	if twinOf != "" {
 		fmt.Printf("✨ %s %s (%s) - %s (twinned with %s)\n",
-			tui.UiSuccessStyle.Render("Created task:"), tui.StyleTaskKey(key), tui.StylePlane(opts.plane),
+			tui.UiSuccessStyle.Render("Created task:"), tui.StyleTaskKey(key), tui.StylePlane(plane),
 			tui.UiBoldValueStyle.Render(title), tui.StyleTaskKey(twinOf))
 	} else {
 		fmt.Printf("✨ %s %s (%s) - %s\n",
-			tui.UiSuccessStyle.Render("Created task:"), tui.StyleTaskKey(key), tui.StylePlane(opts.plane),
+			tui.UiSuccessStyle.Render("Created task:"), tui.StyleTaskKey(key), tui.StylePlane(plane),
 			tui.UiBoldValueStyle.Render(title))
 	}
 	if len(deps) > 0 {
@@ -107,7 +119,6 @@ func executeTaskCreate(title string, opts taskCreateOpts) error {
 		fmt.Printf("  %s %s\n", tui.UiLabelStyle.Render("Next:"),
 			tui.UiCommandStyle.Render(fmt.Sprintf("nomos task start %s --edit", key)))
 	}
-	return nil
 }
 
 func resolveOrAllocateCreateKey(store task.TaskStore, plane, customKey string) (string, error) {
@@ -122,7 +133,7 @@ func resolveOrAllocateCreateKey(store task.TaskStore, plane, customKey string) (
 }
 
 func newTaskStartCmd() *cobra.Command {
-	var autoEdit, forceProject bool
+	var autoEdit, forceProject, jsonOut bool
 	cmd := &cobra.Command{
 		Use:     "start <key>",
 		Short:   "Provision transient worktree and CapBAC lease for task",
@@ -130,11 +141,12 @@ func newTaskStartCmd() *cobra.Command {
 		Example: tui.HelpTaskStartExample,
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTaskStartWithOpts(args[0], autoEdit, forceProject)
+			return runTaskStartWithJSON(args[0], autoEdit, forceProject, jsonOut)
 		},
 	}
 	cmd.Flags().BoolVarP(&autoEdit, "edit", "e", false, "Immediately transition worktree into EDIT phase")
 	cmd.Flags().BoolVar(&forceProject, "force-project", false, "Allow starting a task stamped with a different repository project")
+	cmd.Flags().BoolVar(&jsonOut, tui.FlagNameJSON, false, "Emit structured JSON response")
 	return cmd
 }
 
@@ -143,6 +155,10 @@ func runTaskStart(rawKey string, autoEdit bool) error {
 }
 
 func runTaskStartWithOpts(rawKey string, autoEdit, forceProject bool) error {
+	return runTaskStartWithJSON(rawKey, autoEdit, forceProject, false)
+}
+
+func runTaskStartWithJSON(rawKey string, autoEdit, forceProject, jsonOut bool) error {
 	key := strings.ToUpper(strings.TrimSpace(rawKey))
 	if err := task.ValidateTaskKey(key); err != nil {
 		return err
@@ -182,8 +198,12 @@ func runTaskStartWithOpts(rawKey string, autoEdit, forceProject bool) error {
 	if err := store.UpdateTask(*t); err != nil {
 		return err
 	}
+	if jsonOut {
+		return emitStructuredJSON(os.Stdout, task.BuildInspectionRecord(*t, t.Dependencies, nil, wtPath, mgr.BranchName(key)))
+	}
 	tui.RenderTaskStartedBanner(key, wtPath, string(targetPhase))
-	renderLearnedPitfallsBriefing(mgr.RepoRoot, t.Title)
+	renderTurnZeroExecutionBrief(os.Stdout, t)
+	renderLearnedPitfallsBriefing(mgr.RepoRoot, t.Title, t.ScopePaths)
 	tui.RenderPhaseTransitionNextActions(os.Stdout, targetPhase, key, wtPath, mgr.RepoRoot)
 	return nil
 }

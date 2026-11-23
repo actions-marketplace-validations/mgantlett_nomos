@@ -28,7 +28,7 @@ import (
 )
 
 // RootCmdVersion defines the statutory release version of Nomos v4.
-var RootCmdVersion = "4.29.0"
+var RootCmdVersion = "4.30.0"
 
 func init() {
 	tui.ResolveAppVersion = func() string { return RootCmdVersion }
@@ -59,12 +59,18 @@ Progressive guardrails between coding agents and Git: zero-write codebase X-Ray,
 	rootCmd.SetVersionTemplate(selfupdate.FormatVersionOutput())
 	rootCmd.Flags().BoolVar(&helpAgent, "help-agent", false, "Show internal agent lifecycle and RPC commands")
 
-	hiddenAgentCmds := registerSubcommands(rootCmd)
-	configureRootHelp(rootCmd, &helpAgent, hiddenAgentCmds)
+	agentGroup, hiddenAgentCmds := registerSubcommands(rootCmd)
+	configureRootHelp(rootCmd, &helpAgent, agentGroup, hiddenAgentCmds)
 	return rootCmd
 }
 
-func configureRootHelp(rootCmd *cobra.Command, helpAgent *bool, hiddenAgentCmds []*cobra.Command) {
+const (
+	defaultAgentGroupTitle  = "Cognitive Memory Commands:"
+	expandedAgentGroupTitle = "Agent Boot & Cognitive Memory Commands:"
+)
+
+func configureRootHelp(rootCmd *cobra.Command, helpAgent *bool, agentGroup *cobra.Group, hiddenAgentCmds []*cobra.Command) {
+	bindHelpSubcommandAgentFlag(rootCmd, helpAgent)
 	defaultHelp := rootCmd.HelpFunc()
 	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		if cmd != rootCmd {
@@ -72,13 +78,11 @@ func configureRootHelp(rootCmd *cobra.Command, helpAgent *bool, hiddenAgentCmds 
 			return
 		}
 		if *helpAgent {
-			for _, sub := range hiddenAgentCmds {
-				sub.Hidden = false
-			}
+			agentGroup.Title = expandedAgentGroupTitle
+			setHiddenState(hiddenAgentCmds, false)
 			defaultHelp(cmd, args)
-			for _, sub := range hiddenAgentCmds {
-				sub.Hidden = true
-			}
+			setHiddenState(hiddenAgentCmds, true)
+			agentGroup.Title = defaultAgentGroupTitle
 			return
 		}
 		defaultHelp(cmd, args)
@@ -86,6 +90,21 @@ func configureRootHelp(rootCmd *cobra.Command, helpAgent *bool, hiddenAgentCmds 
 			return
 		}
 	})
+}
+
+func bindHelpSubcommandAgentFlag(rootCmd *cobra.Command, helpAgent *bool) {
+	rootCmd.InitDefaultHelpCmd()
+	for _, sub := range rootCmd.Commands() {
+		if sub.Name() == "help" && sub.Flags().Lookup("help-agent") == nil {
+			sub.Flags().BoolVar(helpAgent, "help-agent", false, "Show internal agent lifecycle and RPC commands")
+		}
+	}
+}
+
+func setHiddenState(cmds []*cobra.Command, hidden bool) {
+	for _, sub := range cmds {
+		sub.Hidden = hidden
+	}
 }
 
 func shouldRecordCommandTelemetry(cmd *cobra.Command) bool {
@@ -155,11 +174,12 @@ func recordRootExecutionAnomaly(repoRoot string, err error) {
 	}
 }
 
-func registerSubcommands(root *cobra.Command) []*cobra.Command {
+func registerSubcommands(root *cobra.Command) (*cobra.Group, []*cobra.Command) {
+	agentGroup := &cobra.Group{ID: "agent", Title: defaultAgentGroupTitle}
 	root.AddGroup(
 		&cobra.Group{ID: "lifecycle", Title: "Workspace & Lifecycle Commands:"},
 		&cobra.Group{ID: "quality", Title: "Quality & Invariant Verification Commands:"},
-		&cobra.Group{ID: "agent", Title: "Agent Boot & Cognitive Memory Commands:"},
+		agentGroup,
 		&cobra.Group{ID: "diagnostics", Title: "Diagnostics & System Commands:"},
 	)
 
@@ -191,8 +211,20 @@ func registerSubcommands(root *cobra.Command) []*cobra.Command {
 	addCommandWithGroup(root, selfupdate.NewUpdateCmd(), "diagnostics")
 	addCommandWithGroup(root, selfupdate.NewVersionCmd(), "diagnostics")
 
-	tui.DiscoverPlugins(root)
-	return []*cobra.Command{physicsCmd, handshakeCmd, hookCmd, directiveCmd, capabilitiesCmd, sessionCmd, mcpCmd}
+	tui.DiscoverPlugins(root, resolveActiveProhibitedCommands())
+	return agentGroup, []*cobra.Command{physicsCmd, handshakeCmd, hookCmd, directiveCmd, capabilitiesCmd, sessionCmd, mcpCmd}
+}
+
+func resolveActiveProhibitedCommands() []string {
+	repoRoot, err := workspace.FindRepoRoot("")
+	if err != nil || repoRoot == "" {
+		return nil
+	}
+	cfg, err := config.LoadConfig(repoRoot)
+	if err != nil || cfg == nil || !cfg.Governance.Boundary.Enforce {
+		return nil
+	}
+	return cfg.Governance.Boundary.ProhibitedCommands
 }
 
 func addCommandWithGroup(root *cobra.Command, cmd *cobra.Command, groupID string) {

@@ -35,11 +35,6 @@ type SchemaType string
 const (
 	SchemaIntent    SchemaType = "intent"
 	SchemaSubstrate SchemaType = "substrate"
-	SchemaMembrane  SchemaType = "membrane"
-	SchemaInfra     SchemaType = "infra"
-	SchemaCycle     SchemaType = "cycle"
-	SchemaDebt      SchemaType = "debt"
-	SchemaSpike     SchemaType = "spike"
 )
 
 // Tier represents the cognitive complexity tier of a task.
@@ -60,27 +55,31 @@ func ValidateTaskKey(key string) error {
 
 // TaskRecord defines the formal specification for Living Ledger task records (#TaskRecord).
 type TaskRecord struct {
-	ID            int        `json:"id,omitempty"`
-	Key           string     `json:"key"`
-	Plane         string     `json:"plane"`
-	Project       string     `json:"project,omitempty"`
-	SchemaType    SchemaType `json:"schema_type"`
-	Title         string     `json:"title"`
-	Description   string     `json:"description,omitempty"`
-	Status        Status     `json:"status"`
-	Tier          Tier       `json:"tier"`
-	Priority      int        `json:"priority"`
-	CreatedAt     string     `json:"created_at"`
-	UpdatedAt     string     `json:"updated_at"`
-	CompletedAt   *string    `json:"completed_at,omitempty"`
-	Dependencies  []string   `json:"dependencies,omitempty"`
-	TwinKey       string     `json:"twin_key,omitempty"`
-	Assignee      string     `json:"assignee,omitempty"`
-	ArcID         string     `json:"arc_id,omitempty"`
-	IntentDelta   string     `json:"intent_delta,omitempty"`
-	Burden        int        `json:"burden,omitempty"`
-	ContextBurden int        `json:"context_burden,omitempty"`
-	ArchLayer     int        `json:"arch_layer,omitempty"`
+	ID                 int        `json:"id,omitempty"`
+	Key                string     `json:"key"`
+	Plane              string     `json:"plane"`
+	Project            string     `json:"project,omitempty"`
+	SchemaType         SchemaType `json:"schema_type"`
+	Title              string     `json:"title"`
+	Description        string     `json:"description,omitempty"`
+	ScopePaths         []string   `json:"scope_paths,omitempty"`
+	Obligations        []string   `json:"obligations,omitempty"`
+	AcceptanceCriteria []string   `json:"acceptance_criteria,omitempty"`
+	VerifyCmd          string     `json:"verify_cmd,omitempty"`
+	Status             Status     `json:"status"`
+	Tier               Tier       `json:"tier"`
+	Priority           int        `json:"priority"`
+	CreatedAt          string     `json:"created_at"`
+	UpdatedAt          string     `json:"updated_at"`
+	CompletedAt        *string    `json:"completed_at,omitempty"`
+	Dependencies       []string   `json:"dependencies,omitempty"`
+	TwinKey            string     `json:"twin_key,omitempty"`
+	Assignee           string     `json:"assignee,omitempty"`
+	ArcID              string     `json:"arc_id,omitempty"`
+	IntentDelta        string     `json:"intent_delta,omitempty"`
+	Burden             int        `json:"burden,omitempty"`
+	ContextBurden      int        `json:"context_burden,omitempty"`
+	ArchLayer          int        `json:"arch_layer,omitempty"`
 }
 
 // ValidateTaskRecord validates relational task record invariants (Law 7).
@@ -113,15 +112,69 @@ func ValidateTaskRecord(r *TaskRecord) error {
 
 // WavefrontCandidate defines the structured candidate task emitted by nomos task dag --json (#WavefrontCandidate).
 type WavefrontCandidate struct {
-	Key         string     `json:"key"`
-	Title       string     `json:"title"`
-	Plane       string     `json:"plane"`
-	Project     string     `json:"project,omitempty"`
-	SchemaType  SchemaType `json:"schema_type"`
-	Status      Status     `json:"status"`
-	Tier        Tier       `json:"tier"`
-	TwinKey     string     `json:"twin_key,omitempty"`
-	IsUnblocked bool       `json:"is_unblocked"`
+	Key            string     `json:"key"`
+	Title          string     `json:"title"`
+	Plane          string     `json:"plane"`
+	Project        string     `json:"project,omitempty"`
+	SchemaType     SchemaType `json:"schema_type"`
+	Status         Status     `json:"status"`
+	Tier           Tier       `json:"tier"`
+	TwinKey        string     `json:"twin_key,omitempty"`
+	ScopePaths     []string   `json:"scope_paths,omitempty"`
+	Obligations    []string   `json:"obligations,omitempty"`
+	OverlapsActive []string   `json:"overlaps_active,omitempty"`
+	IsUnblocked    bool       `json:"is_unblocked"`
+}
+
+// ComputeOverlappingActiveKeys identifies active PLAN/EDIT/IN_PROGRESS sibling tasks sharing ScopePaths.
+func ComputeOverlappingActiveKeys(cand TaskRecord, all []TaskRecord) []string {
+	if len(cand.ScopePaths) == 0 {
+		return nil
+	}
+	var overlaps []string
+	for _, other := range all {
+		if other.Key == cand.Key || !isActiveWorktreeStatus(other.Status) {
+			continue
+		}
+		if cand.Project != "" && other.Project != "" && !strings.EqualFold(cand.Project, other.Project) {
+			continue
+		}
+		if scopePathSetsOverlap(cand.ScopePaths, other.ScopePaths) {
+			overlaps = append(overlaps, other.Key)
+		}
+	}
+	return overlaps
+}
+
+func isActiveWorktreeStatus(st Status) bool {
+	return st == StatusPlan || st == StatusEdit || st == StatusInProgress || st == StatusReview
+}
+
+func scopePathSetsOverlap(a, b []string) bool {
+	for _, pa := range a {
+		na := normalizeScopePrefix(pa)
+		if na == "" {
+			continue
+		}
+		for _, pb := range b {
+			nb := normalizeScopePrefix(pb)
+			if nb != "" && (na == nb || strings.HasPrefix(na, nb+"/") || strings.HasPrefix(nb, na+"/")) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func normalizeScopePrefix(p string) string {
+	clean := strings.TrimSpace(strings.ReplaceAll(p, "\\", "/"))
+	clean = strings.TrimPrefix(clean, "./")
+	for _, wild := range []string{"/**", "/*", "*"} {
+		if idx := strings.Index(clean, wild); idx >= 0 {
+			clean = clean[:idx]
+		}
+	}
+	return strings.Trim(clean, "/")
 }
 
 // FormatTaskKey constructs a canonical task key from prefix and integer.

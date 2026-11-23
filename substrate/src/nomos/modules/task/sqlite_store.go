@@ -41,10 +41,10 @@ func (s *SQLiteTaskStore) CreateTask(t TaskRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	depJSON, err := json.Marshal(t.Dependencies)
-	if err != nil {
-		depJSON = []byte("[]")
-	}
+	depJSON := marshalStringSlice(t.Dependencies)
+	pathsJSON := marshalStringSlice(t.ScopePaths)
+	oblJSON := marshalStringSlice(t.Obligations)
+	acJSON := marshalStringSlice(t.AcceptanceCriteria)
 	now := time.Now().UTC().Format(time.RFC3339)
 	if t.CreatedAt == "" {
 		t.CreatedAt = now
@@ -60,15 +60,17 @@ func (s *SQLiteTaskStore) CreateTask(t TaskRecord) error {
 	}
 
 	query := `INSERT INTO tasks (
-		key, plane, project, schema_type, title, description, status, tier, priority,
-		created_at, updated_at, completed_at, dependencies, twin_key, arc_id,
-		intent_delta, burden, context_burden, arch_layer
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		key, plane, project, schema_type, title, description,
+		scope_paths, obligations, acceptance_criteria, verify_cmd,
+		status, tier, priority, created_at, updated_at, completed_at,
+		dependencies, twin_key, arc_id, intent_delta, burden, context_burden, arch_layer
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
-	_, err = s.db.Exec(query,
+	_, err := s.db.Exec(query,
 		t.Key, t.Plane, t.Project, string(t.SchemaType), t.Title, t.Description,
+		pathsJSON, oblJSON, acJSON, t.VerifyCmd,
 		string(t.Status), string(t.Tier), t.Priority, t.CreatedAt, t.UpdatedAt,
-		t.CompletedAt, string(depJSON), t.TwinKey, t.ArcID,
+		t.CompletedAt, depJSON, t.TwinKey, t.ArcID,
 		t.IntentDelta, t.Burden, t.ContextBurden, t.ArchLayer,
 	)
 	if err != nil {
@@ -80,16 +82,17 @@ func (s *SQLiteTaskStore) CreateTask(t TaskRecord) error {
 	return nil
 }
 
+const selectTaskColumns = `SELECT id, key, plane, project, schema_type, title, description,
+	scope_paths, obligations, acceptance_criteria, verify_cmd,
+	status, tier, priority, created_at, updated_at, completed_at, dependencies,
+	twin_key, arc_id, intent_delta, burden, context_burden, arch_layer FROM tasks`
+
 // GetTask retrieves a task record by canonical key.
 func (s *SQLiteTaskStore) GetTask(key string) (*TaskRecord, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	query := `SELECT id, key, plane, project, schema_type, title, description, status, tier, priority,
-		created_at, updated_at, completed_at, dependencies, twin_key, arc_id,
-		intent_delta, burden, context_burden, arch_layer FROM tasks WHERE key = ?`
-
-	row := s.db.QueryRow(query, key)
+	row := s.db.QueryRow(selectTaskColumns+" WHERE key = ?", key)
 	rec, err := scanTaskRow(row)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -108,22 +111,24 @@ func (s *SQLiteTaskStore) UpdateTask(t TaskRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	depJSON, err := json.Marshal(t.Dependencies)
-	if err != nil {
-		depJSON = []byte("[]")
-	}
+	depJSON := marshalStringSlice(t.Dependencies)
+	pathsJSON := marshalStringSlice(t.ScopePaths)
+	oblJSON := marshalStringSlice(t.Obligations)
+	acJSON := marshalStringSlice(t.AcceptanceCriteria)
 	t.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 
 	query := `UPDATE tasks SET
-		project = ?, schema_type = ?, title = ?, description = ?, status = ?, tier = ?,
-		priority = ?, updated_at = ?, completed_at = ?, dependencies = ?,
+		project = ?, schema_type = ?, title = ?, description = ?,
+		scope_paths = ?, obligations = ?, acceptance_criteria = ?, verify_cmd = ?,
+		status = ?, tier = ?, priority = ?, updated_at = ?, completed_at = ?, dependencies = ?,
 		twin_key = ?, arc_id = ?, intent_delta = ?, burden = ?,
 		context_burden = ?, arch_layer = ?
 		WHERE key = ?`
 
 	res, err := s.db.Exec(query,
-		t.Project, string(t.SchemaType), t.Title, t.Description, string(t.Status), string(t.Tier),
-		t.Priority, t.UpdatedAt, t.CompletedAt, string(depJSON),
+		t.Project, string(t.SchemaType), t.Title, t.Description,
+		pathsJSON, oblJSON, acJSON, t.VerifyCmd,
+		string(t.Status), string(t.Tier), t.Priority, t.UpdatedAt, t.CompletedAt, depJSON,
 		t.TwinKey, t.ArcID, t.IntentDelta, t.Burden,
 		t.ContextBurden, t.ArchLayer, t.Key,
 	)
@@ -145,11 +150,7 @@ func (s *SQLiteTaskStore) ListTasks() []TaskRecord {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	query := `SELECT id, key, plane, project, schema_type, title, description, status, tier, priority,
-		created_at, updated_at, completed_at, dependencies, twin_key, arc_id,
-		intent_delta, burden, context_burden, arch_layer FROM tasks ORDER BY id ASC`
-
-	rows, err := s.db.Query(query)
+	rows, err := s.db.Query(selectTaskColumns + " ORDER BY id ASC")
 	if err != nil {
 		return nil
 	}
@@ -203,19 +204,44 @@ func (s *SQLiteTaskStore) GetWavefront() ([]WavefrontCandidate, error) {
 		}
 		if isTaskUnblocked(t, allMap) {
 			wavefront = append(wavefront, WavefrontCandidate{
-				Key:         t.Key,
-				Title:       t.Title,
-				Plane:       t.Plane,
-				Project:     t.Project,
-				SchemaType:  t.SchemaType,
-				Status:      t.Status,
-				Tier:        t.Tier,
-				TwinKey:     t.TwinKey,
-				IsUnblocked: true,
+				Key:            t.Key,
+				Title:          t.Title,
+				Plane:          t.Plane,
+				Project:        t.Project,
+				SchemaType:     t.SchemaType,
+				Status:         t.Status,
+				Tier:           t.Tier,
+				TwinKey:        t.TwinKey,
+				ScopePaths:     t.ScopePaths,
+				Obligations:    t.Obligations,
+				OverlapsActive: ComputeOverlappingActiveKeys(t, allTasks),
+				IsUnblocked:    true,
 			})
 		}
 	}
 	return wavefront, nil
+}
+
+func marshalStringSlice(items []string) string {
+	if len(items) == 0 {
+		return "[]"
+	}
+	b, err := json.Marshal(items)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
+}
+
+func unmarshalStringSlice(ns sql.NullString) []string {
+	if !ns.Valid || ns.String == "" {
+		return nil
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(ns.String), &out); err != nil || len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 type rowScanner interface {
@@ -229,6 +255,7 @@ func scanTaskRow(scanner rowScanner) (*TaskRecord, error) {
 	)
 	err := scanner.Scan(
 		&row.nullID, &rec.Key, &rec.Plane, &row.project, &row.schemaType, &rec.Title, &row.desc,
+		&row.pathsJSON, &row.oblJSON, &row.acJSON, &row.verifyCmd,
 		&row.status, &row.tier, &row.priority, &rec.CreatedAt, &rec.UpdatedAt,
 		&row.completedAt, &row.depJSON, &row.twinKey, &row.arcID,
 		&row.intentDelta, &row.burden, &row.ctxBurden, &row.archLayer,
@@ -247,6 +274,10 @@ type scannedTaskRow struct {
 	project     sql.NullString
 	schemaType  sql.NullString
 	desc        sql.NullString
+	pathsJSON   sql.NullString
+	oblJSON     sql.NullString
+	acJSON      sql.NullString
+	verifyCmd   sql.NullString
 	status      sql.NullString
 	tier        sql.NullString
 	priority    sql.NullInt64
@@ -265,6 +296,10 @@ func mapScannedFields(rec *TaskRecord, row *scannedTaskRow) {
 		rec.ID = int(row.nullID.Int64)
 	}
 	rec.Description = row.desc.String
+	rec.ScopePaths = unmarshalStringSlice(row.pathsJSON)
+	rec.Obligations = unmarshalStringSlice(row.oblJSON)
+	rec.AcceptanceCriteria = unmarshalStringSlice(row.acJSON)
+	rec.VerifyCmd = row.verifyCmd.String
 	rec.TwinKey = row.twinKey.String
 	rec.SchemaType = SchemaType(row.schemaType.String)
 	if rec.SchemaType == "" {

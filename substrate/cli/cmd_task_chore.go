@@ -22,8 +22,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type taskChoreOpts struct {
+	plane       string
+	project     string
+	paths       []string
+	obligations []string
+	jsonOut     bool
+}
+
 func newTaskChoreCmd() *cobra.Command {
-	var plane, project string
+	var opts taskChoreOpts
 	cmd := &cobra.Command{
 		Use:     "chore [title]",
 		Short:   "Atomically provision a transient task worktree in EDIT phase (1-turn inception)",
@@ -35,11 +43,14 @@ func newTaskChoreCmd() *cobra.Command {
 			if len(args) > 0 && strings.TrimSpace(args[0]) != "" {
 				title = strings.TrimSpace(args[0])
 			}
-			return runTaskChoreWithOpts(title, plane, project)
+			return executeTaskChore(title, opts)
 		},
 	}
-	cmd.Flags().StringVarP(&plane, tui.FlagNamePlane, "p", "substrate", "Target plane (intent|substrate)")
-	cmd.Flags().StringVar(&project, tui.FlagNameProject, "", "Repository project identifier (defaults to active repository)")
+	cmd.Flags().StringVarP(&opts.plane, tui.FlagNamePlane, "p", "substrate", "Target plane (intent|substrate)")
+	cmd.Flags().StringVar(&opts.project, tui.FlagNameProject, "", "Repository project identifier (defaults to active repository)")
+	cmd.Flags().StringSliceVar(&opts.paths, "paths", nil, "Target file/directory paths or globs for scope_paths")
+	cmd.Flags().StringSliceVar(&opts.obligations, "obligations", nil, "Required TC-* compliance vectors bound to this chore")
+	cmd.Flags().BoolVar(&opts.jsonOut, tui.FlagNameJSON, false, "Emit structured JSON response")
 	return cmd
 }
 
@@ -52,11 +63,11 @@ func runTaskChoreWithPlane(title, rawPlane string) error {
 }
 
 func runTaskChoreWithOpts(title, rawPlane, rawProject string) error {
-	plane := tui.NormalizePlaneInput(rawPlane, "")
-	if plane != "intent" && plane != "substrate" {
-		return types.NewNomosError(types.ErrCodeValidationFailed, "invalid plane %q: must be intent or substrate", rawPlane)
-	}
-	store, err := task.NewDefaultSQLiteTaskStore()
+	return executeTaskChore(title, taskChoreOpts{plane: rawPlane, project: rawProject})
+}
+
+func executeTaskChore(title string, opts taskChoreOpts) error {
+	t, store, err := createInitialChoreRecord(title, opts)
 	if err != nil {
 		return err
 	}
@@ -65,42 +76,58 @@ func runTaskChoreWithOpts(title, rawPlane, rawProject string) error {
 			// closed
 		}
 	}()
-
-	key, err := allocateNextKey(store, plane)
+	wtPath, repoRoot, err := provisionChoreWorktreeAndLease(t.Key)
 	if err != nil {
 		return err
 	}
-
-	t := task.TaskRecord{
-		Key:         key,
-		Plane:       plane,
-		Project:     taskui.ResolveActiveTaskProject(rawProject),
-		SchemaType:  task.SchemaType(plane),
-		Title:       title,
-		Description: "Atomic 1-turn chore worktree",
-		Status:      task.StatusTodo,
-		Tier:        task.Tier("T1"),
-		Priority:    50,
-		Burden:      1,
-	}
-	if cErr := store.CreateTask(t); cErr != nil {
-		return cErr
-	}
-
-	wtPath, repoRoot, err := provisionChoreWorktreeAndLease(key)
-	if err != nil {
-		return err
-	}
-
 	t.Status = task.StatusEdit
-	if uErr := store.UpdateTask(t); uErr != nil {
+	if uErr := store.UpdateTask(*t); uErr != nil {
 		return uErr
 	}
-
-	tui.RenderTaskStartedBanner(key, wtPath, "EDIT")
-	renderLearnedPitfallsBriefing(repoRoot, t.Title)
-	tui.RenderPhaseTransitionNextActions(os.Stdout, types.PhaseEdit, key, wtPath, repoRoot)
+	if opts.jsonOut {
+		return emitStructuredJSON(os.Stdout, task.BuildInspectionRecord(*t, nil, nil, wtPath, "feature/"+t.Key))
+	}
+	tui.RenderTaskStartedBanner(t.Key, wtPath, "EDIT")
+	renderTurnZeroExecutionBrief(os.Stdout, t)
+	renderLearnedPitfallsBriefing(repoRoot, t.Title, t.ScopePaths)
+	tui.RenderPhaseTransitionNextActions(os.Stdout, types.PhaseEdit, t.Key, wtPath, repoRoot)
 	return nil
+}
+
+func createInitialChoreRecord(title string, opts taskChoreOpts) (*task.TaskRecord, *task.SQLiteTaskStore, error) {
+	plane := tui.NormalizePlaneInput(opts.plane, "")
+	if plane != "intent" && plane != "substrate" {
+		return nil, nil, types.NewNomosError(types.ErrCodeValidationFailed, "invalid plane %q: must be intent or substrate", opts.plane)
+	}
+	paths := task.NormalizeScopePaths(opts.paths)
+	obligations, oErr := task.NormalizeObligations(opts.obligations)
+	if oErr != nil {
+		return nil, nil, oErr
+	}
+	store, err := task.NewDefaultSQLiteTaskStore()
+	if err != nil {
+		return nil, nil, err
+	}
+	key, err := allocateNextKey(store, plane)
+	if err != nil {
+		if cErr := store.Close(); cErr != nil {
+			// closed
+		}
+		return nil, nil, err
+	}
+	t := task.TaskRecord{
+		Key: key, Plane: plane, Project: taskui.ResolveActiveTaskProject(opts.project),
+		SchemaType: task.SchemaType(plane), Title: title, Description: "Atomic 1-turn chore worktree",
+		ScopePaths: paths, Obligations: obligations, Status: task.StatusTodo,
+		Tier: task.Tier("T1"), Priority: 50, Burden: 1,
+	}
+	if cErr := store.CreateTask(t); cErr != nil {
+		if clErr := store.Close(); clErr != nil {
+			// closed
+		}
+		return nil, nil, cErr
+	}
+	return &t, store, nil
 }
 
 func provisionChoreWorktreeAndLease(key string) (string, string, error) {
@@ -174,22 +201,22 @@ func completeMTPOSync(repoRoot, key string) {
 	}
 }
 
-func renderLearnedPitfallsBriefing(repoRoot, taskTitle string) {
-	axioms := mem.RecallRepoAxiomsReadOnly(repoRoot, taskTitle, nil, 2)
+func renderLearnedPitfallsBriefing(repoRoot, taskTitle string, scopePaths []string) {
+	axioms := mem.RecallRepoAxiomsReadOnly(repoRoot, taskTitle, scopePaths, 2)
 	for i, ax := range axioms {
 		if i == 0 {
 			fmt.Printf("  %s\n", tui.UiHeaderStyle.Render(fmt.Sprintf("Repo Axioms (%d active):", len(axioms))))
 		}
 		fmt.Printf("    🏛️  %s\n", tui.UiValueStyle.Render(ax))
 	}
-	pitfalls := mem.RecallRepoPitfallsReadOnly(repoRoot, nil, 3)
+	pitfalls := mem.RecallRepoPitfallsReadOnly(repoRoot, scopePaths, 3)
 	for i, p := range pitfalls {
 		if i == 0 {
 			fmt.Printf("  %s\n", tui.UiWarnStyle.Render(fmt.Sprintf("Learned Pitfalls (%d active):", len(pitfalls))))
 		}
 		fmt.Printf("    ⚡ %s\n", tui.UiValueStyle.Render(p))
 	}
-	patterns := mem.RecallRepoPatternsReadOnly(repoRoot, taskTitle, nil, 2)
+	patterns := mem.RecallRepoPatternsReadOnly(repoRoot, taskTitle, scopePaths, 2)
 	for i, pat := range patterns {
 		if i == 0 {
 			fmt.Printf("  %s\n", tui.UiHeaderStyle.Render(fmt.Sprintf("Verified Patterns (%d active):", len(patterns))))

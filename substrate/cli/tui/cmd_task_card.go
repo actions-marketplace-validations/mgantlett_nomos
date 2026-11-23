@@ -13,16 +13,29 @@ import (
 )
 
 type TaskCardFlags struct {
-	File      string
-	Desc      string
-	Project   string
-	Scope     string
-	IntScope  string
-	SubScope  string
-	AC        []string
-	Verify    string
-	DependsOn []string
-	Burden    int
+	File        string
+	Desc        string
+	Project     string
+	Scope       string
+	IntScope    string
+	SubScope    string
+	Paths       []string
+	Obligations []string
+	AC          []string
+	Verify      string
+	DependsOn   []string
+	Burden      int
+	JSONOut     bool
+}
+
+// ResolvedCardIR holds the normalized Agent-to-Agent IR and derived Markdown description.
+type ResolvedCardIR struct {
+	Body               string
+	Burden             int
+	ScopePaths         []string
+	Obligations        []string
+	AcceptanceCriteria []string
+	VerifyCmd          string
 }
 
 // BindTaskCardFlags executes deterministic tui verification logic (@intent task_lifecycle_cli_spec.md).
@@ -31,10 +44,13 @@ func BindTaskCardFlags(cmd *cobra.Command, f *TaskCardFlags, includePairScopes b
 	cmd.Flags().StringVarP(&f.Desc, "desc", "d", "", "3-section Markdown task description")
 	cmd.Flags().StringVar(&f.Project, "project", "", "Repository project identifier (defaults to active repository)")
 	cmd.Flags().StringVar(&f.Scope, "scope", "", "Target files/specs and problem context ('## Scope & Context')")
+	cmd.Flags().StringSliceVar(&f.Paths, "paths", nil, "Target file/directory paths or globs for Agent-to-Agent scope_paths")
+	cmd.Flags().StringSliceVar(&f.Obligations, "obligations", nil, "Required TC-* compliance vectors bound to this task")
 	cmd.Flags().StringArrayVar(&f.AC, "ac", nil, "Deliverable checklist item for '## Acceptance Criteria' (repeatable)")
 	cmd.Flags().StringVar(&f.Verify, "verify", "", "Test command or proof for '## Verification'")
 	cmd.Flags().StringSliceVar(&f.DependsOn, "depends-on", nil, "Blocker task key(s) in causal DAG (comma-separated or repeatable)")
 	cmd.Flags().IntVarP(&f.Burden, "burden", "b", 0, "Explicit cognitive burden 1-10 (0 = auto-derive from card density)")
+	cmd.Flags().BoolVar(&f.JSONOut, FlagNameJSON, false, "Emit structured JSON response")
 	if includePairScopes {
 		cmd.Flags().StringVar(&f.IntScope, "int-scope", "", "Intent-specific override for '## Scope & Context'")
 		cmd.Flags().StringVar(&f.SubScope, "sub-scope", "", "Substrate-specific override for '## Scope & Context'")
@@ -93,17 +109,35 @@ func MaterializeCardStdin(stdin io.Reader, f *TaskCardFlags) error {
 
 // ResolveCardBodyAndBurden executes deterministic tui verification logic (@intent task_lifecycle_cli_spec.md).
 func ResolveCardBodyAndBurden(stdin io.Reader, subcommand, title, plane string, f TaskCardFlags, scopeOverride string) (string, int, error) {
-	effectiveScope := strings.TrimSpace(scopeOverride)
-	if effectiveScope == "" {
-		effectiveScope = strings.TrimSpace(f.Scope)
+	ir, err := ResolveCardIR(stdin, subcommand, title, plane, f)
+	if scopeOverride != "" {
+		fCopy := f
+		fCopy.Scope = scopeOverride
+		ir, err = ResolveCardIR(stdin, subcommand, title, plane, fCopy)
 	}
-	hasStructuredFlags := effectiveScope != "" || len(f.AC) > 0 || strings.TrimSpace(f.Verify) != ""
+	if err != nil {
+		return "", 0, err
+	}
+	return ir.Body, ir.Burden, nil
+}
+
+// ResolveCardIR normalizes structured Agent-to-Agent flags or Markdown input into a complete ResolvedCardIR.
+func ResolveCardIR(stdin io.Reader, subcommand, title, plane string, f TaskCardFlags) (*ResolvedCardIR, error) {
+	paths := task.NormalizeScopePaths(f.Paths)
+	obligations, oErr := task.NormalizeObligations(f.Obligations)
+	if oErr != nil {
+		return nil, AttachCardRemedy(oErr, subcommand, title, plane)
+	}
+	effectiveScope := strings.TrimSpace(f.Scope)
+	hasStructured := effectiveScope != "" || len(f.AC) > 0 || strings.TrimSpace(f.Verify) != ""
 
 	var body string
 	var err error
-	if hasStructuredFlags {
+	if hasStructured {
 		body, err = task.RenderTaskCardBody(task.TaskCardInput{
 			Scope:              effectiveScope,
+			ScopePaths:         paths,
+			Obligations:        obligations,
 			AcceptanceCriteria: f.AC,
 			Verification:       f.Verify,
 		})
@@ -114,14 +148,21 @@ func ResolveCardBodyAndBurden(stdin io.Reader, subcommand, title, plane string, 
 		}
 	}
 	if err != nil {
-		return "", 0, AttachCardRemedy(err, subcommand, title, plane)
+		return nil, AttachCardRemedy(err, subcommand, title, plane)
 	}
-
 	burden, bErr := task.DeriveTaskBurden(f.Burden, body)
 	if bErr != nil {
-		return "", 0, bErr
+		return nil, bErr
 	}
-	return body, burden, nil
+	ac, verifyCmd := task.ExtractCardIRFromBody(body)
+	return &ResolvedCardIR{
+		Body:               body,
+		Burden:             burden,
+		ScopePaths:         paths,
+		Obligations:        obligations,
+		AcceptanceCriteria: ac,
+		VerifyCmd:          verifyCmd,
+	}, nil
 }
 
 func readRawCardBody(stdin io.Reader, fileFlag, descFlag string) (string, error) {

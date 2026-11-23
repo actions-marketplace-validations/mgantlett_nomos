@@ -1,6 +1,6 @@
 # Maintainer: Mark Gantlett <mark@sophialabs.ca>
 pkgname=nomos-bin
-pkgver=4.29.0
+pkgver=4.30.0
 pkgrel=1
 pkgdesc="Deterministic engineering substrate and 42-gate AST verification layer between coding agents and Git"
 arch=('x86_64' 'aarch64')
@@ -10,9 +10,9 @@ provides=('nomos')
 conflicts=('nomos')
 options=('!strip' '!debug')
 source_x86_64=("nomos-${pkgver}-x86_64.tar.gz::https://github.com/mgantlett/nomos/releases/download/v${pkgver}/nomos_Linux_x86_64.tar.gz")
-sha256sums_x86_64=('f872753eef3a53e9becf4c71368012f3a58fcd23fa387eb4c6409a8897f67f64')
+sha256sums_x86_64=('656e8df605cbed9f4c3f2d93c2e52f51396fac456e0794fd26d6cc17aeaa7ac4')
 source_aarch64=("nomos-${pkgver}-aarch64.tar.gz::https://github.com/mgantlett/nomos/releases/download/v${pkgver}/nomos_Linux_arm64.tar.gz")
-sha256sums_aarch64=('7d86f9824a5072e6b3bf8cf77bbf670980a9bcd57ad670d489178d0fa1a19f88')
+sha256sums_aarch64=('a9c783cce0b78f54870ef0996810911ea6b92b306bd932f604fb88c032afe665')
 
 package() {
   install -Dm755 "${srcdir}/nomos" "${pkgdir}/usr/bin/nomos"

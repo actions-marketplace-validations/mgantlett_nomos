@@ -134,6 +134,10 @@ func (s *MemoryTaskStore) GetWavefront() ([]WavefrontCandidate, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	var allList []TaskRecord
+	for _, rec := range s.tasks {
+		allList = append(allList, rec)
+	}
 	var wavefront []WavefrontCandidate
 	for _, t := range s.tasks {
 		if IsTerminalStatus(t.Status) {
@@ -141,15 +145,18 @@ func (s *MemoryTaskStore) GetWavefront() ([]WavefrontCandidate, error) {
 		}
 		if isTaskUnblocked(t, s.tasks) {
 			wavefront = append(wavefront, WavefrontCandidate{
-				Key:         t.Key,
-				Title:       t.Title,
-				Plane:       t.Plane,
-				Project:     t.Project,
-				SchemaType:  t.SchemaType,
-				Status:      t.Status,
-				Tier:        t.Tier,
-				TwinKey:     t.TwinKey,
-				IsUnblocked: true,
+				Key:            t.Key,
+				Title:          t.Title,
+				Plane:          t.Plane,
+				Project:        t.Project,
+				SchemaType:     t.SchemaType,
+				Status:         t.Status,
+				Tier:           t.Tier,
+				TwinKey:        t.TwinKey,
+				ScopePaths:     t.ScopePaths,
+				Obligations:    t.Obligations,
+				OverlapsActive: ComputeOverlappingActiveKeys(t, allList),
+				IsUnblocked:    true,
 			})
 		}
 	}

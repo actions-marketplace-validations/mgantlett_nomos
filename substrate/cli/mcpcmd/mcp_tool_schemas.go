@@ -81,13 +81,13 @@ func buildLedgerToolDescriptors(ro, dirProp map[string]any) []MCPToolDescriptor 
 		{
 			Name:  "nomos_task_dag",
 			Title: "List Unblocked Task DAG Wavefront",
-			Description: "Query unblocked causal DAG wavefront tasks ready for execution in the target repository without mutating task ledger state. " +
-				"Use when selecting the next unblocked INT-* or SUB-* task to start. Do NOT use when recalling past architectural decisions or lessons (use nomos_mem_recall instead).",
+			Description: "Query unblocked causal DAG wavefront tasks (including Agent-to-Agent scope_paths, TC-* obligations, and active worktree MTPO overlap flags) ready for execution without mutating task ledger state. " +
+				"Use when selecting the next unblocked INT-* or SUB-* task to start (to submit a new multi-node DAG subgraph, invoke CLI 'nomos task batch -F - --json'). Do NOT use when recalling past architectural decisions or lessons (use nomos_mem_recall instead).",
 			InputSchema: objectSchema(map[string]any{
 				"dir":   dirProp,
 				"limit": boundedLimitSchema("Maximum number of unblocked wavefront tasks to return.", 10, 100),
 			}, nil),
-			OutputSchema: arrayWrapperOutputSchema("Unblocked wavefront task candidates."),
+			OutputSchema: arrayWrapperOutputSchema("Unblocked wavefront task candidates with scope_paths, obligations, and overlaps_active."),
 			Annotations:  ro,
 		},
 		{
