@@ -25,6 +25,8 @@ func FormatTerminal(rep *XrayReport) string {
 	sb.WriteString(fmt.Sprintf("  Anti-Cheat Signals: %d empty/TODO stub(s) · %d skipped test(s) · %d swallowed error(s) · %d secret/path leak(s) · %d CWE sink(s)\n",
 		rep.EmptyStubs, rep.SkippedTests, rep.UncheckedErrors, rep.SecretPathLeaks, rep.SecuritySinks))
 	sb.WriteString(fmt.Sprintf("  Clean Boundaries  : %d zero-violation architecture boundary rule(s) ready\n", rep.InferredBoundaries))
+	sb.WriteString(fmt.Sprintf("  Topology Spine    : %d step(s) · %d reachable · %d unreached dust file(s)\n",
+		rep.SpineDepth, rep.ReachableFiles, rep.UnreachedFiles))
 	appendTerminalHotspots(&sb, rep.Hotspots)
 	sb.WriteString(strings.Repeat("─", 76) + "\n")
 	sb.WriteString(fmt.Sprintf("  ◈ Next Action: %s\n", rep.NextCommand))
@@ -74,6 +76,9 @@ func FormatMarkdown(rep *XrayReport) string {
 		{"Security Sinks (`CWE-89` / `CWE-22`)", rep.SecuritySinks},
 		{"Untyped DTO Boundary Escapes", rep.UntypedBoundaryReads},
 		{"Phantom Wire Keys", rep.PhantomWireKeys},
+		{"Dependency Spine Depth", rep.SpineDepth},
+		{"Reachable Source Files", rep.ReachableFiles},
+		{"Unreached Dust Files", rep.UnreachedFiles},
 		{"Inferred Clean Architecture Rules", rep.InferredBoundaries},
 	} {
 		sb.WriteString(fmt.Sprintf("| %s | `%d` |\n", row.label, row.val))

@@ -146,7 +146,8 @@ func computeHangoverScore(rep *XrayReport) int {
 		rep.MagicStringGroups*4 +
 		rep.SecuritySinks*14 +
 		rep.UntypedBoundaryReads*6 +
-		rep.PhantomWireKeys*8
+		rep.PhantomWireKeys*8 +
+		rep.UnreachedFiles*5
 	if faults == 0 {
 		return 0
 	}

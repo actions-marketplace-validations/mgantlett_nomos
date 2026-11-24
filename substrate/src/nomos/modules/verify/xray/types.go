@@ -40,6 +40,27 @@ type XrayHotspot struct {
 	Reasons              []string `json:"reasons,omitempty"`
 }
 
+// XrayTopologyNode describes a source module on the dependency spine, branch set, or unreached set (#XrayTopologyNode).
+type XrayTopologyNode struct {
+	File       string `json:"file"`
+	Label      string `json:"label"`
+	Language   string `json:"language"`
+	LOC        int    `json:"loc"`
+	CDS        int    `json:"cds,omitempty"`
+	Depth      int    `json:"depth"`
+	ParentFile string `json:"parent_file,omitempty"`
+	InDegree   int    `json:"in_degree,omitempty"`
+	OutDegree  int    `json:"out_degree,omitempty"`
+}
+
+// XrayTopologyGraph captures the dependency spine, sampled reachable branches, and unreached files (#XrayTopologyGraph).
+type XrayTopologyGraph struct {
+	Entrypoints []string           `json:"entrypoints,omitempty"`
+	Spine       []XrayTopologyNode `json:"spine,omitempty"`
+	Branches    []XrayTopologyNode `json:"branches,omitempty"`
+	Dust        []XrayTopologyNode `json:"dust,omitempty"`
+}
+
 // XrayBaselineEnvelope records observed upper-bound structural metrics for baseline locking (#XrayBaselineEnvelope).
 type XrayBaselineEnvelope struct {
 	ObservedMaxFileLOC      int `json:"observed_max_file_loc"`
@@ -50,35 +71,40 @@ type XrayBaselineEnvelope struct {
 	ObservedMaxParams       int `json:"observed_max_params"`
 	ObservedMaxNesting      int `json:"observed_max_nesting"`
 	CloneGroupCount         int `json:"clone_group_count"`
+	ObservedUnreachedFiles  int `json:"observed_unreached_files,omitempty"`
 }
 
 // XrayReport summarizes zero-init polyglot structural debt and hangover indicators (#XrayReport).
 type XrayReport struct {
-	ProjectName        string               `json:"project_name"`
-	DurationMillis     int64                `json:"duration_ms"`
-	Initialized        bool                 `json:"initialized"`
-	FilesScanned       int                  `json:"files_scanned"`
-	TotalLOC           int                  `json:"total_loc"`
-	Languages          map[string]int       `json:"languages"`
-	HangoverScore      int                  `json:"hangover_score"`
-	Grade              string               `json:"grade"`
-	CloneGroups        int                  `json:"clone_groups"`
-	MonolithFiles      int                  `json:"monolith_files"`
-	OversizedFuncs     int                  `json:"oversized_funcs"`
-	HighArityFuncs     int                  `json:"high_arity_funcs"`
-	DeepNestingFuncs   int                  `json:"deep_nesting_funcs"`
-	EmptyStubs         int                  `json:"empty_stubs"`
-	SkippedTests       int                  `json:"skipped_tests"`
-	UncheckedErrors    int                  `json:"unchecked_errors"`
-	SecretPathLeaks    int                  `json:"secret_path_leaks"`
-	MagicStringGroups  int                  `json:"magic_string_groups"`
+	ProjectName          string               `json:"project_name"`
+	DurationMillis       int64                `json:"duration_ms"`
+	Initialized          bool                 `json:"initialized"`
+	FilesScanned         int                  `json:"files_scanned"`
+	TotalLOC             int                  `json:"total_loc"`
+	Languages            map[string]int       `json:"languages"`
+	HangoverScore        int                  `json:"hangover_score"`
+	Grade                string               `json:"grade"`
+	CloneGroups          int                  `json:"clone_groups"`
+	MonolithFiles        int                  `json:"monolith_files"`
+	OversizedFuncs       int                  `json:"oversized_funcs"`
+	HighArityFuncs       int                  `json:"high_arity_funcs"`
+	DeepNestingFuncs     int                  `json:"deep_nesting_funcs"`
+	EmptyStubs           int                  `json:"empty_stubs"`
+	SkippedTests         int                  `json:"skipped_tests"`
+	UncheckedErrors      int                  `json:"unchecked_errors"`
+	SecretPathLeaks      int                  `json:"secret_path_leaks"`
+	MagicStringGroups    int                  `json:"magic_string_groups"`
 	SecuritySinks        int                  `json:"security_sinks"`
 	UntypedBoundaryReads int                  `json:"untyped_boundary_reads"`
 	PhantomWireKeys      int                  `json:"phantom_wire_keys"`
 	InferredBoundaries   int                  `json:"inferred_boundaries"`
-	Hotspots           []XrayHotspot        `json:"hotspots,omitempty"`
-	BaselineEnvelope   XrayBaselineEnvelope `json:"baseline_envelope"`
-	NextCommand        string               `json:"next_command"`
+	SpineDepth           int                  `json:"spine_depth"`
+	ReachableFiles       int                  `json:"reachable_files"`
+	UnreachedFiles       int                  `json:"unreached_files"`
+	Topology             *XrayTopologyGraph   `json:"topology,omitempty"`
+	Hotspots             []XrayHotspot        `json:"hotspots,omitempty"`
+	BaselineEnvelope     XrayBaselineEnvelope `json:"baseline_envelope"`
+	NextCommand          string               `json:"next_command"`
 }
 
 // XrayBaselineManifest persists trunk-pinned Day-0 structural debt bounds in nomos.baseline.json (#XrayBaselineManifest).

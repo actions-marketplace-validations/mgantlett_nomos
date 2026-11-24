@@ -46,6 +46,7 @@ var (
 type scanAccumulator struct {
 	thresholds     treesitter.EngineThresholds
 	nonTestSources map[string][]byte
+	testSources    map[string][]byte
 	dirFileCounts  map[string]int
 	hotspotsByFile map[string]*XrayHotspot
 	report         *XrayReport
@@ -118,6 +119,7 @@ func newScanAccumulator(absRoot string) *scanAccumulator {
 	return &scanAccumulator{
 		thresholds:     treesitter.DefaultEngineThresholds(),
 		nonTestSources: make(map[string][]byte),
+		testSources:    make(map[string][]byte),
 		dirFileCounts:  make(map[string]int),
 		hotspotsByFile: make(map[string]*XrayHotspot),
 		report: &XrayReport{
@@ -244,6 +246,16 @@ func finalizeScanReport(absRoot string, topLimit int, start time.Time, acc *scan
 	)
 	applyBoundaryDriftFindings(wiredrift.ScanCorpusBoundaryWireDrift(acc.nonTestSources), acc.report, acc.hotspotsByFile)
 	acc.report.InferredBoundaries = len(impact.InferCleanArchitectureBoundariesForFiles(absRoot, nonTestSourcePaths(acc.nonTestSources)))
+	applyTopologyMetrics(absRoot, acc)
+	if acc.report.Topology != nil {
+		for i := range acc.report.Topology.Spine {
+			if hs := acc.hotspotsByFile[acc.report.Topology.Spine[i].File]; hs != nil {
+				acc.report.Topology.Spine[i].Language = hs.Language
+				acc.report.Topology.Spine[i].LOC = hs.LOC
+				acc.report.Topology.Spine[i].CDS = hs.CDS
+			}
+		}
+	}
 	acc.report.HangoverScore = computeHangoverScore(acc.report)
 	acc.report.Grade = computeHangoverGrade(acc.report.HangoverScore)
 	acc.report.Hotspots = selectTopHotspots(acc.hotspotsByFile, topLimit)
