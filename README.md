@@ -273,7 +273,7 @@ Nomos Community Edition is **100% open-source under Apache 2.0** with zero telem
 | **Nomos Mneme Receipt-Gated Episodic Memory & Sanitized Issues** (`nomos mem`, `nomos issue`, local `mneme.db` hybrid vector/lexical recall + automatic 2PC `trap -> fix` pitfall distillation) | ✅ Included (Local Repo `mneme.db`) | ✅ + Sophia Memory Curation, Dream Cycle Synthesis, Mneme Cortex HUD & Squad Mesh |
 | **Sophia & Nomos 4-Pillar Workbench & Sophia Flight Deck** (Principal Architect & Orthogonal Critic over BYOK Cloud APIs or Local `14B-32B` SLMs, Unified Workfront, X-Ray Debt Atlas, PR Proof Deck, `MTPO` Radar, 7x3 Verify Matrix & Security Radar) | Not Included (Lipgloss Terminal HUD Included) | 🔒 Sovereign Edition ([Explore Tour](https://sophialabs.ca/sovereign)) |
 | **Headless Tier 2 Autonomous Worker Fleet & Adversarial Conformance Critic** (`nomos code run \| route \| --burndown`, Dual-Sided `nomos code review`, Intent-to-Code Twin Parity, `$0` Local GPU Burndown) | Not Included | 🔒 Sovereign Edition ([Interactive Demo](https://sophialabs.ca/sovereign#nomos-code)) |
-| **Turnkey Air-Gapped NixOS GPU Appliances & Offline Ed25519 Entitlement** | Not Included | 🔒 Regulated & Enterprise ([Adoption Profiles](https://sophialabs.ca/editions)) |
+| **SLSA v1.0 DSSE Provenance, Encrypted Git Squad Sync, Offline Ed25519 Keys & Air-Gapped NixOS Appliances** | Not Included (Git Notes + SARIF Included) | 🔒 Sovereign Pro, Squad & Air-Gap ([Editions](https://sophialabs.ca/editions)) |
 
 ---
 
