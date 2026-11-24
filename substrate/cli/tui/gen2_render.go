@@ -83,6 +83,12 @@ func appendXraySummaryLines(sb *strings.Builder, rep *xray.XrayReport) {
 	bounds := fmt.Sprintf("%s zero-violation architecture boundary rule(s) ready",
 		UiSuccessStyle.Render(fmt.Sprintf("%d", rep.InferredBoundaries)))
 	sb.WriteString(KvLine("Clean Boundaries", 18, bounds) + "\n")
+
+	spineLine := fmt.Sprintf("%s step(s) · %s reachable · %s unreached dust file(s)",
+		UiBoldValueStyle.Render(fmt.Sprintf("%d", rep.SpineDepth)),
+		UiBoldValueStyle.Render(fmt.Sprintf("%d", rep.ReachableFiles)),
+		styleNonZeroCount(rep.UnreachedFiles, UiWarnStyle))
+	sb.WriteString(KvLine("Topology Spine", 18, spineLine) + "\n")
 }
 
 func appendLipglossHotspots(sb *strings.Builder, hotspots []xray.XrayHotspot) {
