@@ -361,8 +361,60 @@ type CapabilityMetrics struct {
 }
 ```
 
+```go
+package inspectcmd
+
+// ContractSlice models a resolved specification contract, TC-* obligations, and reverse AST bindings (#ContractSlice).
+type ContractSlice struct {
+	Target         string   `json:"target"`
+	SpecFile       string   `json:"spec_file"`
+	SpecSHA256     string   `json:"spec_sha256"`
+	SectionHeading string   `json:"section_heading,omitempty"`
+	ContractBlock  string   `json:"contract_block,omitempty"`
+	Obligations    []string `json:"obligations,omitempty"`
+	SourceFiles    []string `json:"source_files,omitempty"`
+	VerifyingTests []string `json:"verifying_tests,omitempty"`
+}
+
+// CapabilityDetail models single-item capability, gate, and contract drill-down (#CapabilityDetail).
+type CapabilityDetail struct {
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	Type        string         `json:"type"`
+	Plane       string         `json:"plane"`
+	Status      string         `json:"status"`
+	Law         int            `json:"law,omitempty"`
+	Ring        string         `json:"ring,omitempty"`
+	Domain      string         `json:"domain,omitempty"`
+	Invocation  string         `json:"invocation"`
+	Description string         `json:"description"`
+	Remedy      string         `json:"remedy,omitempty"`
+	ProbeIDs    []string       `json:"probe_ids,omitempty"`
+	Contract    *ContractSlice `json:"contract,omitempty"`
+}
+```
+
+```go
+package impact
+
+// IndirectBoundarySignal describes a runtime or wire coupling boundary in modified files (#IndirectBoundarySignal).
+type IndirectBoundarySignal struct {
+	Category string   `json:"category"`
+	File     string   `json:"file"`
+	Symbols  []string `json:"symbols,omitempty"`
+	Summary  string   `json:"summary"`
+}
+
+// WorkspaceImpactReport pairs 1-hop AST reverse-dependency packages with indirect boundary signals (#WorkspaceImpactReport).
+type WorkspaceImpactReport struct {
+	ModifiedFiles      []string                 `json:"modified_files"`
+	ImpactedPackages   []string                 `json:"impacted_packages"`
+	IndirectBoundaries []IndirectBoundarySignal `json:"indirect_boundaries,omitempty"`
+}
+```
+
 ### 4.3 Cross-Plane Transduction Matrix (`nomos physics`, `nomos session`, `nomos capabilities`)
-The Open-Core Software Physics Engine exposes real-time worktree AST mass, inertia, and continuous collision detection through `nomos physics [--json]` under the `quality` CLI group. Operators query session arcs via `nomos session` (`--id`, `--root`, `--brain`, `--json`) and capability registries via `nomos capabilities` (`--type`, `--json`).
+The Open-Core Software Physics Engine exposes real-time worktree AST mass, inertia, and continuous collision detection through `nomos physics [--json]` under the `quality` CLI group. Operators query session arcs via `nomos session` (`--id`, `--root`, `--brain`, `--json`) and capability registries via `nomos capabilities` (`--type`, `--json`). Passing `#StructName`, `TC-*`, `ERR_*`, or a spec filename to `nomos capabilities <target>` (or `nomos_capabilities`) extracts the matching `ContractSlice`, reverse `@intent` sources, `@verifies` tests, and `SpecSHA256` digest. Running `nomos verify --impact` (or `nomos_verify_impact`) pairs static 1-hop `ImpactedPackages` with advisory `IndirectBoundaries` covering HTTP routes, SQL tables, JSON/YAML wire tags, CLI flags, and non-AST files.
 
 | Intent Physical Vector | Substrate Engine Package | CLI & Telemetry Projection |
 | :--- | :--- | :--- |
@@ -393,8 +445,10 @@ The Open-Core Software Physics Engine exposes real-time worktree AST mass, inert
 | `TC-LAUNCH-002` | Fail-Safe Telemetry Recording | `RecordInvocationSafe` with unavailable database path | `PASS` (Degrades silently with zero panic or CLI disruption) |
 | `TC-LAUNCH-003` | Capability Matrix Inspection | `nomos capabilities --json` | `PASS` (Emits structured capability and 7x3 gate registry JSON) |
 | `TC-LAUNCH-004` | Single-Capability Deep Dive | `nomos capabilities <probe_id>` | `PASS` (Renders law, ring, threshold, and remedy contract) |
+| `TC-LAUNCH-005` | Intent Contract Slice Lookup | `nomos capabilities "#GateResult"` and `TC-DOD-07` | `PASS` (Extracts `ContractSlice`, `Obligations`, `SourceFiles`, `VerifyingTests`, and `SpecSHA256`) |
 | `TC-PHY-05` | Brownfield dCDS Recipe | Positive `dCDS` over Git baseline (`PrescribeRatchetedCDSRecipe`) | Emits `file:start-end`, baseline ceiling, and top function `dCDS` delta |
 | `TC-PHY-06` | Complexity & Arity Recipe | Function exceeds `V(G)`, `LOC`, or `MaxFuncParams` | Emits `file:start-end`, numeric excess, and 1-step helper/struct target |
+| `TC-PHY-07` | Indirect Blast-Radius Boundaries | `ComputeWorkspaceImpactReport` over HTTP, SQL, wire-tag, CLI flag, and `.sh` edits | `PASS` (Emits static `ImpactedPackages` plus advisory `IndirectBoundaries`) |
 | `TC-MTPO-01` | Monotonic Trajectory Pre-Order | `nomos task start` and `nomos task chore` across concurrent worktrees | Allocates ascending `Seq` values in `worktree_mtpo` ledger |
 | `TC-MTPO-02` | Write-Time AST Mediation | `RecordFileMutation` on later trajectory touching earlier active symbol | Persists AST sets under `25ms` and emits advisory `MTPOConflict` |
 | `TC-MTPO-03` | 2PC AST Serializability | `VerifySyncSerializability` when predecessor merges overlapping symbol to `main` | Rejects stale base commit with rebase and verify remedy |

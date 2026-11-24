@@ -8,11 +8,13 @@ import (
 	"time"
 )
 
-// SearchResult encapsulates a ranked memory match.
+// SearchResult pairs a matched Memory record with its hybrid relevance score and lineage guardrails (#SearchResult).
+// @intent mneme_memory_spec.md #SearchResult
 type SearchResult struct {
-	Memory  *Memory `json:"memory"`
-	Score   float64 `json:"score"`
-	Snippet string  `json:"snippet"`
+	Memory     *Memory           `json:"memory"`
+	Score      float64           `json:"score"`
+	Snippet    string            `json:"snippet"`
+	Guardrails []RecallGuardrail `json:"guardrails,omitempty"`
 }
 
 // SearchOptions encapsulates parameters for querying Nomos Mneme memory.
@@ -58,6 +60,7 @@ func (s *Store) SearchWithOptions(query string, opts SearchOptions) ([]*SearchRe
 	results := scoreMatchingMemories(records, query, queryEmb, opts)
 	sortSearchResults(results)
 	results = applyGlobalAxiomSlotCap(results, opts, limit)
+	attachRecallGuardrails(results, records)
 
 	if !opts.ReadOnly {
 		for _, res := range results {

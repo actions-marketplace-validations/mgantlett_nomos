@@ -183,6 +183,11 @@ func renderRecallResults(query string, results []*mem.SearchResult) {
 			tui.UiCommandStyle.Render(fmt.Sprintf("#%d", r.Memory.ID)),
 			tui.UiLabelStyle.Render(fmt.Sprintf("(%s · %s)", r.Memory.Kind, r.Memory.Topic)))
 		fmt.Printf("     %s\n", tui.UiValueStyle.Render(r.Snippet))
+		for _, g := range r.Guardrails {
+			fmt.Printf("     %s %s\n",
+				tui.UiWarnStyle.Render(fmt.Sprintf("⚠️  [%s #%d]", g.Relation, g.MemoryID)),
+				tui.UiMutedStyle.Render(g.Summary))
+		}
 	}
 	fmt.Println(tui.UiRule(tui.RuleNarrow))
 	fmt.Printf("%s\n", tui.UiFooterStyle.Render(fmt.Sprintf("Found %d relevant memory record(s)", len(results))))

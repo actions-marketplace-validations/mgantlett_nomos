@@ -305,14 +305,20 @@ func coreOrDefault(val, fallback string) string {
 }
 
 func execCapabilitiesTool(args map[string]any) (string, bool) {
+	if id := strings.TrimSpace(stringArg(args, "id")); id != "" {
+		targetDir := resolveTargetDir(stringArg(args, "dir"))
+		detail, err := inspectcmd.ResolveCapabilityDetailInDir(targetDir, id)
+		if err != nil {
+			return err.Error(), true
+		}
+		return marshalToolJSON(detail)
+	}
 	cmd := inspectcmd.NewCapabilitiesCmd()
 	var outBuf, errBuf bytes.Buffer
 	cmd.SetOut(&outBuf)
 	cmd.SetErr(&errBuf)
 	cliArgs := []string{"--json"}
-	if id := strings.TrimSpace(stringArg(args, "id")); id != "" {
-		cliArgs = []string{id, "--json"}
-	} else if fType := strings.TrimSpace(stringArg(args, "type")); fType != "" {
+	if fType := strings.TrimSpace(stringArg(args, "type")); fType != "" {
 		cliArgs = []string{"--type", fType, "--json"}
 	}
 	cmd.SetArgs(cliArgs)
