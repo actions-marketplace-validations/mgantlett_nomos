@@ -19,7 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Remove closed Smithery reference from distribution manifest spec (`INT-2253`)**.
 
 ### CLI, Distribution & Hooks (`nomos cli`)
-- **Add intent contract lookup, impact boundary hints, and Mneme lineage recall (`INT-2260`, `SUB-3533`)**: Nomos capabilities and `nomos_capabilities` resolve #StructName, TC-*, ERR_*, and spec filenames with zero-markup extraction, reverse `@intent`/@verifies links, and sha256 digest.
+- **Add intent contract lookup, impact boundary hints, and Mneme lineage recall (`INT-2260`, `SUB-3533`)**: Nomos capabilities and `nomos_capabilities` resolve `#StructName`, `TC-*`, `ERR_*`, and spec filenames with zero-markup extraction, reverse `@intent`/`@verifies` links, and `sha256` digest.
 
 ### Verification & Quality Gates (`nomos verify`, `capbac`)
 - **Add polyglot dependency spine, reachable branch, and unreached file topology to xray and verify (`INT-2272`, `SUB-3608`)**: XrayReport emits SpineDepth, ReachableFiles, UnreachedFiles, and XrayTopologyGraph with zero false positives on library exemplars.
