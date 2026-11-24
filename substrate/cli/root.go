@@ -28,7 +28,7 @@ import (
 )
 
 // RootCmdVersion defines the statutory release version of Nomos v4.
-var RootCmdVersion = "4.31.0"
+var RootCmdVersion = "4.32.0"
 
 func init() {
 	tui.ResolveAppVersion = func() string { return RootCmdVersion }

@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v4.32.0] - 2026-11-24
+
+> Add polyglot dependency spine, reachable branch, and unreached file topology to xray and verify; Add intent contract lookup, impact boundary hints, and Mneme lineage recall; Add Windows Scoop, Winget, Devcontainer, and mise distribution manifests; Specify GateResult sensor scopes and orphan fixture checks (Apache 2.0)
+
+### Agent Upgrade & New Surfaces
+- **Upgrade**: `npx -y @mgantlett/nomos@latest update --sync-workspace` (or `uvx --refresh nomos-cli xray . --json`).
+- **Active Surfaces**: `intent/architecture/specs/`, `nomos cli`, `nomos verify`, `capbac`.
+
+### Intent & Specifications (`intent/architecture/specs/`)
+- **Specify GateResult sensor scopes and orphan fixture checks (`INT-2258`, `SUB-3527`)**: Specify diff-ratcheted orphan fixture detection in AntiShimGate and sensor execution summaries across GateResult, PipelineReport, SARIF, and ReleaseNotePayload.
+- **Remove closed Smithery reference from distribution manifest spec (`INT-2253`)**.
+
+### CLI, Distribution & Hooks (`nomos cli`)
+- **Add intent contract lookup, impact boundary hints, and Mneme lineage recall (`INT-2260`, `SUB-3533`)**: Nomos capabilities and `nomos_capabilities` resolve #StructName, TC-*, ERR_*, and spec filenames with zero-markup extraction, reverse `@intent`/@verifies links, and sha256 digest.
+
+### Verification & Quality Gates (`nomos verify`, `capbac`)
+- **Add polyglot dependency spine, reachable branch, and unreached file topology to xray and verify (`INT-2272`, `SUB-3608`)**: XrayReport emits SpineDepth, ReachableFiles, UnreachedFiles, and XrayTopologyGraph with zero false positives on library exemplars.
+- **Harden shell lexer near-misses, place-scoped container guards, and config/symlink preflight (`SUB-3529`)**: Harden shell lexer near-misses, dangling escaping symlinks, and `corpus_command` trunk pin.
+- **Propagate gate sensor execution summaries and orphan fixture checks (`INT-2259`, `SUB-3527`)**: Enforce diff-ratcheted ScanOrphanedFixtures in AntiShimGate and emit ExecutionScope, SensorSummary, and UnindexedExtensions across GateResult, PipelineReport, SARIF, CLI verify output, and ReleaseNotePayload.
+
+### Release & Packaging (`README.md`, `.goreleaser.yaml`, `.github/workflows/ci.yaml`)
+- **Align Open-Core boundary row with Sovereign Pro, Squad, SLSA DSSE audit, and Air-Gap editions (`SUB-3666`)**: Align Open-Core boundary row with Sovereign Pro, Squad, SLSA DSSE, and Air-Gap editions.
+- **Add Glama remote MCP connector backlink in collapsed MCP details (`SUB-3658`)**.
+- **Surface Topology Spine and Unreached Dust row in TUI xray card (`SUB-3614`)**: Surface Topology Spine and Unreached Dust row in CLI xray summary.
+- **Close cp/subshell binary-copy TOCTOU on workspace escaping symlinks (`SUB-3531`)**: Close cp/subshell binary-copy TOCTOU and derive escaping symlink parent roots.
+- **Add Windows Scoop, Winget, Devcontainer, and mise distribution manifests (`INT-2256`, `SUB-3523`)**: Goreleaser check and strict KnownFields tests validate scoops and winget targets.
+- **Assert closed Smithery manifest remains absent (`SUB-3519`)**: Assert Marketplace shield branding in distribution manifest suite.
+- **Add pre-commit hooks, Nix flake, and multi-arch GHCR OCI container distribution (`INT-2252`, `SUB-3517`)**: Pre-commit hooks manifest, Nix flake, multi-arch GHCR OCI container config, and GoReleaser contract tests pass all 42 DoD gates.
+
+---
+
 ## [v4.31.0] - 2026-11-23
 
 > Catch silent JSON `snake_case` wire drift and untyped DTO escapes across Go, TypeScript, and Python; expose Page 0 capability discovery across stdio MCP, npm, PyPI, and `llms.txt` (Apache 2.0)
