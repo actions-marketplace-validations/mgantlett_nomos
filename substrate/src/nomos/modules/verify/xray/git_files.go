@@ -156,7 +156,7 @@ func evaluateSingleCandidate(cand scanCandidate, thresholds treesitter.EngineThr
 	if impact.IsTestSourceFile(cand.relSlash) {
 		return scannedFileOutcome{
 			valid: true, isTest: true, relSlash: cand.relSlash,
-			lang: cand.lang, loc: loc, skippedTests: skipped,
+			lang: cand.lang, loc: loc, skippedTests: skipped, data: data,
 		}
 	}
 	fm, oversized := computeImplementationMetrics(cand.relSlash, cand.lang, loc, data, thresholds)
@@ -178,6 +178,7 @@ func reduceScannedFiles(outcomes []scannedFileOutcome, acc *scanAccumulator) {
 		acc.report.Languages[r.lang]++
 		acc.report.SkippedTests += r.skippedTests
 		if r.isTest {
+			acc.testSources[r.relSlash] = r.data
 			continue
 		}
 		acc.nonTestSources[r.relSlash] = r.data

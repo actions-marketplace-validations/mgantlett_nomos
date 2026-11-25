@@ -53,7 +53,27 @@ func evaluateConfiguredObligations(gateName string, ctx *vscope.VerifyContext, r
 			return boundaryFailure
 		}
 	}
-	return evaluateContractObligationChecks(gateName, ctx, cfg, root, targetDir)
+	if contractRes := evaluateContractObligationChecks(gateName, ctx, cfg, root, targetDir); contractRes != nil {
+		return contractRes
+	}
+	return evaluateWorktreeZeroDustGate(gateName, ctx, root)
+}
+
+func evaluateWorktreeZeroDustGate(gateName string, ctx *vscope.VerifyContext, root string) *vscope.GateResult {
+	scanRoot := root
+	if ctx != nil && ctx.WorktreePath != "" {
+		scanRoot = ctx.WorktreePath
+	}
+	unreached := impact.EvaluateWorktreeUnreachedFiles(ctx, scanRoot)
+	if len(unreached) == 0 {
+		return nil
+	}
+	return &vscope.GateResult{
+		GateName: gateName, ProbeID: probeIDIntentTraceability, Law: 7, Ring: RingSyntactic,
+		Passed:  false,
+		Message: fmt.Sprintf("unreached worktree file(s): %s", strings.Join(unreached, "; ")),
+		Remedy:  "wire newly added source files into an entrypoint/caller, add a paired unit test, or prune dead AI dust (Law 6 & Law 7)",
+	}
 }
 
 // evaluateContractObligationChecks enforces bijective contract struct parity, executable TC-*

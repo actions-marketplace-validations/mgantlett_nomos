@@ -322,6 +322,27 @@ type XrayHotspot struct {
 	Reasons              []string `json:"reasons,omitempty"`
 }
 
+// XrayTopologyNode describes a source module on the dependency spine, branch set, or unreached set (#XrayTopologyNode).
+type XrayTopologyNode struct {
+	File       string `json:"file"`
+	Label      string `json:"label"`
+	Language   string `json:"language"`
+	LOC        int    `json:"loc"`
+	CDS        int    `json:"cds,omitempty"`
+	Depth      int    `json:"depth"`
+	ParentFile string `json:"parent_file,omitempty"`
+	InDegree   int    `json:"in_degree,omitempty"`
+	OutDegree  int    `json:"out_degree,omitempty"`
+}
+
+// XrayTopologyGraph captures the dependency spine, sampled reachable branches, and unreached files (#XrayTopologyGraph).
+type XrayTopologyGraph struct {
+	Entrypoints []string           `json:"entrypoints,omitempty"`
+	Spine       []XrayTopologyNode `json:"spine,omitempty"`
+	Branches    []XrayTopologyNode `json:"branches,omitempty"`
+	Dust        []XrayTopologyNode `json:"dust,omitempty"`
+}
+
 // XrayBaselineEnvelope records observed upper-bound structural metrics for baseline locking (#XrayBaselineEnvelope).
 type XrayBaselineEnvelope struct {
 	ObservedMaxFileLOC      int `json:"observed_max_file_loc"`
@@ -332,35 +353,40 @@ type XrayBaselineEnvelope struct {
 	ObservedMaxParams       int `json:"observed_max_params"`
 	ObservedMaxNesting      int `json:"observed_max_nesting"`
 	CloneGroupCount         int `json:"clone_group_count"`
+	ObservedUnreachedFiles  int `json:"observed_unreached_files,omitempty"`
 }
 
 // XrayReport summarizes zero-init polyglot structural debt and hangover indicators (#XrayReport).
 type XrayReport struct {
-	ProjectName        string               `json:"project_name"`
-	DurationMillis     int64                `json:"duration_ms"`
-	Initialized        bool                 `json:"initialized"`
-	FilesScanned       int                  `json:"files_scanned"`
-	TotalLOC           int                  `json:"total_loc"`
-	Languages          map[string]int       `json:"languages"`
-	HangoverScore      int                  `json:"hangover_score"`
-	Grade              string               `json:"grade"`
-	CloneGroups        int                  `json:"clone_groups"`
-	MonolithFiles      int                  `json:"monolith_files"`
-	OversizedFuncs     int                  `json:"oversized_funcs"`
-	HighArityFuncs     int                  `json:"high_arity_funcs"`
-	DeepNestingFuncs   int                  `json:"deep_nesting_funcs"`
-	EmptyStubs         int                  `json:"empty_stubs"`
-	SkippedTests       int                  `json:"skipped_tests"`
-	UncheckedErrors    int                  `json:"unchecked_errors"`
-	SecretPathLeaks    int                  `json:"secret_path_leaks"`
-	MagicStringGroups  int                  `json:"magic_string_groups"`
+	ProjectName          string               `json:"project_name"`
+	DurationMillis       int64                `json:"duration_ms"`
+	Initialized          bool                 `json:"initialized"`
+	FilesScanned         int                  `json:"files_scanned"`
+	TotalLOC             int                  `json:"total_loc"`
+	Languages            map[string]int       `json:"languages"`
+	HangoverScore        int                  `json:"hangover_score"`
+	Grade                string               `json:"grade"`
+	CloneGroups          int                  `json:"clone_groups"`
+	MonolithFiles        int                  `json:"monolith_files"`
+	OversizedFuncs       int                  `json:"oversized_funcs"`
+	HighArityFuncs       int                  `json:"high_arity_funcs"`
+	DeepNestingFuncs     int                  `json:"deep_nesting_funcs"`
+	EmptyStubs           int                  `json:"empty_stubs"`
+	SkippedTests         int                  `json:"skipped_tests"`
+	UncheckedErrors      int                  `json:"unchecked_errors"`
+	SecretPathLeaks      int                  `json:"secret_path_leaks"`
+	MagicStringGroups    int                  `json:"magic_string_groups"`
 	SecuritySinks        int                  `json:"security_sinks"`
 	UntypedBoundaryReads int                  `json:"untyped_boundary_reads"`
 	PhantomWireKeys      int                  `json:"phantom_wire_keys"`
 	InferredBoundaries   int                  `json:"inferred_boundaries"`
-	Hotspots           []XrayHotspot        `json:"hotspots,omitempty"`
-	BaselineEnvelope   XrayBaselineEnvelope `json:"baseline_envelope"`
-	NextCommand        string               `json:"next_command"`
+	SpineDepth           int                  `json:"spine_depth"`
+	ReachableFiles       int                  `json:"reachable_files"`
+	UnreachedFiles       int                  `json:"unreached_files"`
+	Topology             *XrayTopologyGraph   `json:"topology,omitempty"`
+	Hotspots             []XrayHotspot        `json:"hotspots,omitempty"`
+	BaselineEnvelope     XrayBaselineEnvelope `json:"baseline_envelope"`
+	NextCommand          string               `json:"next_command"`
 }
 
 // XrayBaselineManifest persists trunk-pinned Day-0 structural debt bounds in nomos.baseline.json (#XrayBaselineManifest).
@@ -378,9 +404,12 @@ type XrayBaselineManifest struct {
 }
 
 func ScanRepository(rootDir string, opts XrayScanOptions) (*XrayReport, error)
+func EvaluateUnreachedFilesGate(rootDir string, baselineUnreached int) ([]string, error)
 ```
 
 `ScanRepository` evaluates candidate source files across a `GOMAXPROCS` worker pool and reduces results in sorted path order. Git index candidate queries pass `-- .` so subdirectory scans avoid full-repository untracked directory walks. Parallel clone hashing, directory-partitioned magic-string clustering, and inner-layer boundary inference preserve deterministic `XrayReport` output on multi-million-LOC monorepos.
+
+`ScanRepository` discovers executable, route, manifest, suite, and public library entrypoints before traversing polyglot imports across non-test source files. The graph walker extracts the longest acyclic dependency spine, samples reachable branches, and isolates unreached files in `XrayTopologyGraph`. Pure library repositories without executable `main` packages root reachability at exported non-internal packages to prevent false-positive reports. `ArchitectureBoundariesGate` invokes `EvaluateUnreachedFilesGate` during `nomos verify` and rejects net-new unreached files exceeding the baseline count.
 
 When `FilesScanned >= 1500`, terminal rendering appends a `nomos xray <subdir>` seam affordance. On `>= 1000`-file monorepos, `PostToolUse` emits one-time `Nomos Monorepo Seam` paired-test and 1-hop peer hints on up to five `< 500`-LOC source reads. `Nomos Hotspot Read` appends a bounded Tree-sitter function line-range outline on `>= 500`-LOC files, and `PreToolUse` pauses broad search tools after `22` consecutive zero-edit reads.
 
@@ -447,6 +476,7 @@ The following table-driven verification vectors validate the Tree-sitter AST Gat
 | `TC-XRAY-01` | `polyglot` | Uninitialized Go, Python, and TS fixture with clones and stubs | `xray.ScanRepository` aggregates polyglot metrics and hotspots | Non-zero `HangoverScore` and `BaselineEnvelope` | `PASS` | Read-only scan writes zero files or SQLite rows |
 | `TC-XRAY-02` | `polyglot` | `XrayReport` serialized via JSON and Markdown formatters | Relative hotspot paths emitted | Zero host home-directory literals | `PASS` | Law 5 path scrubbing holds across `XrayReport` outputs |
 | `TC-XRAY-03` | `polyglot` | Exported `*Result` DTO using `Record<string, unknown>` plus `r.top_hotspots` read | `ScanCorpusBoundaryWireDrift` flags untyped DTO escape and phantom wire key | `UntypedBoundaryReads == 1`, `PhantomWireKeys == 1`, tag `hotspots` | `FAIL` | Law 4 rejects untyped DTO escapes and phantom wire keys |
+| `TC-XRAY-04` | `polyglot` | Multi-file fixture with entrypoint spine, library exports, and orphaned helper | `ScanRepository` computes `SpineDepth`, `ReachableFiles`, `UnreachedFiles`, and `Topology` | `UnreachedFiles == 1`; library exemplars report `0` unreached files | `FAIL` | Law 6 & Law 7 reject net-new unreached files above baseline |
 | `TC-MUT-02` | `go` | Modified Go function tested with boundary assertions | `prproof.EvaluateDiffMutations` flips AST operators | `KillScorePct == 100` | `PASS` | Boundary tests kill every diff AST mutant |
 
 ---
