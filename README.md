@@ -141,7 +141,7 @@ Enforce zero-trust PR mutation proofs in GitHub Actions ([GitHub Marketplace](ht
 ```yaml
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }
-- uses: mgantlett/nomos@v4.32.0
+- uses: mgantlett/nomos@v4.32.1
   with: { base-ref: origin/main, mutate-diff: 'true' }
 ```
 

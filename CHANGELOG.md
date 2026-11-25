@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v4.32.1] - 2026-11-25
+
+> Wrap `@verifies` and #StructName in backticks in v4.32.0 changelog (Apache 2.0)
+
+### Agent Upgrade & New Surfaces
+- **Upgrade**: `npx -y @mgantlett/nomos@latest update --sync-workspace` (or `uvx --refresh nomos-cli xray . --json`).
+
+### Release & Packaging (`CHANGELOG.md`)
+- **Wrap `@verifies` and #StructName in backticks in v4.32.0 changelog (`SUB-3711`)**.
+
+---
+
 ## [v4.32.0] - 2026-11-24
 
 > Add polyglot dependency spine, reachable branch, and unreached file topology to xray and verify; Add intent contract lookup, impact boundary hints, and Mneme lineage recall; Add Windows Scoop, Winget, Devcontainer, and mise distribution manifests; Specify GateResult sensor scopes and orphan fixture checks (Apache 2.0)
