@@ -358,7 +358,7 @@ func TestCleanroomBranchGuardOnboarding_RatchetScratchStrictPromotionAndReceipts
 		t.Fatalf("write note1: %v", wErr)
 	}
 	runGitOrFail(t, scratchDir, "add", "note1.txt")
-	runGitOrFail(t, scratchDir, "commit", "-m", "docs: first commit")
+	runGitOrFail(t, scratchDir, "-c", "core.hooksPath=/dev/null", "commit", "-m", "docs: first commit")
 	pc1, pc1Err := runRootCLIForTest(t, "", "hook", "post-commit", "--dir", scratchDir)
 	if pc1Err != nil || !strings.Contains(pc1, "first verified commit") {
 		t.Fatalf("TC-STATUS-BG-02: expected first verified commit receipt, got err=%v out=%q", pc1Err, pc1)
@@ -368,7 +368,7 @@ func TestCleanroomBranchGuardOnboarding_RatchetScratchStrictPromotionAndReceipts
 		t.Fatalf("write note2: %v", wErr)
 	}
 	runGitOrFail(t, scratchDir, "add", "note2.txt")
-	runGitOrFail(t, scratchDir, "commit", "-m", "docs: clean second commit")
+	runGitOrFail(t, scratchDir, "-c", "core.hooksPath=/dev/null", "commit", "-m", "docs: clean second commit")
 	pc2, pc2Err := runRootCLIForTest(t, "", "hook", "post-commit", "--dir", scratchDir)
 	if pc2Err != nil || strings.TrimSpace(pc2) != "" {
 		t.Fatalf("TC-STATUS-BG-02: expected quiet clean second commit, got err=%v out=%q", pc2Err, pc2)
@@ -379,7 +379,7 @@ func TestCleanroomBranchGuardOnboarding_RatchetScratchStrictPromotionAndReceipts
 		t.Fatalf("write note3: %v", wErr)
 	}
 	runGitOrFail(t, scratchDir, "add", "note3.txt")
-	runGitOrFail(t, scratchDir, "commit", "-m", "fix: commit after catch")
+	runGitOrFail(t, scratchDir, "-c", "core.hooksPath=/dev/null", "commit", "-m", "fix: commit after catch")
 	pc3, pc3Err := runRootCLIForTest(t, "", "hook", "post-commit", "--dir", scratchDir)
 	if pc3Err != nil || !strings.Contains(pc3, "1 shortcut(s) caught before commit") {
 		t.Fatalf("TC-STATUS-BG-02: expected catch receipt on third commit, got err=%v out=%q", pc3Err, pc3)

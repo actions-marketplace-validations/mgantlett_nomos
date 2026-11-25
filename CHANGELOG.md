@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v4.33.0] - 2026-11-25
+
+> Ratchet-by-Default Compact Init, Repo-Scoped Shield Scorecard Telemetry, Smart Home Agent Detection, and Branch-Guard 4-Rung Graduation Ladder (Apache 2.0)
+
+### Agent Upgrade & New Surfaces
+- **Upgrade**: `npx -y @mgantlett/nomos@latest update --sync-workspace` (or `uvx --refresh nomos-cli xray . --json`).
+- **Active Surfaces**: `nomos init`, `nomos status`, `nomos hook post-commit`, `mneme.db` (`shield_events`).
+
+### Intent & Specifications (`intent/architecture/specs/`)
+- **Specify Shield telemetry, ratchet-by-default init, and Branch-Guard status ladder (`INT-2294`)**: Add `shield_events` SQLite table, `#ShieldSummary` Go SSoT, compact `templates/nomos_branch.yaml`, smart agent detection without 5-folder fallback, Branch-Guard `nomos status` 4-rung graduation ladder, quiet post-commit Shield Receipts, and compliance vectors `TC-SHIELD-01..03`, `TC-INIT-08..10`, and `TC-STATUS-BG-01..02`.
+
+### CLI, Onboarding & Cognitive Memory (`nomos init`, `nomos status`, `mneme.db`)
+- **Add Ratchet-by-default compact init, smart `$HOME` agent detection, and idempotent `--strict` promotion (`SUB-3851`)**: Plain `nomos init` always starts in safe Ratchet posture (`strict_mode: false`) with compact `~18`-line `nomos.yaml`, checks repo -> `$PATH` -> `$HOME` agent config directories without dumping unused IDE folders, prints plain-English ratchet guarantees and auto-locked boundaries, and promotes existing `nomos.yaml` cleanly via `nomos init --strict` while preserving historical `nomos.baseline.json`.
+- **Add Shield Scorecard telemetry, Branch-Guard `nomos status`, and quiet 1-line post-commit receipts (`SUB-3851`, `SUB-3853`)**: Record `PreToolUse` denies, `Stop` blocks, verification gate catches, and verified commits into repo-scoped `shield_events` in `mneme.db` (`0ms` cost on clean allows), render the Branch Guard Status Card with a 4-rung graduation ladder (`Stealth` -> `Branch Guard` -> `CI PR Proofs` -> `Strict/Worktrees`), and emit a 1-line `post-commit` Shield Receipt only on first commit, branch catches, or pitfall distillation.
+
+---
+
 ## [v4.32.1] - 2026-11-25
 
 > Wrap `@verifies` and #StructName in backticks in v4.32.0 changelog (Apache 2.0)
