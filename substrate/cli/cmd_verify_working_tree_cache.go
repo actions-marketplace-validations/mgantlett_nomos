@@ -17,6 +17,7 @@ import (
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/constants"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/types"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/mem"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/prproof"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/sarif"
@@ -230,4 +231,27 @@ func classifyPorcelainEntry(tok string) (staged, unstaged, extraPath bool) {
 	unstaged = (y != ' ' && y != '!') || x == '?'
 	extraPath = x == 'R' || x == 'C'
 	return staged, unstaged, extraPath
+}
+
+func recordFailedReportShieldEvents(repoRoot, branch string, report *verify.PipelineReport) {
+	if report == nil {
+		return
+	}
+	for _, res := range report.GateResults {
+		if res.Passed {
+			continue
+		}
+		mem.RecordShieldEvent(repoRoot, classifyVerifyShieldCategory(res.GateName), res.GateName, branch, res.Message)
+	}
+}
+
+func classifyVerifyShieldCategory(gateName string) string {
+	lower := strings.ToLower(gateName)
+	if strings.Contains(lower, "shim") || strings.Contains(lower, "test") || strings.Contains(lower, "tdd") || strings.Contains(lower, "mutation") {
+		return mem.ShieldCategoryAntiCheat
+	}
+	if strings.Contains(lower, "security") || strings.Contains(lower, "secret") || strings.Contains(lower, "forbidden") || strings.Contains(lower, "boundary") || strings.Contains(lower, "dependency") {
+		return mem.ShieldCategorySecurityAirlock
+	}
+	return mem.ShieldCategoryStructuralRatchet
 }

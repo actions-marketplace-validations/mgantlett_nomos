@@ -15,6 +15,7 @@ import (
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/types"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/handshake"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/mem"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/task"
 	"github.com/spf13/cobra"
 )
@@ -30,6 +31,18 @@ type StatusReport struct {
 	RepoRoot         string                     `json:"repo_root"`
 	ActiveBranch     string                     `json:"active_branch"`
 	IsWorktree       bool                       `json:"is_worktree"`
+	IsolationMode    string                     `json:"isolation_mode,omitempty"`
+	StrictMode       bool                       `json:"strict_mode,omitempty"`
+	StealthLocal     bool                       `json:"stealth_local,omitempty"`
+	HooksInstalled   bool                       `json:"hooks_installed,omitempty"`
+	WiredAgents      []string                   `json:"wired_agents,omitempty"`
+	BaselineScore    int                        `json:"baseline_score,omitempty"`
+	BaselineGrade    string                     `json:"baseline_grade,omitempty"`
+	HasBaseline      bool                       `json:"has_baseline,omitempty"`
+	CIEnabled        bool                       `json:"ci_enabled,omitempty"`
+	Shield           *mem.ShieldSummary         `json:"shield,omitempty"`
+	GraduationRung   int                        `json:"graduation_rung,omitempty"`
+	GraduationName   string                     `json:"graduation_name,omitempty"`
 	DatabasePath     string                     `json:"database_path"`
 	DatabaseStatus   string                     `json:"database_status"`
 	TotalTasks       int                        `json:"total_tasks"`
@@ -118,7 +131,7 @@ func collectStatusReportWithScope(allProjects bool) *StatusReport {
 	remoteAhead := resolveRemoteAheadCount(repoRoot)
 	staleObligations := ResolveStaleObligations(repoRoot)
 
-	return &StatusReport{
+	report := &StatusReport{
 		Phase:            snap.phase,
 		ActiveTask:       snap.activeTask,
 		Assignee:         snap.assignee,
@@ -138,6 +151,10 @@ func collectStatusReportWithScope(allProjects bool) *StatusReport {
 		StaleObligations: staleObligations,
 		NextActions:      snap.actions,
 	}
+	if !allProjects {
+		enrichBranchGuardStatus(report, repoRoot, isWorktree)
+	}
+	return report
 }
 
 func resolveStatusPhaseSnapshot(treeRoot string, isWorktree bool) statusPhaseSnapshot {
@@ -242,6 +259,10 @@ func queryTaskMetrics(dbPath, project string, allProjects bool) (int, int, int, 
 }
 
 func renderStatusReport(out io.Writer, r *StatusReport) {
+	if r.IsolationMode == config.IsolationModeBranch && !r.IsWorktree {
+		renderBranchGuardStatusReport(out, r)
+		return
+	}
 	fmt.Fprintln(out, tui.RenderBrandTitle("📋 Nomos Operational Status"))
 	fmt.Fprintln(out, tui.UiRule(tui.RuleNarrow))
 	fmt.Fprintln(out, tui.KvLine("Active Phase", 15, tui.StyleSemanticBadge(r.Phase)))

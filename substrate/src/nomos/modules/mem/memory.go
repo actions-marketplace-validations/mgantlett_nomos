@@ -122,6 +122,17 @@ CREATE INDEX IF NOT EXISTS idx_memories_status ON memories(status);
 CREATE INDEX IF NOT EXISTS idx_memories_repo ON memories(repo_id);
 CREATE INDEX IF NOT EXISTS idx_memories_kind ON memories(kind);
 CREATE INDEX IF NOT EXISTS idx_memories_repo_kind_status ON memories(repo_id, kind, status);
+CREATE TABLE IF NOT EXISTS shield_events (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	repo_id TEXT NOT NULL,
+	category TEXT NOT NULL,
+	gate_name TEXT NOT NULL DEFAULT '',
+	branch TEXT NOT NULL DEFAULT '',
+	detail TEXT NOT NULL DEFAULT '',
+	created_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_shield_events_repo_created ON shield_events(repo_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_shield_events_repo_branch ON shield_events(repo_id, branch, created_at);
 `
 
 // NewStore initializes a SQLite Nomos Mneme memory store.

@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mgantlett/nomos/v4.32.1/nomos.schema.json
+# Nomos Branch Guard configuration (compact default).
+# Full thresholds, contracts, and worktree options: run 'nomos init --worktrees' or use IDE $schema autocomplete.
+project: "{{.ProjectName}}"
+default_branch: "{{.DefaultBranch}}"
+
+governance:
+    boundary:
+        enforce: true
+        isolation_mode: "branch"
+    quality_gates:
+        strict_mode: false
+        polyglot_toolchains: true
+        forbidden_literals:
+            - '"/home/'
+            - '"/Users/'
+            - '"/var/home/'

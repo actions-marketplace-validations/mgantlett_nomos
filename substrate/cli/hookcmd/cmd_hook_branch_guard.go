@@ -4,6 +4,7 @@ package hookcmd
 import (
 	"fmt"
 	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -189,7 +190,7 @@ func evaluateBranchGuardMutation(rawTarget, resolved, repoRoot, branch string, c
 		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason: fmt.Sprintf(
-				"Governance Tamper Guard (Law 7): Direct agent mutation of '%s' (resolved: '%s') is prohibited in Branch Guard mode.",
+				"Governance Tamper Guard: Direct agent mutation of '%s' (resolved: '%s') is prohibited in Branch Guard mode.",
 				rawTarget, resolved,
 			),
 		}
@@ -205,7 +206,7 @@ func evaluateBranchGuardMutation(rawTarget, resolved, repoRoot, branch string, c
 		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
 			Reason: fmt.Sprintf(
-				"Branch Guard Violation (Law 3): Direct mutation of '%s' on protected branch '%s' is prohibited. Create or switch to a feature branch via 'git switch -c feat/<slug>' (or 'fix/<slug>'), then edit files normally.",
+				"Branch Guard: Direct mutation of '%s' on protected branch '%s' is prohibited. Create or switch to a feature branch via 'git switch -c feat/<slug>' (or 'fix/<slug>'), then edit files normally.",
 				rawTarget, label,
 			),
 		}
@@ -246,7 +247,7 @@ func newHookPostCommitCmd() *cobra.Command {
 		Short:   "Distill verified Branch Guard trap-to-fix lessons into Mneme after git commit",
 		Long:    tui.HelpHookPostCommitLong,
 		Example: tui.HelpHookPostCommitExample,
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			dir := strings.TrimSpace(targetDir)
 			if dir == "" {
 				cwd, err := os.Getwd()
@@ -255,7 +256,7 @@ func newHookPostCommitCmd() *cobra.Command {
 				}
 				dir = cwd
 			}
-			RunPostCommitDistillation(dir)
+			RunPostCommitDistillationWithWriter(dir, cmd.OutOrStdout())
 			return nil
 		},
 	}
@@ -266,6 +267,12 @@ func newHookPostCommitCmd() *cobra.Command {
 // RunPostCommitDistillation distills resolved BRANCH-* traps and commit patterns in Branch Guard mode.
 // @intent task_lifecycle_cli_spec.md
 func RunPostCommitDistillation(targetDir string) {
+	RunPostCommitDistillationWithWriter(targetDir, os.Stdout)
+}
+
+// RunPostCommitDistillationWithWriter distills lessons, records a verified commit shield event, and prints a 1-line receipt on milestone commits.
+// @intent task_lifecycle_cli_spec.md
+func RunPostCommitDistillationWithWriter(targetDir string, out io.Writer) {
 	repoRoot, cfg, branch, isBranch := ResolveBranchGuardContext(targetDir)
 	if !isBranch || IsProtectedTrunkForConfig(branch, cfg) {
 		return
@@ -287,14 +294,70 @@ func RunPostCommitDistillation(targetDir string) {
 			}
 		}
 	}
+
+	branchCatches := mem.QueryBranchShieldCatches(repoRoot, branch)
+	isFirstCommit := true
+	if summaryBefore, sErr := mem.QueryShieldSummary(repoRoot); sErr == nil && summaryBefore != nil {
+		isFirstCommit = summaryBefore.VerifiedCommits == 0
+	}
+
 	branchTaskKey := "BRANCH-" + SanitizeBranchSlug(branch)
-	if _, err := mem.DistillTaskLearnings(repoRoot, branchTaskKey, commitMsg, touched); err != nil {
-		// non-blocking post-commit Mneme capture
+	distilledPitfalls := 0
+	if count, dErr := mem.DistillTaskLearnings(repoRoot, branchTaskKey, commitMsg, touched); dErr == nil {
+		distilledPitfalls = count
 	}
 	if shortSHA != "" {
 		if _, err := mem.DistillVerifiedPattern(repoRoot, "COMMIT-"+shortSHA, commitMsg, touched); err != nil {
 			// non-blocking post-commit Mneme capture
 		}
 	}
+	mem.RecordShieldEvent(repoRoot, mem.ShieldCategoryVerifiedCommit, "post-commit", branch, commitMsg)
 	ClearBranchSessionTrace(repoRoot, branch)
+	emitPostCommitShieldReceipt(out, branch, branchCatches, distilledPitfalls, isFirstCommit)
+}
+
+func emitPostCommitShieldReceipt(out io.Writer, branch string, branchCatches, distilledPitfalls int, isFirstCommit bool) {
+	if out == nil || (branchCatches == 0 && distilledPitfalls == 0 && !isFirstCommit) {
+		return
+	}
+	if branchCatches == 0 && distilledPitfalls == 0 && isFirstCommit {
+		if _, err := fmt.Fprintf(out, "🛡️  Nomos: first verified commit on %s · run 'nomos status' anytime to view your Shield Scorecard\n", branch); err != nil {
+			// non-fatal receipt output
+		}
+		return
+	}
+	var parts []string
+	if branchCatches > 0 {
+		parts = append(parts, fmt.Sprintf("%d shortcut(s) caught before commit", branchCatches))
+	}
+	if distilledPitfalls > 0 {
+		parts = append(parts, fmt.Sprintf("%d lesson(s) saved to memory", distilledPitfalls))
+	}
+	if _, err := fmt.Fprintf(out, "🛡️  Nomos: verified commit on %s · %s (run 'nomos status' for Shield Scorecard)\n",
+		branch, strings.Join(parts, " · ")); err != nil {
+		// non-fatal receipt output
+	}
+}
+
+func recordPreToolShieldDeny(p *shellguard.HookPayload, hermeticDir, reason string) {
+	if p == nil || hermeticDir != "" {
+		return
+	}
+	baseCwd := resolveHookWorkspaceDir(p, "")
+	repoRoot := findRepoRootFast(baseCwd)
+	if repoRoot == "" && p.TargetFile != "" {
+		repoRoot = findRepoRootFast(filepath.Dir(shellguard.NormalizeCanonicalPath(p.TargetFile, baseCwd)))
+	}
+	if repoRoot == "" {
+		return
+	}
+	branch := resolveCurrentGitBranchFast(repoRoot)
+	cat := mem.ShieldCategorySecurityAirlock
+	gate := "PreToolGuard"
+	lower := strings.ToLower(reason)
+	if strings.Contains(lower, "branch guard") || strings.Contains(lower, "protected branch") || strings.Contains(lower, "trunk") {
+		cat = mem.ShieldCategoryTrunkGuard
+		gate = "BranchGuard"
+	}
+	mem.RecordShieldEvent(repoRoot, cat, gate, branch, reason)
 }

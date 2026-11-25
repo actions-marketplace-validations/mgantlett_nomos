@@ -38,7 +38,7 @@ const PostCommitHookScript = `#!/usr/bin/env bash
     fi
 
     if [ -n "$NOMOS_BIN" ]; then
-        "$NOMOS_BIN" hook post-commit --dir "$REPO_ROOT" >/dev/null 2>&1 || true
+        "$NOMOS_BIN" hook post-commit --dir "$REPO_ROOT" 2>/dev/null || true
     fi
     exit 0
 }

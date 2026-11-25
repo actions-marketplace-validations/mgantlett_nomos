@@ -34,15 +34,29 @@ func TestParseSelectedAgents_ValidationAndAllExpansion(t *testing.T) {
 	}
 }
 
-func TestDetectInstalledAgents_RepoSignalsAndFallback(t *testing.T) {
+// @verifies TC-INIT-09
+func TestDetectInstalledAgents_RepoSignalsHomeAndZeroDumpFallback(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
 
 	emptyDir := t.TempDir()
 	fallback, fErr := resolveInitAgents(emptyDir, "")
-	if fErr != nil || !reflect.DeepEqual(fallback, canonicalInitAgents) {
-		t.Fatalf("expected fallback to all canonical agents when none detected, got %v (err=%v)", fallback, fErr)
+	if fErr != nil || len(fallback) != 0 {
+		t.Fatalf("TC-INIT-09: expected empty agent slice when no repo/PATH/HOME signals exist, got %v (err=%v)", fallback, fErr)
 	}
 
+	// Verify $HOME/.cursor auto-detection works without cursor on PATH.
+	homeWithCursor := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(homeWithCursor, hookcmd.CursorDirToken), 0755); err != nil {
+		t.Fatalf("mkdir ~/.cursor: %v", err)
+	}
+	t.Setenv("HOME", homeWithCursor)
+	homeDetected, hErr := resolveInitAgents(emptyDir, "")
+	if hErr != nil || !reflect.DeepEqual(homeDetected, []string{agentCursor}) {
+		t.Fatalf("TC-INIT-09: expected [cursor] from $HOME/.cursor, got %v (err=%v)", homeDetected, hErr)
+	}
+
+	t.Setenv("HOME", t.TempDir())
 	claudeDir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(claudeDir, claudeDirToken), 0755); err != nil {
 		t.Fatalf("mkdir .claude: %v", err)

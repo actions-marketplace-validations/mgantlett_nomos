@@ -31,7 +31,7 @@ func NewVerifyCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "verify [path]",
 		Short: "Execute automated Definition of Done (DoD) quality gates",
-		Long: `Evaluate the 7 statutory Nomos Laws and 21 Invariant Cells across active worktrees.
+		Long: `Evaluate deterministic AST, security, and test-hygiene quality gates across feature branches or isolated worktrees.
 Zero trust in conversational claims; non-verbal proof via AST and compilation exit code 0.`,
 		Example: tui.HelpVerifyExample,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -157,15 +157,18 @@ func normalizeVerifyTargetScope(targetDir string, baseline bool) (string, string
 }
 
 func handleFailedVerificationReport(repoRoot, targetDir, activeTask string, allFiles, baseline bool, report *verify.PipelineReport) error {
+	var branchName string
 	if !allFiles && !baseline {
 		hookcmd.MarkWorktreeVerificationFailed(targetDir)
 		trapKey := activeTask
-		if trapKey == "" {
-			if _, cfg, branch, isBranch := hookcmd.ResolveBranchGuardContext(targetDir); isBranch && !hookcmd.IsProtectedTrunkForConfig(branch, cfg) {
+		if _, cfg, branch, isBranch := hookcmd.ResolveBranchGuardContext(targetDir); isBranch && !hookcmd.IsProtectedTrunkForConfig(branch, cfg) {
+			branchName = branch
+			if trapKey == "" {
 				trapKey = "BRANCH-" + hookcmd.SanitizeBranchSlug(branch)
 			}
 		}
 		recordFailedReportTraps(repoRoot, targetDir, trapKey, report)
+		recordFailedReportShieldEvents(repoRoot, branchName, report)
 	}
 	for _, res := range report.GateResults {
 		if !res.Passed && res.GateName == "Plane Separation Invariant" {
