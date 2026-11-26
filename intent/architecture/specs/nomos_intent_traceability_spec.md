@@ -347,20 +347,35 @@ type PRDebtDelta struct {
 	BaselineManifest bool   `json:"baseline_manifest"`
 }
 
+// ArchitecturalIntentBrief compresses diff-level verification into four architectural review signals (#ArchitecturalIntentBrief).
+type ArchitecturalIntentBrief struct {
+	ContractsMutated   []string `json:"contracts_mutated,omitempty"`
+	DepsOrBoundaries   []string `json:"deps_or_boundaries,omitempty"`
+	ObligationsDelta   []string `json:"obligations_delta,omitempty"`
+	ZeroMechanicalDebt bool     `json:"zero_mechanical_debt"`
+}
+
 // PRProofReceipt seals 42-gate posture, plane separation, debt delta, and mutation score (#PRProofReceipt).
 type PRProofReceipt struct {
-	SchemaVersion  string              `json:"schema_version"`
-	ProjectName    string              `json:"project_name"`
-	BaseRef        string              `json:"base_ref"`
-	HeadCommit     string              `json:"head_commit"`
-	GatesPassed    int                 `json:"gates_passed"`
-	GatesTotal     int                 `json:"gates_total"`
-	PlaneSummary   string              `json:"plane_summary"`
-	DebtDelta      PRDebtDelta         `json:"debt_delta"`
-	MutationReport *DiffMutationReport `json:"mutation_report,omitempty"`
-	Passed         bool                `json:"passed"`
-	ReceiptSHA256  string              `json:"receipt_sha256"`
+	SchemaVersion  string                    `json:"schema_version"`
+	ProjectName    string                    `json:"project_name"`
+	BaseRef        string                    `json:"base_ref"`
+	HeadCommit     string                    `json:"head_commit"`
+	GatesPassed    int                       `json:"gates_passed"`
+	GatesTotal     int                       `json:"gates_total"`
+	PlaneSummary   string                    `json:"plane_summary"`
+	DebtDelta      PRDebtDelta               `json:"debt_delta"`
+	IntentBrief    *ArchitecturalIntentBrief `json:"intent_brief,omitempty"`
+	MutationReport *DiffMutationReport       `json:"mutation_report,omitempty"`
+	Passed         bool                      `json:"passed"`
+	ReceiptSHA256  string                    `json:"receipt_sha256"`
 }
+
+// BuildArchitecturalIntentBrief summarizes mutated contracts, dependency shifts, and TC-* deltas against baseRef.
+func BuildArchitecturalIntentBrief(repoRoot, baseRef string, zeroMechanicalDebt bool) *ArchitecturalIntentBrief
+
+// FormatArchitecturalIntentBrief renders a compact Markdown architectural decision card.
+func FormatArchitecturalIntentBrief(brief *ArchitecturalIntentBrief) string
 
 // EvaluateDiffMutations mutates single-point AST operators in ephemeral shadow copies and runs targeted tests.
 func EvaluateDiffMutations(repoRoot, baseRef string) (*DiffMutationReport, error)
@@ -442,6 +457,12 @@ func FormatPRProofMarkdownForRepo(receipt *PRProofReceipt, targetDir string) str
 16. **Native Zod 4 Contract Parity & Polyglot Diagnostics (`TC-OBL-017`):**
    - `VerifySpecTypeSignatures` extracts contract fields from TypeScript `z.object({ ... })` Zod schema blocks alongside `interface`, `type`, `class`, and `record` contracts.
    - Polyglot signature drift diagnostics report accurate contract-type terminology without Go-specific struct phrasing.
+17. **15-Second Architectural Intent Brief (`--intent-brief`, `TC-PR-03`):**
+   - `BuildArchitecturalIntentBrief` summarizes mutated contracts, dependency or boundary manifest changes, `TC-*` obligation deltas, and mechanical debt posture.
+   - `nomos verify --pr` embeds the brief inside `PRProofReceipt`, and `nomos verify --intent-brief` emits the standalone decision card as Markdown or JSON.
+18. **Optional Runtime Benchmark Ratchet (`benchmark_ratchet`, `--update-bench-baseline`, `TC-BENCH-01`):**
+   - When `governance.quality_gates.benchmark_ratchet` declares `command`, `GoToolchainGate` parses Go benchmark metrics (`ns/op`, `allocs/op`, `B/op`) or JSON metric maps.
+   - Regressions exceeding `max_regression_pct` (default `15%`) relative to `baseline_file` trigger rejection; `nomos verify --update-bench-baseline` refreshes the recorded baseline.
 
 ---
 
@@ -502,6 +523,8 @@ func FormatPRProofMarkdownForRepo(receipt *PRProofReceipt, targetDir string) str
 | `TC-MUT-01` | `EvaluateDiffMutations` | Modified Go function tested only by tautological `true` check | Mutant survives and fails `nomos verify --mutate-diff` | Law 2 & Law 7 |
 | `TC-PR-01` | `BuildPRProofReceipt` | `nomos verify --pr` evaluates clean branch against `main` | Seals 42-gate posture, debt delta, and SHA-256 digest | Law 2 & Law 4 |
 | `TC-PR-02` | `FormatPRProofMarkdown` | `PRProofReceipt` rendered via `--pr` and `--pr-output` | Writes deterministic Markdown table without workstation literals | Law 4 & Law 5 |
+| `TC-PR-03` | `BuildArchitecturalIntentBrief` | Branch mutates exported contract, manifest, and `@verifies TC-*` | Emits 4-section Architectural Intent Brief in `--pr` and `--intent-brief` | Law 2 & Law 4 |
+| `TC-BENCH-01` | `EvaluateBenchmarkRatchet` | Benchmark command emits Go `-bench` or JSON metrics vs baseline | Rejects regressions above `max_regression_pct`; updates baseline via `--update-bench-baseline` | Law 2 & Law 7 |
 | `TC-SHIM-02` | `EvaluateContainerPreToolHook` | Agent reads `/grading/score.py`, `/verifier/run.sh`, or `/proc/1/environ` | Rejects verifier-snooping payload before tool execution | Law 2 & Law 3 |
 
 ---
