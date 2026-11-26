@@ -17,6 +17,8 @@ var (
 	polyglotFencedBlockRe = regexp.MustCompile("(?s)```(ts|typescript|js|javascript|py|python|rs|rust|java|kt|kotlin|cs|csharp)\\s*\\n(.*?)```")
 	braceTypeBlockRe      = regexp.MustCompile(`(?ms)\b(?:interface|class|struct|record)\s+([A-Z][A-Za-z0-9_]*)[^{]*\{([^}]*)\}`)
 	tsTypeLiteralBlockRe  = regexp.MustCompile(`(?ms)\btype\s+([A-Z][A-Za-z0-9_]*)\s*=\s*\{([^}]*)\}`)
+	zodObjectBlockRe      = regexp.MustCompile(`(?ms)\b(?:const|let|var)\s+([A-Z][A-Za-z0-9_]*)\s*=\s*z\.(?:strictObject|looseObject|object)\s*\(\s*\{([^}]*)\}\s*\)`)
+	zodFieldLineRe        = regexp.MustCompile(`^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:`)
 	braceFieldLineRe      = regexp.MustCompile(`^\s*(?:readonly\s+|pub\s+|public\s+|private\s+|protected\s+|final\s+|val\s+|var\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\??\s*(?:[:=;]|/[/*]|$)`)
 	jvmTypedFieldLineRe   = regexp.MustCompile(`^\s*(?:public\s+|private\s+|protected\s+|final\s+|readonly\s+)*[A-Za-z0-9_<>\[\]?.,]+\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\{\s*get|[;=])`)
 	recordHeaderRe        = regexp.MustCompile(`\b(?:record|data\s+class)\s+([A-Z][A-Za-z0-9_]*)\s*\(([^)]*)\)`)
@@ -162,6 +164,24 @@ func parsePolyglotContractSnippet(lang, src string, out map[string]map[string]bo
 			if len(m) == 3 {
 				recordBraceBlockFields(m[1], m[2], out)
 			}
+		}
+	}
+	for _, m := range zodObjectBlockRe.FindAllStringSubmatch(src, -1) {
+		if len(m) == 3 {
+			recordZodObjectFields(m[1], m[2], out)
+		}
+	}
+}
+
+func recordZodObjectFields(typeName, body string, out map[string]map[string]bool) {
+	fields := ensureStructFieldSet(out, typeName)
+	for _, line := range strings.Split(body, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "/*") || strings.HasPrefix(trimmed, "*") {
+			continue
+		}
+		if m := zodFieldLineRe.FindStringSubmatch(line); len(m) == 2 && !isBraceKeyword(m[1]) {
+			fields[m[1]] = true
 		}
 	}
 }

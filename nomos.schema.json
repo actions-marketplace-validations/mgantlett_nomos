@@ -283,6 +283,11 @@
                 "type": "string"
               }
             },
+            "forbid_suppressions": {
+              "description": "Reject net-new linter suppression pragmas and type-escape hatches in modified non-test source files (default: true).",
+              "type": "boolean",
+              "default": true
+            },
             "forbidden_literals": {
               "description": "Hardcoded string or path literals rejected by Law 5.",
               "type": "array",

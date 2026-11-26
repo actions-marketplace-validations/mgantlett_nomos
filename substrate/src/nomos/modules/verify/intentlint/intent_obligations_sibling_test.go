@@ -197,6 +197,26 @@ func writeRepoFile(t *testing.T, repo, relPath, body string) {
 	}
 }
 
+// @verifies TC-OBL-017
+func TestVerifySpecTypeSignatures_ZodObjectContractParity(t *testing.T) {
+	repo := initTestGitRepoWithBaseSpec(t)
+	commitSpecFileMutation(t, repo, "intent/architecture/specs/zod_spec.md", "docs: add zod contract",
+		"# Zod Contract\n```ts\nexport const InvoiceSchema = z.object({\n  invoiceId: z.string(),\n  totalCents: z.number(),\n  currency: z.string().default('USD'),\n});\n```\n")
+	writeRepoFile(t, repo, "web/schema.ts",
+		"export const InvoiceSchema = z.object({\n  invoiceId: z.string(),\n  totalCents: z.number(),\n  currency: z.string(),\n});\n")
+
+	if issues := VerifySpecTypeSignaturesWithDelta(repo, "", []string{"intent/architecture/specs/zod_spec.md"}, nil); len(issues) != 0 {
+		t.Fatalf("expected matching Zod schema to pass parity, got: %v", issues)
+	}
+
+	writeRepoFile(t, repo, "web/schema.ts",
+		"export const InvoiceSchema = z.object({\n  invoiceId: z.string(),\n});\n")
+	drift := strings.Join(VerifySpecTypeSignaturesWithDelta(repo, "", []string{"intent/architecture/specs/zod_spec.md"}, nil), "; ")
+	if !strings.Contains(drift, "type InvoiceSchema missing declared field totalCents") || !strings.Contains(drift, "type InvoiceSchema missing declared field currency") {
+		t.Fatalf("expected Zod field drift diagnostics, got: %s", drift)
+	}
+}
+
 func initTestGitRepoWithBaseSpec(t *testing.T) string {
 	t.Helper()
 	repo := t.TempDir()

@@ -167,7 +167,9 @@ func (g *AntiShimGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, 
 	if root == "" {
 		root = ctx.RepoRoot
 	}
-	forbiddenShims := vscope.ResolveVerifyConfig(ctx).Governance.QualityGates.ForbiddenShims
+	cfg := vscope.ResolveVerifyConfig(ctx)
+	forbiddenShims := cfg.Governance.QualityGates.ForbiddenShims
+	forbidSuppressions := cfg.Governance.QualityGates.IsForbidSuppressionsEnabled()
 
 	var violations []string
 
@@ -175,7 +177,7 @@ func (g *AntiShimGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, 
 		if walkErr != nil || info == nil || info.IsDir() || !ratchet.IsPolyglotTargetFile(path) {
 			return nil
 		}
-		violations = append(violations, evaluateAntiShimTargetFile(ctx, root, path, forbiddenShims)...)
+		violations = append(violations, evaluateAntiShimTargetFile(ctx, root, path, forbiddenShims, forbidSuppressions)...)
 		return nil
 	})
 	if err != nil {
@@ -188,21 +190,24 @@ func (g *AntiShimGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResult, 
 			GateName: g.Name(),
 			Passed:   false,
 			Message:  fmt.Sprintf("detected %d anti-shim violation(s): %s", len(violations), strings.Join(violations, "; ")),
-			Remedy:   "implement real algorithmic logic, eliminate panic/empty shims, and bind every testdata/examples fixture to a test or go:embed consumer",
+			Remedy:   "implement real algorithmic logic, eliminate panic/empty shims and suppression escapes, and bind every testdata/examples fixture to a test or go:embed consumer",
 		}, nil
 	}
 
 	return &vscope.GateResult{GateName: g.Name(), Passed: true, Message: "zero anti-shim violations detected"}, nil
 }
 
-func evaluateAntiShimTargetFile(ctx *vscope.VerifyContext, root, path string, forbiddenShims []string) []string {
+func evaluateAntiShimTargetFile(ctx *vscope.VerifyContext, root, path string, forbiddenShims []string, forbidSuppressions bool) []string {
 	relPath, rErr := filepath.Rel(root, path)
 	if rErr != nil {
 		relPath = path
 	}
-	fileViolations := collectLiveAntiShimViolations(ctx, root, path, relPath, forbiddenShims)
+	fileViolations := collectLiveAntiShimViolations(ctx, root, path, relPath, forbiddenShims, forbidSuppressions)
 	return ratchet.FilterNetNewLineViolations(ctx, root, path, fileViolations, func(baseBytes []byte) []string {
 		baseOut := scanCoverageAndImportFallbackViolations(root, relPath, baseBytes)
+		if forbidSuppressions {
+			baseOut = append(baseOut, sensorsummary.ScanSuppressionEscapes(relPath, baseBytes)...)
+		}
 		tempOut := ratchet.ScanTempBaselineViolations(path, baseBytes, func(tmpPath string) []string {
 			out := scanCustomForbiddenShims(tmpPath, relPath, forbiddenShims)
 			if !strings.HasSuffix(path, ".go") {
@@ -214,10 +219,13 @@ func evaluateAntiShimTargetFile(ctx *vscope.VerifyContext, root, path string, fo
 	})
 }
 
-func collectLiveAntiShimViolations(ctx *vscope.VerifyContext, root, path, relPath string, forbiddenShims []string) []string {
+func collectLiveAntiShimViolations(ctx *vscope.VerifyContext, root, path, relPath string, forbiddenShims []string, forbidSuppressions bool) []string {
 	fileViolations := scanCustomForbiddenShims(path, relPath, forbiddenShims)
 	if raw, rErr := os.ReadFile(path); rErr == nil {
 		fileViolations = append(fileViolations, scanCoverageAndImportFallbackViolations(root, relPath, raw)...)
+		if forbidSuppressions {
+			fileViolations = append(fileViolations, sensorsummary.ScanSuppressionEscapes(relPath, raw)...)
+		}
 	}
 	if !strings.HasSuffix(path, ".go") {
 		return append(fileViolations, scanPolyglotAntiShim(path, relPath)...)

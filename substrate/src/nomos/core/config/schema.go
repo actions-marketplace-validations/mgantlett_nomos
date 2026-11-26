@@ -62,6 +62,7 @@ var configFieldDescriptions = map[string]string{
 	"coverage_mode":                "Statement coverage enforcement policy: live (default zero-dep live probes plus artifacts), artifact (on-disk coverage reports only), or off.",
 	"corpus_command":               "Optional shell command executed during GoToolchainGate to assert zero regressions against a reference corpus.",
 	"polyglot_toolchains":          "Enable automatic polyglot test/linter toolchain discovery.",
+	"forbid_suppressions":          "Reject net-new linter suppression pragmas and type-escape hatches in modified non-test source files (default: true).",
 	"exclude":                      "Workspace-relative glob patterns excluded from AST gates.",
 	"intent_source_roots":          "Directories classified under the Intent plane (Law 7).",
 	"substrate_source_roots":       "Directories classified under the Substrate plane (Law 7).",

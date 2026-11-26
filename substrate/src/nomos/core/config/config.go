@@ -141,6 +141,7 @@ type QualityGatesConfig struct {
 	CoverageMode                 string                     `yaml:"coverage_mode,omitempty" json:"coverage_mode,omitempty"`
 	CorpusCommand                string                     `yaml:"corpus_command,omitempty" json:"corpus_command,omitempty"`
 	PolyglotToolchains           *bool                      `yaml:"polyglot_toolchains,omitempty" json:"polyglot_toolchains,omitempty"`
+	ForbidSuppressions           *bool                      `yaml:"forbid_suppressions,omitempty" json:"forbid_suppressions,omitempty"`
 	Exclude                      []string                   `yaml:"exclude,omitempty" json:"exclude,omitempty"`
 	IntentSourceRoots            []string                   `yaml:"intent_source_roots,omitempty" json:"intent_source_roots,omitempty"`
 	SubstrateSourceRoots         []string                   `yaml:"substrate_source_roots,omitempty" json:"substrate_source_roots,omitempty"`
@@ -155,6 +156,14 @@ func (q *QualityGatesConfig) IsPolyglotToolchainsEnabled() bool {
 		return true
 	}
 	return *q.PolyglotToolchains
+}
+
+// IsForbidSuppressionsEnabled reports whether diff-ratcheted suppression and type-escape blocking is active (@intent: #QualityGatesConfig).
+func (q *QualityGatesConfig) IsForbidSuppressionsEnabled() bool {
+	if q == nil || q.ForbidSuppressions == nil {
+		return true
+	}
+	return *q.ForbidSuppressions
 }
 
 // EffectiveIntentTwinMode returns normalized intent_twin_mode, defaulting to "off" (@intent: #QualityGatesConfig).
@@ -207,6 +216,7 @@ type EcosystemConfig struct {
 // DefaultNomosConfig returns a clean, downstream-safe baseline configuration (@intent intent.md go_ssot_and_json_schema_spec.md #EcosystemConfig).
 func DefaultNomosConfig() *EcosystemConfig {
 	polyglot := true
+	forbidSuppressions := true
 	return &EcosystemConfig{
 		Project:       constants.AppName,
 		DefaultBranch: "main",
@@ -217,6 +227,7 @@ func DefaultNomosConfig() *EcosystemConfig {
 			QualityGates: QualityGatesConfig{
 				StrictMode:         true,
 				PolyglotToolchains: &polyglot,
+				ForbidSuppressions: &forbidSuppressions,
 				Thresholds: ThresholdsConfig{
 					MaxCognitiveDebtScore:     45,
 					MaxCyclomaticComplexity:   15,
