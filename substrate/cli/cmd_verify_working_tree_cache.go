@@ -14,31 +14,70 @@ import (
 
 	"github.com/mgantlett/nomos/substrate/cli/hookcmd"
 	"github.com/mgantlett/nomos/substrate/cli/tui"
+	"github.com/mgantlett/nomos/substrate/src/nomos/core/config"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/constants"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/types"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/mem"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/prproof"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/ratchet"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/sarif"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
+	"github.com/spf13/cobra"
 )
 
 type verifyPRFlags struct {
-	prMode     bool
-	mutateDiff bool
-	sarifMode  bool
-	prOutput   string
-	baseRef    string
+	prMode              bool
+	intentBrief         bool
+	updateBenchBaseline bool
+	mutateDiff          bool
+	sarifMode           bool
+	prOutput            string
+	baseRef             string
+}
+
+func bindVerifyPRFlags(cmd *cobra.Command, prFlags *verifyPRFlags) {
+	cmd.Flags().BoolVar(&prFlags.sarifMode, "sarif", false, "Emit OASIS SARIF 2.1.0 JSON report for GitHub Code Scanning")
+	cmd.Flags().BoolVar(&prFlags.prMode, "pr", false, "Emit tamper-evident Pull Request proof receipt (Markdown or --json)")
+	cmd.Flags().BoolVar(&prFlags.intentBrief, "intent-brief", false, "Emit compact 15-second Architectural Intent Brief decision card (Markdown or --json)")
+	cmd.Flags().BoolVar(&prFlags.updateBenchBaseline, "update-bench-baseline", false, "Execute benchmark_ratchet command and refresh baseline metric file")
+	cmd.Flags().StringVar(&prFlags.prOutput, "pr-output", "", "Optional file path to write rendered Pull Request proof receipt")
+	// @intent nomos_intent_traceability_spec.md
+	// @intent tree_sitter_ast_gate_spec.md
+	cmd.Flags().BoolVar(&prFlags.mutateDiff, "mutate-diff", false, "Probe modified Go, TypeScript/JS, and Python functions with zero-token AST micro-mutants")
+	cmd.Flags().StringVar(&prFlags.baseRef, "base-ref", "", "Git base reference for PR receipt and diff micro-mutation comparison")
 }
 
 func (f verifyPRFlags) hasCustomProbe() bool {
-	return f.prMode || f.mutateDiff || f.sarifMode || strings.TrimSpace(f.prOutput) != ""
+	return f.prMode || f.intentBrief || f.mutateDiff || f.sarifMode || strings.TrimSpace(f.prOutput) != ""
+}
+
+func runUpdateBenchBaseline(out io.Writer, targetDir string, jsonOutput bool) error {
+	cfg, err := config.LoadConfig(targetDir)
+	if err != nil {
+		return types.NewNomosError(types.ErrCodeValidationFailed, "failed loading nomos.yaml: %v", err)
+	}
+	basePath, metrics, uErr := ratchet.UpdateBenchmarkBaseline(targetDir, cfg.Governance.QualityGates.BenchmarkRatchet)
+	if uErr != nil {
+		return types.NewNomosError(types.ErrCodeValidationFailed, "benchmark baseline update failed: %v", uErr)
+	}
+	if jsonOutput {
+		if encoded, mErr := json.MarshalIndent(map[string]any{"baseline_file": basePath, "metrics": metrics}, "", "  "); mErr == nil {
+			fmt.Fprintln(out, string(encoded))
+		}
+		return nil
+	}
+	fmt.Fprintf(out, "✅ Updated benchmark ratchet baseline (%d metric(s)) at %s\n", len(metrics), filepath.Base(basePath))
+	return nil
 }
 
 func finalizeVerificationReport(out io.Writer, ctx *vscope.VerifyContext, jsonOutput bool, report *verify.PipelineReport, prFlags verifyPRFlags) error {
 	if prFlags.prMode || strings.TrimSpace(prFlags.prOutput) != "" {
 		return executePRProofMode(out, ctx.WorktreePath, report, prFlags, jsonOutput)
+	}
+	if prFlags.intentBrief {
+		return executeIntentBriefMode(out, ctx.WorktreePath, report, prFlags.baseRef, jsonOutput)
 	}
 	if prFlags.sarifMode {
 		if err := writeVerifySarifOutput(out, report); err != nil {
@@ -105,6 +144,21 @@ func executePRProofMode(out io.Writer, targetDir string, report *verify.Pipeline
 	}
 	if !receipt.Passed {
 		return types.NewNomosError(types.ErrCodeInvariant, "PR proof verification failed")
+	}
+	return nil
+}
+
+func executeIntentBriefMode(out io.Writer, targetDir string, report *verify.PipelineReport, baseRef string, jsonOutput bool) error {
+	brief := prproof.BuildArchitecturalIntentBrief(targetDir, baseRef, report.Passed)
+	if jsonOutput {
+		if encoded, mErr := json.MarshalIndent(brief, "", "  "); mErr == nil {
+			fmt.Fprintln(out, string(encoded))
+		}
+	} else {
+		fmt.Fprint(out, prproof.FormatArchitecturalIntentBrief(brief))
+	}
+	if !report.Passed {
+		return types.NewNomosError(types.ErrCodeInvariant, "verification failed: %d/%d gates passed", report.GatesPassed, report.GatesTotal)
 	}
 	return nil
 }

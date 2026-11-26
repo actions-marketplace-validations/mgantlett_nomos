@@ -127,6 +127,13 @@ type ArchitectureBoundaryRule struct {
 	AllowOnly     []string `yaml:"allow_only,omitempty" json:"allow_only,omitempty"`
 }
 
+// BenchmarkRatchetConfig defines opt-in runtime benchmark regression enforcement (#BenchmarkRatchetConfig).
+type BenchmarkRatchetConfig struct {
+	Command          string  `yaml:"command" json:"command"`
+	BaselineFile     string  `yaml:"baseline_file,omitempty" json:"baseline_file,omitempty"`
+	MaxRegressionPct float64 `yaml:"max_regression_pct,omitempty" json:"max_regression_pct,omitempty"`
+}
+
 // QualityGatesConfig defines verification policies.
 type QualityGatesConfig struct {
 	ForbiddenLiterals            []string                   `yaml:"forbidden_literals,omitempty" json:"forbidden_literals,omitempty"`
@@ -143,28 +150,13 @@ type QualityGatesConfig struct {
 	PolyglotToolchains           *bool                      `yaml:"polyglot_toolchains,omitempty" json:"polyglot_toolchains,omitempty"`
 	ForbidSuppressions           *bool                      `yaml:"forbid_suppressions,omitempty" json:"forbid_suppressions,omitempty"`
 	ImmutableTestPaths           []string                   `yaml:"immutable_test_paths,omitempty" json:"immutable_test_paths,omitempty"`
+	BenchmarkRatchet             *BenchmarkRatchetConfig    `yaml:"benchmark_ratchet,omitempty" json:"benchmark_ratchet,omitempty"`
 	Exclude                      []string                   `yaml:"exclude,omitempty" json:"exclude,omitempty"`
 	IntentSourceRoots            []string                   `yaml:"intent_source_roots,omitempty" json:"intent_source_roots,omitempty"`
 	SubstrateSourceRoots         []string                   `yaml:"substrate_source_roots,omitempty" json:"substrate_source_roots,omitempty"`
 	ArchitectureBoundaries       []ArchitectureBoundaryRule `yaml:"architecture_boundaries,omitempty" json:"architecture_boundaries,omitempty"`
 	Contracts                    *ContractsBoundaryConfig   `yaml:"contracts,omitempty" json:"contracts,omitempty"`
 	Thresholds                   ThresholdsConfig           `yaml:"thresholds" json:"thresholds"`
-}
-
-// IsPolyglotToolchainsEnabled reports whether polyglot toolchain auto-discovery is active (@intent: #QualityGatesConfig).
-func (q *QualityGatesConfig) IsPolyglotToolchainsEnabled() bool {
-	if q == nil || q.PolyglotToolchains == nil {
-		return true
-	}
-	return *q.PolyglotToolchains
-}
-
-// IsForbidSuppressionsEnabled reports whether diff-ratcheted suppression and type-escape blocking is active (@intent: #QualityGatesConfig).
-func (q *QualityGatesConfig) IsForbidSuppressionsEnabled() bool {
-	if q == nil || q.ForbidSuppressions == nil {
-		return true
-	}
-	return *q.ForbidSuppressions
 }
 
 // EffectiveIntentTwinMode returns normalized intent_twin_mode, defaulting to "off" (@intent: #QualityGatesConfig).

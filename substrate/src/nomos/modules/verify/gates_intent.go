@@ -310,7 +310,17 @@ func checkBooleanGovernanceFlagsDowngrade(trunkCfg, wtCfg *config.EcosystemConfi
 	if strings.TrimSpace(wtCfg.Governance.QualityGates.CorpusCommand) != strings.TrimSpace(trunkCfg.Governance.QualityGates.CorpusCommand) {
 		return "worktree nomos.yaml illegally modifies, injects, or clears governance.quality_gates.corpus_command from trunk baseline"
 	}
+	if benchmarkRatchetCommand(wtCfg) != benchmarkRatchetCommand(trunkCfg) {
+		return "worktree nomos.yaml illegally modifies, injects, or clears governance.quality_gates.benchmark_ratchet.command from trunk baseline"
+	}
 	return ""
+}
+
+func benchmarkRatchetCommand(cfg *config.EcosystemConfig) string {
+	if cfg == nil || cfg.Governance.QualityGates.BenchmarkRatchet == nil {
+		return ""
+	}
+	return strings.TrimSpace(cfg.Governance.QualityGates.BenchmarkRatchet.Command)
 }
 
 func loadPinnedTrunkConfig(ctx *vscope.VerifyContext, wtCfg *config.EcosystemConfig) (*config.EcosystemConfig, string) {

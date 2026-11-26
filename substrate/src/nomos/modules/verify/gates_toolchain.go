@@ -188,6 +188,11 @@ func (g *GoToolchainGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateResul
 	} else if corpusLabel != "" {
 		stacks = append(stacks, corpusLabel)
 	}
+	if benchLabel, benchFail := ratchet.EvaluateBenchmarkRatchet(g.Name(), ctx, root); benchFail != nil {
+		return benchFail, nil
+	} else if benchLabel != "" {
+		stacks = append(stacks, benchLabel)
+	}
 	if len(stacks) == 0 {
 		return &vscope.GateResult{GateName: g.Name(), Passed: true, Message: "no Go or polyglot toolchain module detected in scope"}, nil
 	}
