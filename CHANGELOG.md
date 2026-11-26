@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v4.34.0] - 2026-11-26
+
+> Suppression & Type-Escape Diff-Ratchet, Native Zod 4 Contract Parity, Held-Out Test Oracle Lock (`--lock-tests`), Hard `--scope` Write Fence, 15-Second Architectural Intent Brief (`--intent-brief`), Optional Runtime `benchmark_ratchet`, and Polyglot `SiblingDelta` Multi-Agent Isolation (Apache 2.0)
+
+### Agent Upgrade & New Surfaces
+- **Upgrade**: `npx -y @mgantlett/nomos@latest update --sync-workspace` (or `uvx --refresh nomos-cli xray . --json`).
+- **Active Surfaces**: `nomos verify --intent-brief`, `nomos verify --update-bench-baseline`, `nomos task start --lock-tests`, `nomos task pair --lock-tests`, `nomos.yaml` (`forbid_suppressions`, `immutable_test_paths`, `benchmark_ratchet`).
+
+### Static Escape & Polyglot Contract Hardening (`INT-2305`, `SUB-3875`, `SUB-3878`)
+- **Diff-Ratcheted Suppression & Type-Escape Guard (`SUB-3878`)**: `AntiShimGate` rejects net-new linter suppression pragmas and TypeScript type escapes (`//nolint`, `eslint-disable`, `@ts-ignore`, `@ts-expect-error`, `# noqa`, `# type: ignore`, `#[allow(`, `: any`, `as any`) by default while grandfathering pre-existing baseline occurrences (`forbid_suppressions: false` opt-out; `TC-AGT-12`).
+- **Native Zod 4 Contract Parity & Polyglot `SiblingDelta` Isolation (`SUB-3875`, `SUB-3878`)**: Extracts contract field shapes from TypeScript `z.object` / `z.strictObject` / `z.looseObject` schemas (`TC-OBL-017`), extends `SiblingDelta` deferral to polyglot contract blocks and bidirectional multi-`INT-*` twins, and bounds trunk deferral strictly to non-terminal sibling `SUB-*` worktrees present on disk.
+
+### Pre-Tool Hook & Verification Oracle Boundaries (`INT-2307`, `SUB-3879`)
+- **Held-Out Test Oracle Lock (`--lock-tests`, `immutable_test_paths`)**: Persists `LockTests` in SQLite schema v5 and blocks edits to pre-existing committed verification suites while allowing net-new test files; `immutable_test_paths` globs remain write-protected across every `SUB-*` task in both 4ms Pre-Tool Hooks and `PlaneSeparationGate` (`TC-TSK-23`).
+- **Hard `--scope` Write Fence**: Enforces declared `scope_paths` in both 4ms Pre-Tool Hooks and `nomos verify` while automatically permitting paired unit test files so TDD never deadlocks (`TC-TSK-24`).
+
+### Review Compression & Runtime Ratchet (`INT-2308`, `SUB-3880`)
+- **15-Second Architectural Intent Brief (`--pr`, `--intent-brief`)**: Embeds `#ArchitecturalIntentBrief` (mutated contracts, dependency/boundary manifests, `TC-*` obligation deltas, and mechanical debt seal) directly into `PRProofReceipt` Markdown and exposes standalone `nomos verify --intent-brief` output (`TC-PR-03`).
+- **Optional Runtime Benchmark Ratchet (`benchmark_ratchet`, `--update-bench-baseline`)**: Runs opt-in Go `-bench` (`ns/op`, `allocs/op`, `B/op`) or generic JSON metric commands inside `GoToolchainGate`, rejects regressions exceeding `max_regression_pct` (default `15%`), pins `benchmark_ratchet.command` to trunk in `ConfigImmutabilityGate`, and refreshes baselines via `nomos verify --update-bench-baseline` (`TC-BENCH-01`).
+
+---
+
 ## [v4.33.0] - 2026-11-25
 
 > Ratchet-by-Default Compact Init, Repo-Scoped Shield Scorecard Telemetry, Smart Home Agent Detection, and Branch-Guard 4-Rung Graduation Ladder (Apache 2.0)
