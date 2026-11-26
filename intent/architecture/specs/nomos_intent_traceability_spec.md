@@ -435,6 +435,13 @@ func FormatPRProofMarkdownForRepo(receipt *PRProofReceipt, targetDir string) str
 14. **Gate Sensor Execution Scope & Unindexed Extension Telemetry (`TC-DOD-07`):**
    - `Pipeline.Execute` classifies each `GateResult.ExecutionScope` (`ast_verified`, `runtime_verified`, `structural_verified`, `bounded_heuristic`, `no_files_in_scope`, `config_disabled`).
    - `PipelineReport` aggregates `SensorSummary` counts and lists non-AST script or query extensions in `UnindexedExtensions`.
+15. **Diff-Ratcheted Suppression Directive & Type-Escape Guard (`TC-AGT-12`):**
+   - With `forbid_suppressions` active (default `true`), `AntiShimGate` scans modified non-test source files for net-new suppression pragmas and type escapes.
+   - Covered tokens include `eslint-disable`, `@ts-ignore`, `@ts-expect-error`, `//nolint`, `# noqa`, `# type: ignore`, `#[allow(`, `: any`, and `as any`.
+   - Pre-existing baseline occurrences remain grandfathered; net-new tokens trigger rejection unless `nomos.yaml` sets `forbid_suppressions: false`.
+16. **Native Zod 4 Contract Parity & Polyglot Diagnostics (`TC-OBL-017`):**
+   - `VerifySpecTypeSignatures` extracts contract fields from TypeScript `z.object({ ... })` Zod schema blocks alongside `interface`, `type`, `class`, and `record` contracts.
+   - Polyglot signature drift diagnostics report accurate contract-type terminology without Go-specific struct phrasing.
 
 ---
 
@@ -463,6 +470,7 @@ func FormatPRProofMarkdownForRepo(receipt *PRProofReceipt, targetDir string) str
 | `TC-OBL-014` | `VerifyNormativeRegistrySurjection` | Self-hosted `nomos` omits gate `ProbeID`, CLI `--flag`, or `ERR_*` | Rejects undocumented normative surface entry | Law 4 & Law 6 |
 | `TC-OBL-015` | `collectActiveSiblingTwinDeltas` | Concurrent `SUB-*` tasks share one domain spec file | Defers only sibling `INT-*` commit delta without blocking | Law 3 & Law 4 |
 | `TC-OBL-016` | `InferCleanArchitectureBoundariesForFiles` | Polyglot repo with `.gitignore` build output and `$lib/` / `@/` imports | Ignores untracked build trees and enforces `$lib/` / `@/` layer rules | Law 4 & Law 7 |
+| `TC-OBL-017` | `VerifySpecTypeSignatures` | Spec declares Zod `z.object` schema fields vs TypeScript source | Enforces Zod field parity and rejects missing fields cleanly | Law 4 & Law 7 |
 | `TC-MAT-01` | `CanonicalMatrix` | `CanonicalMatrixModel{Laws: 7, Rings: 3, Cells: 21}` | Enforces exact `7x3 = 21` invariant cell topology | Law 2 & Law 6 |
 | `TC-MAT-02` | `CanonicalLaws` | Statutory 1..7 law metadata registry | Binds every cell to one of the 7 laws | Law 4 |
 | `TC-MAT-03` | `InvariantCellSpec` | Cell specification with syntactic, dynamic, or cryptographic ring | Maps every sensor probe to a canonical cell coordinate | Law 2 |
@@ -490,6 +498,7 @@ func FormatPRProofMarkdownForRepo(receipt *PRProofReceipt, targetDir string) str
 | `TC-AGT-09` | `ContractParityGate` | Zero canonical assets discovered during parity check | Fails closed rejecting vacuous asset discovery | Law 4 |
 | `TC-AGT-10` | `AntiShimGate` (`AntiShimDTO`) | Function body consists solely of `panic("TODO")` stub | Fails closed with `IsPanicShim == true` | Law 2 & Law 7 |
 | `TC-AGT-11` | `AntiShimGate` (`ScanOrphanedFixtures`) | Worktree adds orphaned vs test-referenced file in `testdata/` or `examples/` | Rejects orphaned fixture; passes referenced or walked directory fixtures | Law 2 & Law 7 |
+| `TC-AGT-12` | `AntiShimGate` (`ScanSuppressionEscapes`) | Modified source adds net-new linter suppression or `as any` escape | Rejects net-new escapes while grandfathering pre-existing baseline occurrences | Law 2 & Law 7 |
 | `TC-MUT-01` | `EvaluateDiffMutations` | Modified Go function tested only by tautological `true` check | Mutant survives and fails `nomos verify --mutate-diff` | Law 2 & Law 7 |
 | `TC-PR-01` | `BuildPRProofReceipt` | `nomos verify --pr` evaluates clean branch against `main` | Seals 42-gate posture, debt delta, and SHA-256 digest | Law 2 & Law 4 |
 | `TC-PR-02` | `FormatPRProofMarkdown` | `PRProofReceipt` rendered via `--pr` and `--pr-output` | Writes deterministic Markdown table without workstation literals | Law 4 & Law 5 |

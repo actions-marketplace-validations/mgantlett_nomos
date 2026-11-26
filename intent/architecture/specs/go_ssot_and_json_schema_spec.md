@@ -115,6 +115,7 @@ type QualityGatesConfig struct {
 	CoverageMode                 string                     `yaml:"coverage_mode,omitempty" json:"coverage_mode,omitempty"`
 	CorpusCommand                string                     `yaml:"corpus_command,omitempty" json:"corpus_command,omitempty"`
 	PolyglotToolchains           *bool                      `yaml:"polyglot_toolchains,omitempty" json:"polyglot_toolchains,omitempty"`
+	ForbidSuppressions           *bool                      `yaml:"forbid_suppressions,omitempty" json:"forbid_suppressions,omitempty"`
 	Exclude                      []string                   `yaml:"exclude,omitempty" json:"exclude,omitempty"`
 	IntentSourceRoots            []string                   `yaml:"intent_source_roots,omitempty" json:"intent_source_roots,omitempty"`
 	SubstrateSourceRoots         []string                   `yaml:"substrate_source_roots,omitempty" json:"substrate_source_roots,omitempty"`
