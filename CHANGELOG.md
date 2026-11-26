@@ -7,7 +7,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ---
 
 ## [v4.34.0] - 2026-11-26
-
 > Suppression & Type-Escape Diff-Ratchet, Native Zod 4 Contract Parity, Held-Out Test Oracle Lock (`--lock-tests`), Hard `--scope` Write Fence, 15-Second Architectural Intent Brief (`--intent-brief`), Optional Runtime `benchmark_ratchet`, and Polyglot `SiblingDelta` Multi-Agent Isolation (Apache 2.0)
 
 ### Agent Upgrade & New Surfaces
@@ -25,6 +24,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Review Compression & Runtime Ratchet (`INT-2308`, `SUB-3880`)
 - **15-Second Architectural Intent Brief (`--pr`, `--intent-brief`)**: Embeds `#ArchitecturalIntentBrief` (mutated contracts, dependency/boundary manifests, `TC-*` obligation deltas, and mechanical debt seal) directly into `PRProofReceipt` Markdown and exposes standalone `nomos verify --intent-brief` output (`TC-PR-03`).
 - **Optional Runtime Benchmark Ratchet (`benchmark_ratchet`, `--update-bench-baseline`)**: Runs opt-in Go `-bench` (`ns/op`, `allocs/op`, `B/op`) or generic JSON metric commands inside `GoToolchainGate`, rejects regressions exceeding `max_regression_pct` (default `15%`), pins `benchmark_ratchet.command` to trunk in `ConfigImmutabilityGate`, and refreshes baselines via `nomos verify --update-bench-baseline` (`TC-BENCH-01`).
+
+### Release & Packaging (`README.md`, `CHANGELOG.md`)
+- **Prepare v4.34.0 Open-Core milestone release and align version pins (`INT-2308`, `SUB-3883`)**: Bump all statutory version pins to v4.34.0 and record v4.34.0 `CHANGELOG.md` section.
 
 ---
 
