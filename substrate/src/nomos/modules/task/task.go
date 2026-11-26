@@ -63,6 +63,7 @@ type TaskRecord struct {
 	Title              string     `json:"title"`
 	Description        string     `json:"description,omitempty"`
 	ScopePaths         []string   `json:"scope_paths,omitempty"`
+	LockTests          bool       `json:"lock_tests,omitempty"`
 	Obligations        []string   `json:"obligations,omitempty"`
 	AcceptanceCriteria []string   `json:"acceptance_criteria,omitempty"`
 	VerifyCmd          string     `json:"verify_cmd,omitempty"`

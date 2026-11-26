@@ -226,10 +226,11 @@ func newTaskShowCmd() *cobra.Command {
 }
 
 type taskPairOpts struct {
-	tier     string
-	priority int
-	card     tui.TaskCardFlags
-	stdin    io.Reader
+	tier      string
+	priority  int
+	lockTests bool
+	card      tui.TaskCardFlags
+	stdin     io.Reader
 }
 
 func newTaskPairCmd() *cobra.Command {
@@ -252,6 +253,7 @@ func newTaskPairCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVarP(&opts.tier, tui.FlagNameTier, "t", "T1", "Cognitive tier (T1|T2)")
 	cmd.Flags().IntVarP(&opts.priority, "priority", "r", 50, "Priority (0-100)")
+	cmd.Flags().BoolVar(&opts.lockTests, "lock-tests", false, "Freeze pre-existing committed verification suites during SUB execution")
 	tui.BindTaskCardFlags(cmd, &opts.card, true)
 	return cmd
 }
@@ -279,6 +281,7 @@ func executeTaskPair(store task.TaskStore, title string, opts taskPairOpts) erro
 	project := taskui.ResolveActiveTaskProject(opts.card.Project)
 	intTask := buildPairedRecordFromSpec(pairedRecordBuildSpec{key: intKey, plane: "intent", twinKey: subKey, project: project, title: title}, opts, intIR, deps)
 	subTask := buildPairedRecordFromSpec(pairedRecordBuildSpec{key: subKey, plane: "substrate", twinKey: intKey, project: project, title: title}, opts, subIR, deps)
+	subTask.LockTests = opts.lockTests
 	if err := persistTwinnedPair(store, intTask, subTask); err != nil {
 		return err
 	}

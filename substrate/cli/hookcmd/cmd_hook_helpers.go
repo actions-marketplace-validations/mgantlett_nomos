@@ -180,7 +180,7 @@ func evaluateHermeticDirBoundary(rawTarget, resolved, hermeticDir string) shellg
 
 func evaluateWorktreeBoundary(rawTarget, resolved, baseCwd, toolName string) shellguard.HookDecision {
 	if isPermittedWorktreePath(resolved, baseCwd) {
-		return shellguard.HookDecision{Decision: hookDecisionAllow}
+		return evaluateWorktreeTaskWriteFence(resolved)
 	}
 	if repoRoot, cfg, branch, isBranch := ResolveBranchGuardContext(resolved); isBranch {
 		return evaluateBranchGuardMutation(rawTarget, resolved, repoRoot, branch, cfg)
@@ -202,6 +202,60 @@ func evaluateWorktreeBoundary(rawTarget, resolved, baseCwd, toolName string) she
 			rawTarget, resolved, toolName, choreHint,
 		),
 	}
+}
+
+func evaluateWorktreeTaskWriteFence(resolved string) shellguard.HookDecision {
+	wtRoot := extractEnclosingWorktreeRoot(resolved)
+	if wtRoot == "" {
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
+	}
+	relPath := strings.TrimPrefix(strings.TrimPrefix(resolved, wtRoot), "/")
+	if relPath == "" || strings.HasPrefix(relPath, ".tmp/") {
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
+	}
+	taskKey := extractTaskKeyFromWorktreeRoot(wtRoot)
+	if taskKey == "" {
+		return shellguard.HookDecision{Decision: hookDecisionAllow}
+	}
+	var immutablePaths []string
+	if cfg, err := config.LoadConfig(wtRoot); err == nil && cfg != nil {
+		immutablePaths = cfg.Governance.QualityGates.ImmutableTestPaths
+	}
+	rec := loadTaskRecordForHook(taskKey)
+	if reason := task.EvaluateTaskWriteBoundaries(wtRoot, taskKey, relPath, rec, immutablePaths); reason != "" {
+		return shellguard.HookDecision{Decision: hookDecisionDeny, Reason: reason}
+	}
+	return shellguard.HookDecision{Decision: hookDecisionAllow}
+}
+
+func extractTaskKeyFromWorktreeRoot(wtRoot string) string {
+	baseUpper := strings.ToUpper(filepath.Base(filepath.Clean(wtRoot)))
+	for _, prefix := range []string{"SUB-", "INT-"} {
+		if idx := strings.LastIndex(baseUpper, prefix); idx >= 0 {
+			cand := baseUpper[idx:]
+			if err := task.ValidateTaskKey(cand); err == nil {
+				return cand
+			}
+		}
+	}
+	return ""
+}
+
+func loadTaskRecordForHook(taskKey string) *task.TaskRecord {
+	store, err := task.NewDefaultSQLiteTaskStore()
+	if err != nil || store == nil {
+		return nil
+	}
+	defer func() {
+		if cErr := store.Close(); cErr != nil {
+			// best-effort read-only close in PreToolUse hook
+		}
+	}()
+	rec, gErr := store.GetTask(taskKey)
+	if gErr != nil {
+		return nil
+	}
+	return rec
 }
 
 func isPermittedWorktreePath(resolved, baseCwd string) bool {

@@ -302,6 +302,13 @@
                 "type": "string"
               }
             },
+            "immutable_test_paths": {
+              "description": "Workspace-relative verification suite globs that remain write-protected across every SUB-* task.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
             "intent_source_roots": {
               "description": "Directories classified under the Intent plane (Law 7).",
               "type": "array",

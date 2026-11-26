@@ -16,6 +16,7 @@ import (
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/storage"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/types"
 	"github.com/mgantlett/nomos/substrate/src/nomos/core/workspace"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/task"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/polygate"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/ratchet"
 	"github.com/mgantlett/nomos/substrate/src/nomos/modules/verify/vscope"
@@ -351,13 +352,15 @@ func (g *PlaneSeparationGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateR
 	modified := vscope.GetModifiedFilesInScope(ctx, workDir)
 
 	cfg := vscope.ResolveVerifyConfig(ctx)
-	var intentRoots, substrateRoots []string
+	var intentRoots, substrateRoots, immutableTests []string
 	if cfg != nil {
 		intentRoots = cfg.Governance.QualityGates.IntentSourceRoots
 		substrateRoots = cfg.Governance.QualityGates.SubstrateSourceRoots
+		immutableTests = cfg.Governance.QualityGates.ImmutableTestPaths
 	}
 
 	violations := EvaluatePlaneViolationsWithRoots(ctx.TaskID, modified, intentRoots, substrateRoots)
+	violations = append(violations, evaluateWorktreeOracleAndScopeViolations(workDir, ctx.TaskID, modified, immutableTests)...)
 	if len(violations) > 0 {
 		return &vscope.GateResult{
 			GateName: g.Name(),
@@ -367,4 +370,28 @@ func (g *PlaneSeparationGate) Evaluate(ctx *vscope.VerifyContext) (*vscope.GateR
 		}, nil
 	}
 	return &vscope.GateResult{GateName: g.Name(), Passed: true, Message: "plane separation intact: zero cross-plane mutations"}, nil
+}
+
+func evaluateWorktreeOracleAndScopeViolations(workDir, taskKey string, modified, immutableTests []string) []string {
+	if len(modified) == 0 {
+		return nil
+	}
+	var rec *task.TaskRecord
+	if store, err := task.NewDefaultSQLiteTaskStore(); err == nil && store != nil {
+		defer func() {
+			if cErr := store.Close(); cErr != nil {
+				// best-effort read-only store close
+			}
+		}()
+		if loaded, gErr := store.GetTask(taskKey); gErr == nil {
+			rec = loaded
+		}
+	}
+	var out []string
+	for _, f := range modified {
+		if reason := task.EvaluateTaskWriteBoundaries(workDir, taskKey, f, rec, immutableTests); reason != "" {
+			out = append(out, reason)
+		}
+	}
+	return out
 }
