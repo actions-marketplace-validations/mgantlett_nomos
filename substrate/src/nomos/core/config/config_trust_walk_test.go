@@ -13,7 +13,8 @@ func TestEcosystemConfig_PreTrustExecutableSurfaceWalk(t *testing.T) {
 	sort.Strings(paths)
 
 	knownExecutableFields := map[string]bool{
-		"Governance.QualityGates.CorpusCommand": true,
+		"Governance.QualityGates.CorpusCommand":            true,
+		"Governance.QualityGates.BenchmarkRatchet.Command": true,
 	}
 	suspiciousTokens := []string{"Command", "Exec", "Script", "Hook", "Shell"}
 	for _, fieldPath := range paths {

@@ -69,16 +69,37 @@ func parseSelectedAgents(raw string) ([]string, error) {
 }
 
 func detectInstalledAgents(absDir string) []string {
+	homeDir := ""
+	if resolvedHome, err := os.UserHomeDir(); err == nil {
+		homeDir = resolvedHome
+	}
 	var detected []string
 	for _, agent := range canonicalInitAgents {
-		if hasAgentDirSignal(absDir, agent) || hasAgentBinaryOnPath(agent) {
+		if hasAgentDirSignal(absDir, agent) || hasAgentBinaryOnPath(agent) || hasAgentHomeSignal(homeDir, agent) {
 			detected = append(detected, agent)
 		}
 	}
-	if len(detected) == 0 {
-		return append([]string(nil), canonicalInitAgents...)
-	}
 	return detected
+}
+
+func hasAgentHomeSignal(homeDir, agent string) bool {
+	if strings.TrimSpace(homeDir) == "" {
+		return false
+	}
+	switch agent {
+	case agentClaude:
+		return pathExists(filepath.Join(homeDir, claudeDirToken))
+	case agentCursor:
+		return pathExists(filepath.Join(homeDir, hookcmd.CursorDirToken))
+	case agentOpenCode:
+		return pathExists(filepath.Join(homeDir, ".config", "opencode")) || pathExists(filepath.Join(homeDir, openCodeDirToken))
+	case agentGemini:
+		return pathExists(filepath.Join(homeDir, geminiDirToken))
+	case agentAgy:
+		return pathExists(filepath.Join(homeDir, hookcmd.AgentsDirToken)) || pathExists(filepath.Join(homeDir, geminiDirToken, "antigravity"))
+	default:
+		return false
+	}
 }
 
 func detectExistingHookAgents(absDir string) []string {
@@ -270,10 +291,8 @@ func printInitializationSummary(info initSummaryData) {
 	writeSummaryLine(out, "%s\n", tui.UiRule(tui.RuleNarrow))
 	writeSummaryLine(out, "  %s Governance mode: %s\n", check, tui.UiBoldValueStyle.Render(modeLabel))
 	writeSummaryLine(out, "  %s Configuration & protocol: %s\n", check, tui.UiCommandStyle.Render("nomos.yaml, AGENTS.md"))
-	writeSummaryLine(out, "  %s Agent hooks: %s\n", check, tui.UiMutedStyle.Render(strings.Join(info.selectedAgents, ", ")))
-	if info.wroteBaseline && info.preInitXray != nil {
-		writeSummaryLine(out, "  %s Baseline locked %s\n", check, tui.UiCommandStyle.Render(fmt.Sprintf("(%s · score %d/100 · grade %s)", constants.FileNomosBaselineJSON, info.preInitXray.HangoverScore, info.preInitXray.Grade)))
-	}
+	printInitAgentHooksLine(out, check, info.selectedAgents)
+	printInitRatchetAndBoundaryLines(out, check, info)
 	if len(info.ciFiles) > 0 {
 		writeSummaryLine(out, "  %s CI workflows: %s\n", check, tui.UiCommandStyle.Render(strings.Join(info.ciFiles, ", ")))
 		writeSummaryLine(out, "  %s README badge: %s\n", check, tui.UiMutedStyle.Render(selfupdate.FormatReadmeBadgeSnippet(filepath.Base(info.absDir))))
@@ -284,6 +303,37 @@ func printInitializationSummary(info initSummaryData) {
 	printGitAndNextGuidance(out, check, info)
 }
 
+func printInitAgentHooksLine(out io.Writer, check string, agents []string) {
+	if len(agents) > 0 {
+		writeSummaryLine(out, "  %s Agent hooks: %s\n", check, tui.UiMutedStyle.Render(strings.Join(agents, ", ")))
+		return
+	}
+	writeSummaryLine(out, "  %s Agent hooks: %s\n", check,
+		tui.UiMutedStyle.Render("none auto-detected (wire anytime: nomos init --agents claude|cursor|opencode|gemini|agy)"))
+}
+
+func printInitRatchetAndBoundaryLines(out io.Writer, check string, info initSummaryData) {
+	if info.opts.Strict {
+		label := "Strict mode active (full structural & test ceilings enforced)"
+		if info.promotedStrict {
+			label = "Promoted existing nomos.yaml to strict_mode: true (historical baseline preserved)"
+		}
+		writeSummaryLine(out, "  %s %s\n", check, tui.UiBoldValueStyle.Render(label))
+	} else if info.wroteBaseline && info.preInitXray != nil {
+		hotspots := len(info.preInitXray.Hotspots)
+		writeSummaryLine(out, "  %s Ratchet active: %s %s\n", check,
+			tui.UiBoldValueStyle.Render(fmt.Sprintf("0 of %d existing hotspot(s) will fail; only net-new debt in touched files is gated", hotspots)),
+			tui.UiCommandStyle.Render(fmt.Sprintf("(%s · score %d/100 · grade %s)", constants.FileNomosBaselineJSON, info.preInitXray.HangoverScore, info.preInitXray.Grade)))
+	} else if !info.opts.Worktrees {
+		writeSummaryLine(out, "  %s Ratchet active: %s\n", check,
+			tui.UiMutedStyle.Render("anti-cheat & security gates live; pass --strict anytime for full ceilings"))
+	}
+	if info.inferredBoundaries > 0 {
+		writeSummaryLine(out, "  %s Auto-locked boundaries: %s\n", check,
+			tui.UiSuccessStyle.Render(fmt.Sprintf("%d clean architecture rule(s)", info.inferredBoundaries)))
+	}
+}
+
 func resolveInitModeLabel(opts InitOptions) string {
 	if opts.Worktrees && opts.Local {
 		return "Hermetic Worktrees (Local Stealth)"
@@ -291,10 +341,14 @@ func resolveInitModeLabel(opts InitOptions) string {
 	if opts.Worktrees {
 		return "Hermetic Worktrees"
 	}
-	if opts.Local {
-		return "Branch Guard (Local Stealth)"
+	posture := "Ratchet"
+	if opts.Strict {
+		posture = "Strict"
 	}
-	return "Branch Guard"
+	if opts.Local {
+		return fmt.Sprintf("Branch Guard (Local Stealth · %s)", posture)
+	}
+	return fmt.Sprintf("Branch Guard (%s)", posture)
 }
 
 func printGitAndNextGuidance(out io.Writer, check string, info initSummaryData) {
@@ -303,10 +357,18 @@ func printGitAndNextGuidance(out io.Writer, check string, info initSummaryData) 
 	} else {
 		writeSummaryLine(out, "  %s\n", tui.UiWarnStyle.Render("⚠️ Git defense hooks not installed (run 'git init' to enable)"))
 	}
-	writeSummaryLine(out, "  %s Living Ledger & Mneme storage connected\n", check)
+	if !info.opts.Worktrees {
+		writeSummaryLine(out, "  %s Verified local memory connected\n", check)
+	} else {
+		writeSummaryLine(out, "  %s Living Ledger & Mneme storage connected\n", check)
+	}
 	writeSummaryLine(out, "%s\n", tui.UiRule(tui.RuleNarrow))
 	if !info.opts.Worktrees {
-		writeSummaryLine(out, "  %s\n", tui.UiSuccessStyle.Render("✨ Ready on normal branches. Switch to a feature branch: git switch -c feat/<topic>"))
+		if info.currentBranch != "" && info.currentBranch != info.defaultBranch && !hookcmd.IsProtectedTrunkForConfig(info.currentBranch, nil) {
+			writeSummaryLine(out, "  %s\n", tui.UiSuccessStyle.Render(fmt.Sprintf("✨ Ready on branch %s. Keep coding with your agent; run 'nomos status' anytime to view catches.", info.currentBranch)))
+			return
+		}
+		writeSummaryLine(out, "  %s\n", tui.UiSuccessStyle.Render("✨ Ready on normal branches. Switch to a feature branch: git switch -c feat/<topic> (run 'nomos status' anytime to view catches)."))
 		return
 	}
 	if info.createdBaselineCommit {

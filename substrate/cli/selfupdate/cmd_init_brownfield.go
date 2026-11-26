@@ -198,11 +198,13 @@ func RenderScaffoldedNomosYAMLConfigured(dir string, opts NomosYAMLRenderOptions
 	content = ApplyIsolationMode(content, opts.IsolationMode)
 
 	isBrownfield, substrateRoots := detectBrownfieldWorkspace(dir)
+	if opts.ForceStrict {
+		content = ApplyStrictMode(content, true)
+	} else if isBrownfield || opts.ForceBrownfield || opts.IsolationMode == config.IsolationModeBranch {
+		content = ApplyStrictMode(content, false)
+	}
 	if !isBrownfield && !opts.ForceBrownfield {
 		return content
-	}
-	if !opts.ForceStrict {
-		content = strings.Replace(content, "        strict_mode: true", "        strict_mode: false", 1)
 	}
 	strictAnchor := "        strict_mode: false\n"
 	if opts.ForceStrict {
@@ -225,6 +227,24 @@ func RenderScaffoldedNomosYAMLConfigured(dir string, opts NomosYAMLRenderOptions
 	}
 	if inferred := impact.InferCleanArchitectureBoundaries(dir); len(inferred) > 0 {
 		content = injectScaffoldedArchitectureBoundaries(content, inferred, strictAnchor)
+	}
+	return content
+}
+
+// ApplyStrictMode updates governance.quality_gates.strict_mode in nomos.yaml content (@intent task_lifecycle_cli_spec.md).
+func ApplyStrictMode(content string, strict bool) string {
+	val := "false"
+	if strict {
+		val = "true"
+	}
+	target := "strict_mode: " + val
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "strict_mode:") {
+			indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+			lines[i] = indent + target
+			return strings.Join(lines, "\n")
+		}
 	}
 	return content
 }

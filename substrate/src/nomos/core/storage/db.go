@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     title               TEXT NOT NULL,
     description         TEXT NOT NULL DEFAULT '',
     scope_paths         TEXT NOT NULL DEFAULT '[]',
+    lock_tests          INTEGER NOT NULL DEFAULT 0,
     obligations         TEXT NOT NULL DEFAULT '[]',
     acceptance_criteria TEXT NOT NULL DEFAULT '[]',
     verify_cmd          TEXT NOT NULL DEFAULT '',
@@ -133,7 +134,7 @@ func pingAndInit(db *sql.DB) error {
 
 // currentSchemaUserVersion tracks the authoritative SQLite schema version in the page-1 header.
 // Increment whenever SchemaDDL or migrateLegacyColumns changes so OpenDB skips redundant DDL writes.
-const currentSchemaUserVersion = 4
+const currentSchemaUserVersion = 5
 
 // InitSchema executes idempotent table definitions, indexes, and runtime pragmas.
 func InitSchema(db *sql.DB) error {
@@ -187,6 +188,7 @@ func migrateLegacyColumns(db *sql.DB) error {
 		"ALTER TABLE tasks ADD COLUMN context_burden INTEGER NOT NULL DEFAULT 0;",
 		"ALTER TABLE tasks ADD COLUMN arch_layer INTEGER NOT NULL DEFAULT 0;",
 		"ALTER TABLE tasks ADD COLUMN scope_paths TEXT NOT NULL DEFAULT '[]';",
+		"ALTER TABLE tasks ADD COLUMN lock_tests INTEGER NOT NULL DEFAULT 0;",
 		"ALTER TABLE tasks ADD COLUMN obligations TEXT NOT NULL DEFAULT '[]';",
 		"ALTER TABLE tasks ADD COLUMN acceptance_criteria TEXT NOT NULL DEFAULT '[]';",
 		"ALTER TABLE tasks ADD COLUMN verify_cmd TEXT NOT NULL DEFAULT '';",

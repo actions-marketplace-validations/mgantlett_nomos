@@ -97,7 +97,7 @@ func TestCollectInFlightSubSpecDigestsWithTwin_IncludesBoundTwinSpecsWithoutSour
 		}
 	}
 
-	got := collectInFlightSubSpecDigestsWithTwin(nil, repo, "INT-2123", nil)
+	got := collectInFlightSubSpecDigestsWithTwins(nil, repo, []string{"INT-2123"}, nil)
 	if !got["intent/architecture/specs/portal_spec.md"] {
 		t.Fatalf("expected bound twin spec portal_spec.md in in-flight digests without @intent tag, got: %+v", got)
 	}

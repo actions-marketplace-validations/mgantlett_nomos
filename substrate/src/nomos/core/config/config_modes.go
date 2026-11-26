@@ -43,6 +43,22 @@ const (
 	IsolationModeBranch = "branch"
 )
 
+// IsPolyglotToolchainsEnabled reports whether polyglot toolchain auto-discovery is active (@intent: #QualityGatesConfig).
+func (q *QualityGatesConfig) IsPolyglotToolchainsEnabled() bool {
+	if q == nil || q.PolyglotToolchains == nil {
+		return true
+	}
+	return *q.PolyglotToolchains
+}
+
+// IsForbidSuppressionsEnabled reports whether diff-ratcheted suppression and type-escape blocking is active (@intent: #QualityGatesConfig).
+func (q *QualityGatesConfig) IsForbidSuppressionsEnabled() bool {
+	if q == nil || q.ForbidSuppressions == nil {
+		return true
+	}
+	return *q.ForbidSuppressions
+}
+
 // EffectiveRatchetMode returns normalized ratchet_mode, defaulting to "standard" (@intent: #QualityGatesConfig).
 func (q *QualityGatesConfig) EffectiveRatchetMode() string {
 	if q == nil {

@@ -59,18 +59,28 @@ type PRDebtDelta struct {
 	BaselineManifest bool   `json:"baseline_manifest"`
 }
 
+// ArchitecturalIntentBrief compresses diff-level verification into four architectural review signals.
+// @intent nomos_intent_traceability_spec.md #ArchitecturalIntentBrief
+type ArchitecturalIntentBrief struct {
+	ContractsMutated   []string `json:"contracts_mutated,omitempty"`
+	DepsOrBoundaries   []string `json:"deps_or_boundaries,omitempty"`
+	ObligationsDelta   []string `json:"obligations_delta,omitempty"`
+	ZeroMechanicalDebt bool     `json:"zero_mechanical_debt"`
+}
+
 // PRProofReceipt seals 42-gate posture, plane separation, debt delta, and mutation score.
 // @intent nomos_intent_traceability_spec.md #PRProofReceipt
 type PRProofReceipt struct {
-	SchemaVersion  string              `json:"schema_version"`
-	ProjectName    string              `json:"project_name"`
-	BaseRef        string              `json:"base_ref"`
-	HeadCommit     string              `json:"head_commit"`
-	GatesPassed    int                 `json:"gates_passed"`
-	GatesTotal     int                 `json:"gates_total"`
-	PlaneSummary   string              `json:"plane_summary"`
-	DebtDelta      PRDebtDelta         `json:"debt_delta"`
-	MutationReport *DiffMutationReport `json:"mutation_report,omitempty"`
-	Passed         bool                `json:"passed"`
-	ReceiptSHA256  string              `json:"receipt_sha256"`
+	SchemaVersion  string                    `json:"schema_version"`
+	ProjectName    string                    `json:"project_name"`
+	BaseRef        string                    `json:"base_ref"`
+	HeadCommit     string                    `json:"head_commit"`
+	GatesPassed    int                       `json:"gates_passed"`
+	GatesTotal     int                       `json:"gates_total"`
+	PlaneSummary   string                    `json:"plane_summary"`
+	DebtDelta      PRDebtDelta               `json:"debt_delta"`
+	IntentBrief    *ArchitecturalIntentBrief `json:"intent_brief,omitempty"`
+	MutationReport *DiffMutationReport       `json:"mutation_report,omitempty"`
+	Passed         bool                      `json:"passed"`
+	ReceiptSHA256  string                    `json:"receipt_sha256"`
 }

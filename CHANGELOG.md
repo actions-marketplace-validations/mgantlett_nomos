@@ -6,6 +6,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v4.34.0] - 2026-11-26
+> Suppression & Type-Escape Diff-Ratchet, Native Zod 4 Contract Parity, Held-Out Test Oracle Lock (`--lock-tests`), Hard `--scope` Write Fence, 15-Second Architectural Intent Brief (`--intent-brief`), Optional Runtime `benchmark_ratchet`, and Polyglot `SiblingDelta` Multi-Agent Isolation (Apache 2.0)
+
+### Agent Upgrade & New Surfaces
+- **Upgrade**: `npx -y @mgantlett/nomos@latest update --sync-workspace` (or `uvx --refresh nomos-cli xray . --json`).
+- **Active Surfaces**: `nomos verify --intent-brief`, `nomos verify --update-bench-baseline`, `nomos task start --lock-tests`, `nomos task pair --lock-tests`, `nomos.yaml` (`forbid_suppressions`, `immutable_test_paths`, `benchmark_ratchet`).
+
+### Static Escape & Polyglot Contract Hardening (`INT-2305`, `SUB-3875`, `SUB-3878`)
+- **Diff-Ratcheted Suppression & Type-Escape Guard (`SUB-3878`)**: `AntiShimGate` rejects net-new linter suppression pragmas and TypeScript type escapes (`//nolint`, `eslint-disable`, `@ts-ignore`, `@ts-expect-error`, `# noqa`, `# type: ignore`, `#[allow(`, `: any`, `as any`) by default while grandfathering pre-existing baseline occurrences (`forbid_suppressions: false` opt-out; `TC-AGT-12`).
+- **Native Zod 4 Contract Parity & Polyglot `SiblingDelta` Isolation (`SUB-3875`, `SUB-3878`)**: Extracts contract field shapes from TypeScript `z.object` / `z.strictObject` / `z.looseObject` schemas (`TC-OBL-017`), extends `SiblingDelta` deferral to polyglot contract blocks and bidirectional multi-`INT-*` twins, and bounds trunk deferral strictly to non-terminal sibling `SUB-*` worktrees present on disk.
+
+### Pre-Tool Hook & Verification Oracle Boundaries (`INT-2307`, `SUB-3879`)
+- **Held-Out Test Oracle Lock (`--lock-tests`, `immutable_test_paths`)**: Persists `LockTests` in SQLite schema v5 and blocks edits to pre-existing committed verification suites while allowing net-new test files; `immutable_test_paths` globs remain write-protected across every `SUB-*` task in both 4ms Pre-Tool Hooks and `PlaneSeparationGate` (`TC-TSK-23`).
+- **Hard `--scope` Write Fence**: Enforces declared `scope_paths` in both 4ms Pre-Tool Hooks and `nomos verify` while automatically permitting paired unit test files so TDD never deadlocks (`TC-TSK-24`).
+
+### Review Compression & Runtime Ratchet (`INT-2308`, `SUB-3880`)
+- **15-Second Architectural Intent Brief (`--pr`, `--intent-brief`)**: Embeds `#ArchitecturalIntentBrief` (mutated contracts, dependency/boundary manifests, `TC-*` obligation deltas, and mechanical debt seal) directly into `PRProofReceipt` Markdown and exposes standalone `nomos verify --intent-brief` output (`TC-PR-03`).
+- **Optional Runtime Benchmark Ratchet (`benchmark_ratchet`, `--update-bench-baseline`)**: Runs opt-in Go `-bench` (`ns/op`, `allocs/op`, `B/op`) or generic JSON metric commands inside `GoToolchainGate`, rejects regressions exceeding `max_regression_pct` (default `15%`), pins `benchmark_ratchet.command` to trunk in `ConfigImmutabilityGate`, and refreshes baselines via `nomos verify --update-bench-baseline` (`TC-BENCH-01`).
+
+### Release & Packaging (`README.md`, `CHANGELOG.md`)
+- **Prepare v4.34.0 Open-Core milestone release and align version pins (`INT-2308`, `SUB-3883`)**: Bump all statutory version pins to v4.34.0 and record v4.34.0 `CHANGELOG.md` section.
+
+---
+
+## [v4.33.0] - 2026-11-25
+
+> Ratchet-by-Default Compact Init, Repo-Scoped Shield Scorecard Telemetry, Smart Home Agent Detection, and Branch-Guard 4-Rung Graduation Ladder (Apache 2.0)
+
+### Agent Upgrade & New Surfaces
+- **Upgrade**: `npx -y @mgantlett/nomos@latest update --sync-workspace` (or `uvx --refresh nomos-cli xray . --json`).
+- **Active Surfaces**: `nomos init`, `nomos status`, `nomos hook post-commit`, `mneme.db` (`shield_events`).
+
+### Intent & Specifications (`intent/architecture/specs/`)
+- **Specify Shield telemetry, ratchet-by-default init, and Branch-Guard status ladder (`INT-2294`)**: Add `shield_events` SQLite table, `#ShieldSummary` Go SSoT, compact `templates/nomos_branch.yaml`, smart agent detection without 5-folder fallback, Branch-Guard `nomos status` 4-rung graduation ladder, quiet post-commit Shield Receipts, and compliance vectors `TC-SHIELD-01..03`, `TC-INIT-08..10`, and `TC-STATUS-BG-01..02`.
+
+### CLI, Onboarding & Cognitive Memory (`nomos init`, `nomos status`, `mneme.db`)
+- **Add Ratchet-by-default compact init, smart `$HOME` agent detection, and idempotent `--strict` promotion (`SUB-3851`)**: Plain `nomos init` always starts in safe Ratchet posture (`strict_mode: false`) with compact `~18`-line `nomos.yaml`, checks repo -> `$PATH` -> `$HOME` agent config directories without dumping unused IDE folders, prints plain-English ratchet guarantees and auto-locked boundaries, and promotes existing `nomos.yaml` cleanly via `nomos init --strict` while preserving historical `nomos.baseline.json`.
+- **Add Shield Scorecard telemetry, Branch-Guard `nomos status`, and quiet 1-line post-commit receipts (`SUB-3851`, `SUB-3853`)**: Record `PreToolUse` denies, `Stop` blocks, verification gate catches, and verified commits into repo-scoped `shield_events` in `mneme.db` (`0ms` cost on clean allows), render the Branch Guard Status Card with a 4-rung graduation ladder (`Stealth` -> `Branch Guard` -> `CI PR Proofs` -> `Strict/Worktrees`), and emit a 1-line `post-commit` Shield Receipt only on first commit, branch catches, or pitfall distillation.
+
+---
+
 ## [v4.32.1] - 2026-11-25
 
 > Wrap `@verifies` and #StructName in backticks in v4.32.0 changelog (Apache 2.0)

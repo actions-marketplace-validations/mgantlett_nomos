@@ -50,9 +50,13 @@ func evaluateCommandGuard(cmdLine, baseCwd, hermeticDir string) shellguard.HookD
 		}
 	}
 	if isForbiddenGitStashCmd(cmdLine) {
+		remedy := "Use 'nomos task chore \"<title>\"' or 'git restore <file>'."
+		if _, _, _, isBranch := ResolveBranchGuardContext(baseCwd); isBranch {
+			remedy = "Switch to a feature branch ('git switch -c feat/<topic>') or run 'git restore <file>'."
+		}
 		return shellguard.HookDecision{
 			Decision: hookDecisionDeny,
-			Reason:   "❌ [NOMOS INTERCEPT] 'git stash' is prohibited (Law 2 & Law 3). Use 'nomos task chore \"<title>\"' or 'git restore <file>'.",
+			Reason:   "❌ [NOMOS INTERCEPT] 'git stash' is prohibited (Law 2 & Law 3). " + remedy,
 		}
 	}
 	if isForbiddenGitHooksCmd(cmdLine) {

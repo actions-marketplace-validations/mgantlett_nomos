@@ -144,6 +144,25 @@
                 "additionalProperties": false
               }
             },
+            "benchmark_ratchet": {
+              "description": "Opt-in runtime benchmark regression gate enforcing bounded latency and allocation budgets.",
+              "type": "object",
+              "properties": {
+                "baseline_file": {
+                  "description": "Workspace-relative JSON file recording pinned benchmark baseline metrics (default: nomos.bench.baseline.json).",
+                  "type": "string"
+                },
+                "command": {
+                  "description": "Shell command executed to collect Go -bench or JSON runtime metrics.",
+                  "type": "string"
+                },
+                "max_regression_pct": {
+                  "description": "Maximum allowed percentage regression over baseline metrics before rejecting verification (default: 15).",
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
             "contracts": {
               "description": "Contract schema parity, UI membrane, and ingress boundaries.",
               "type": "object",
@@ -283,6 +302,11 @@
                 "type": "string"
               }
             },
+            "forbid_suppressions": {
+              "description": "Reject net-new linter suppression pragmas and type-escape hatches in modified non-test source files (default: true).",
+              "type": "boolean",
+              "default": true
+            },
             "forbidden_literals": {
               "description": "Hardcoded string or path literals rejected by Law 5.",
               "type": "array",
@@ -292,6 +316,13 @@
             },
             "forbidden_shims": {
               "description": "Stub or placeholder patterns rejected by the Anti-Shim Gate.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "immutable_test_paths": {
+              "description": "Workspace-relative verification suite globs that remain write-protected across every SUB-* task.",
               "type": "array",
               "items": {
                 "type": "string"

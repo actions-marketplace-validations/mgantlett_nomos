@@ -3,6 +3,7 @@
 package intentlint
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -31,7 +32,11 @@ func ResolveActiveWorktreeSpecRoots(scanRoot string, specRoots []string) []strin
 // excluding specs owned exclusively by another pending sibling SUB-* task's INT-* twin
 // (@intent nomos_intent_traceability_spec.md #ContractsConfig).
 func ResolveTaskContractSpecRoots(scanRoot, taskKey string, specRoots []string) []string {
-	deferred := CollectActiveSiblingTwinSpecs(scanRoot, taskKey)
+	cleanKey := strings.TrimSpace(taskKey)
+	if !strings.HasPrefix(cleanKey, "SUB-") {
+		return specRoots
+	}
+	deferred := CollectActiveSiblingTwinSpecs(scanRoot, cleanKey)
 	filtered, hasDeferred := FilterDeferredSpecRoots(scanRoot, specRoots, deferred)
 	if !hasDeferred {
 		return specRoots
@@ -63,11 +68,13 @@ func extractWorktreePrefixedKey(scanRoot, prefix string) string {
 }
 
 // CollectActiveSiblingTwinSpecs returns relative Markdown specification paths touched by
-// other pending sibling SUB-* twins that are disjoint from activeSubKey's own twin.
+// other pending sibling SUB-* twins that are disjoint from activeSubKey's own twins.
+// When activeSubKey is empty (trunk verification), deferral is strictly bounded to non-terminal
+// sibling SUB-* tasks whose physical worktree directory exists on disk.
 // @intent nomos_intent_traceability_spec.md #ContractsConfig
 func CollectActiveSiblingTwinSpecs(scanRoot, activeSubKey string) map[string]bool {
 	cleanKey := strings.TrimSpace(activeSubKey)
-	if !strings.HasPrefix(cleanKey, "SUB-") {
+	if cleanKey != "" && !strings.HasPrefix(cleanKey, "SUB-") {
 		return nil
 	}
 	trunkRoot := resolvePrimaryRepoRoot(scanRoot)
@@ -85,21 +92,30 @@ func collectDeferredSiblingSpecsFromTasks(trunkRoot, scanRoot, activeSubKey stri
 		if !isEligibleSiblingRecord(trunkRoot, scanRoot, activeSubKey, rec) {
 			continue
 		}
-		for sp := range listTwinCommitSpecFiles(trunkRoot, strings.TrimSpace(rec.TwinKey)) {
+		twins := collectTwinIntentKeysForSub(rec.Key, tasks)
+		addSiblingTwinSpecFiles(trunkRoot, twins, ownSpecs, deferred)
+	}
+	return deferred
+}
+
+func addSiblingTwinSpecFiles(trunkRoot string, twins []string, ownSpecs, deferred map[string]bool) {
+	for _, twin := range twins {
+		for sp := range listTwinCommitSpecFiles(trunkRoot, twin) {
 			if !ownSpecs[sp] {
 				deferred[sp] = true
 			}
 		}
 	}
-	return deferred
 }
 
 // CollectActiveSiblingTwinDeltas extracts exact commit-delta TC-* vectors, structs, and struct fields
-// introduced by pending sibling INT-* twins even when they share a canonical domain spec with activeSubKey
+// introduced by pending sibling INT-* twins even when they share a canonical domain spec with activeSubKey.
+// When activeSubKey is empty (trunk verification), deferral is strictly bounded to non-terminal
+// sibling SUB-* tasks whose physical worktree directory exists on disk
 // (@intent nomos_intent_traceability_spec.md #ContractsConfig).
 func CollectActiveSiblingTwinDeltas(scanRoot, activeSubKey string) *impact.SiblingDelta {
 	cleanKey := strings.TrimSpace(activeSubKey)
-	if !strings.HasPrefix(cleanKey, "SUB-") {
+	if cleanKey != "" && !strings.HasPrefix(cleanKey, "SUB-") {
 		return nil
 	}
 	trunkRoot := resolvePrimaryRepoRoot(scanRoot)
@@ -111,38 +127,95 @@ func CollectActiveSiblingTwinDeltas(scanRoot, activeSubKey string) *impact.Sibli
 }
 
 func computePendingSiblingDeltasFromTasks(trunkRoot, scanRoot, activeSubKey string, tasks []task.TaskRecord) *impact.SiblingDelta {
-	ownTwin := findOwnTwinKey(activeSubKey, tasks)
+	ownTwinList := collectTwinIntentKeysForSub(activeSubKey, tasks)
+	ownTwins := stringSliceToSet(ownTwinList)
 	delta := impact.NewSiblingDelta()
 	for _, rec := range tasks {
-		twin := strings.TrimSpace(rec.TwinKey)
-		if twin == ownTwin || !isEligibleSiblingRecord(trunkRoot, scanRoot, activeSubKey, rec) {
+		if !isEligibleSiblingRecord(trunkRoot, scanRoot, activeSubKey, rec) {
 			continue
 		}
-		accumulateTwinCommitDelta(trunkRoot, twin, delta)
+		accumulateSiblingTwinDeltas(trunkRoot, collectTwinIntentKeysForSub(rec.Key, tasks), ownTwins, delta)
 	}
-	if ownTwin != "" {
+	if len(ownTwinList) > 0 {
 		ownDelta := impact.NewSiblingDelta()
-		accumulateTwinCommitDelta(trunkRoot, ownTwin, ownDelta)
+		accumulateSiblingTwinDeltas(trunkRoot, ownTwinList, nil, ownDelta)
 		subtractOwnDelta(delta, ownDelta)
 	}
 	return delta
+}
+
+func accumulateSiblingTwinDeltas(trunkRoot string, twins []string, exclude map[string]bool, into *impact.SiblingDelta) {
+	for _, twin := range twins {
+		if !exclude[twin] {
+			accumulateTwinCommitDelta(trunkRoot, twin, into)
+		}
+	}
 }
 
 func isEligibleSiblingRecord(trunkRoot, scanRoot, activeSubKey string, rec task.TaskRecord) bool {
 	if rec.Key == activeSubKey || !strings.HasPrefix(rec.Key, "SUB-") {
 		return false
 	}
-	twin := strings.TrimSpace(rec.TwinKey)
-	return strings.HasPrefix(twin, "INT-") && isSiblingSubPendingForWorktree(trunkRoot, scanRoot, rec)
+	if activeSubKey == "" {
+		return isSiblingSubLiveOnDisk(trunkRoot, rec)
+	}
+	return isSiblingSubPendingForWorktree(trunkRoot, scanRoot, rec)
 }
 
-func findOwnTwinKey(activeSubKey string, tasks []task.TaskRecord) string {
-	for _, rec := range tasks {
-		if rec.Key == activeSubKey && strings.HasPrefix(strings.TrimSpace(rec.TwinKey), "INT-") {
-			return strings.TrimSpace(rec.TwinKey)
+func isSiblingSubLiveOnDisk(trunkRoot string, rec task.TaskRecord) bool {
+	if rec.Status == task.StatusDone || rec.Status == task.StatusAborted {
+		return false
+	}
+	return hasPhysicalTaskWorktree(trunkRoot, rec.Key)
+}
+
+func hasPhysicalTaskWorktree(trunkRoot, subKey string) bool {
+	wtRoot := filepath.Join(trunkRoot, "worktrees")
+	entries, err := os.ReadDir(wtRoot)
+	if err != nil {
+		return false
+	}
+	for _, ent := range entries {
+		if !ent.IsDir() {
+			continue
+		}
+		if extractWorktreePrefixedKey(filepath.Join(wtRoot, ent.Name()), "SUB-") == subKey {
+			return true
 		}
 	}
-	return ""
+	return false
+}
+
+func collectTwinIntentKeysForSub(subKey string, tasks []task.TaskRecord) []string {
+	cleanSub := strings.TrimSpace(subKey)
+	if !strings.HasPrefix(cleanSub, "SUB-") {
+		return nil
+	}
+	seen := make(map[string]bool)
+	var twins []string
+	for _, rec := range tasks {
+		recTwin := strings.TrimSpace(rec.TwinKey)
+		if rec.Key == cleanSub && strings.HasPrefix(recTwin, "INT-") && !seen[recTwin] {
+			seen[recTwin] = true
+			twins = append(twins, recTwin)
+		}
+		if strings.HasPrefix(rec.Key, "INT-") && recTwin == cleanSub && !seen[rec.Key] {
+			seen[rec.Key] = true
+			twins = append(twins, rec.Key)
+		}
+	}
+	return twins
+}
+
+func stringSliceToSet(items []string) map[string]bool {
+	if len(items) == 0 {
+		return nil
+	}
+	set := make(map[string]bool, len(items))
+	for _, item := range items {
+		set[item] = true
+	}
+	return set
 }
 
 func accumulateTwinCommitDelta(repoRoot, twinKey string, into *impact.SiblingDelta) {
@@ -155,6 +228,7 @@ func accumulateTwinCommitDelta(repoRoot, twinKey string, into *impact.SiblingDel
 		afterMD := readGitBlobString(repoRoot, sha+":"+specRel)
 		if afterMD != "" {
 			impact.ComputeMarkdownSpecDelta(beforeMD, afterMD, into)
+			recordPolyglotSpecDelta(beforeMD, afterMD, into)
 		}
 	}
 }
@@ -219,10 +293,17 @@ func loadRepoScopedTasks(trunkRoot string) []task.TaskRecord {
 }
 
 func resolveOwnTwinSpecs(trunkRoot, activeSubKey string, tasks []task.TaskRecord) map[string]bool {
-	if own := findOwnTwinKey(activeSubKey, tasks); own != "" {
-		return listTwinCommitSpecFiles(trunkRoot, own)
+	ownTwins := collectTwinIntentKeysForSub(activeSubKey, tasks)
+	if len(ownTwins) == 0 {
+		return nil
 	}
-	return nil
+	specs := make(map[string]bool)
+	for _, twin := range ownTwins {
+		for sp := range listTwinCommitSpecFiles(trunkRoot, twin) {
+			specs[sp] = true
+		}
+	}
+	return specs
 }
 
 func isSiblingSubPendingForWorktree(trunkRoot, scanRoot string, rec task.TaskRecord) bool {

@@ -42,12 +42,15 @@ type InitOptions struct {
 type initSummaryData struct {
 	absDir                string
 	defaultBranch         string
+	currentBranch         string
 	opts                  InitOptions
 	selectedAgents        []string
 	isGitRepo             bool
 	createdBaselineCommit bool
 	preInitXray           *xray.XrayReport
 	wroteBaseline         bool
+	inferredBoundaries    int
+	promotedStrict        bool
 	ciFiles               []string
 }
 
@@ -106,7 +109,8 @@ func executeInitWithOptions(dir string, opts InitOptions) error {
 	if scanErr != nil {
 		return scanErr
 	}
-	if err := scaffoldGovernanceForOptions(absDir, opts, selectedAgents, shouldBaseline, preInitXray); err != nil {
+	promotedStrict, err := scaffoldGovernanceForOptions(absDir, opts, selectedAgents, shouldBaseline, preInitXray)
+	if err != nil {
 		return err
 	}
 	ciFiles, ciErr := scaffoldCIWorkflowsIfRequested(absDir, opts)
@@ -120,15 +124,23 @@ func executeInitWithOptions(dir string, opts InitOptions) error {
 	}
 	seedDayZeroBrownfieldMemory(absDir)
 
+	inferredBoundaries := 0
+	if cfg, cErr := config.LoadConfig(absDir); cErr == nil && cfg != nil {
+		inferredBoundaries = len(cfg.Governance.QualityGates.ArchitectureBoundaries)
+	}
+
 	printInitializationSummary(initSummaryData{
 		absDir:                absDir,
 		defaultBranch:         detectDefaultBranch(absDir),
+		currentBranch:         detectCurrentBranch(absDir),
 		opts:                  opts,
 		selectedAgents:        selectedAgents,
 		isGitRepo:             isGitRepo,
 		createdBaselineCommit: createdCommit,
 		preInitXray:           preInitXray,
 		wroteBaseline:         shouldBaseline,
+		inferredBoundaries:    inferredBoundaries,
+		promotedStrict:        promotedStrict,
 		ciFiles:               ciFiles,
 	})
 	return nil
@@ -183,23 +195,24 @@ func resolveInitBaseline(absDir string, opts InitOptions) (*xray.XrayReport, boo
 	return rep, shouldBaseline, nil
 }
 
-func scaffoldGovernanceForOptions(absDir string, opts InitOptions, selectedAgents []string, shouldBaseline bool, preInitXray *xray.XrayReport) error {
+func scaffoldGovernanceForOptions(absDir string, opts InitOptions, selectedAgents []string, shouldBaseline bool, preInitXray *xray.XrayReport) (bool, error) {
 	if err := applyInitBoundaries(absDir, opts); err != nil {
-		return err
+		return false, err
 	}
 	forceBrownfield := shouldBaseline && preInitXray != nil && preInitXray.HangoverScore > 0
-	if err := scaffoldNomosConfigForOptions(absDir, opts, forceBrownfield); err != nil {
-		return types.NewNomosError(types.ErrCodeSubstrate, "failed scaffolding nomos.yaml: %v", err)
+	promotedStrict, err := scaffoldNomosConfigForOptions(absDir, opts, forceBrownfield)
+	if err != nil {
+		return false, types.NewNomosError(types.ErrCodeSubstrate, "failed scaffolding nomos.yaml: %v", err)
 	}
 	if err := scaffoldProtocolAndHooksForOptions(absDir, opts, selectedAgents); err != nil {
-		return err
+		return false, err
 	}
 	if shouldBaseline && preInitXray != nil {
 		if _, wErr := xray.WriteBaselineManifest(absDir, preInitXray); wErr != nil {
-			return types.NewNomosError(types.ErrCodeSubstrate, "failed writing %s: %v", constants.FileNomosBaselineJSON, wErr)
+			return false, types.NewNomosError(types.ErrCodeSubstrate, "failed writing %s: %v", constants.FileNomosBaselineJSON, wErr)
 		}
 	}
-	return nil
+	return promotedStrict, nil
 }
 
 func scaffoldProtocolAndHooksForOptions(absDir string, opts InitOptions, selectedAgents []string) error {
@@ -233,24 +246,20 @@ func applyInitBoundaries(absDir string, opts InitOptions) error {
 	return nil
 }
 
-func scaffoldNomosConfigForOptions(dir string, opts InitOptions, forceBrownfield bool) error {
+func scaffoldNomosConfigForOptions(dir string, opts InitOptions, forceBrownfield bool) (bool, error) {
 	configPath := filepath.Join(dir, constants.FileNomosYAML)
 	if existingRaw, err := os.ReadFile(configPath); err == nil {
-		if opts.Worktrees {
-			updated := selfupdate.ApplyIsolationMode(string(existingRaw), config.IsolationModeWorktree)
-			if updated != string(existingRaw) {
-				return os.WriteFile(configPath, []byte(updated), 0644)
-			}
-		}
-		return nil
+		return upgradeExistingNomosYAML(configPath, string(existingRaw), opts)
 	}
-	tmplBytes, err := initTemplates.ReadFile("templates/nomos.yaml")
-	if err != nil {
-		return err
-	}
+	templatePath := "templates/nomos_branch.yaml"
 	isolationMode := config.IsolationModeBranch
 	if opts.Worktrees {
+		templatePath = "templates/nomos.yaml"
 		isolationMode = config.IsolationModeWorktree
+	}
+	tmplBytes, err := initTemplates.ReadFile(templatePath)
+	if err != nil {
+		return false, err
 	}
 	content := selfupdate.RenderScaffoldedNomosYAMLConfigured(dir, selfupdate.NomosYAMLRenderOptions{
 		RawTemplate:     string(tmplBytes),
@@ -260,7 +269,34 @@ func scaffoldNomosConfigForOptions(dir string, opts InitOptions, forceBrownfield
 		ForceBrownfield: forceBrownfield,
 		ForceStrict:     opts.Strict,
 	})
-	return os.WriteFile(configPath, []byte(content), 0644)
+	return false, os.WriteFile(configPath, []byte(content), 0644)
+}
+
+func upgradeExistingNomosYAML(configPath, existing string, opts InitOptions) (bool, error) {
+	updated := existing
+	promotedStrict := false
+	if opts.Worktrees {
+		updated = selfupdate.ApplyIsolationMode(updated, config.IsolationModeWorktree)
+	}
+	if opts.Strict {
+		strictUpdated := selfupdate.ApplyStrictMode(updated, true)
+		if strictUpdated != updated {
+			promotedStrict = true
+			updated = strictUpdated
+		}
+	}
+	if updated == existing {
+		return false, nil
+	}
+	return promotedStrict, os.WriteFile(configPath, []byte(updated), 0644)
+}
+
+func detectCurrentBranch(dir string) string {
+	out, err := workspace.SafeGitCommand(dir, "branch", "--show-current").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func initializeGitGovernanceWithOptions(absDir string, opts InitOptions) (bool, bool) {

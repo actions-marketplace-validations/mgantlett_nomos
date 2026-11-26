@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/mgantlett/nomos/substrate/cli/hookcmd/shellguard"
 	"github.com/mgantlett/nomos/substrate/cli/tui"
+	"github.com/mgantlett/nomos/substrate/src/nomos/modules/mem"
 	"io"
 	"io/fs"
 	"path/filepath"
@@ -107,10 +108,19 @@ func evaluateTracedStopHook(p *shellguard.HookPayload, hermeticDir string, conta
 		saveHookSessionTrace(path, *tr)
 	}
 	if !needsVerify && needsBehavior {
-		return buildBehavioralStopDecision(wsRoot, len(tr.MutatedFiles), tr.StopBlockStrikes, maxBlocks, containerSandbox)
+		return recordAndReturnStopBlock(wsRoot, branchLabel, containerSandbox,
+			buildBehavioralStopDecision(wsRoot, len(tr.MutatedFiles), tr.StopBlockStrikes, maxBlocks, containerSandbox))
 	}
 	radarNote := collectStopInlineRadarSummary(wsRoot, tr.MutatedFiles)
-	return buildUnverifiedStopDecision(wsRoot, branchLabel, len(tr.MutatedFiles), tr.StopBlockStrikes, maxBlocks, containerSandbox, radarNote)
+	return recordAndReturnStopBlock(wsRoot, branchLabel, containerSandbox,
+		buildUnverifiedStopDecision(wsRoot, branchLabel, len(tr.MutatedFiles), tr.StopBlockStrikes, maxBlocks, containerSandbox, radarNote))
+}
+
+func recordAndReturnStopBlock(wsRoot, branchLabel string, containerSandbox bool, dec shellguard.HookDecision) shellguard.HookDecision {
+	if !containerSandbox && dec.Decision == hookDecisionBlock {
+		mem.RecordShieldEvent(wsRoot, mem.ShieldCategoryStopGuard, "StopGuard", branchLabel, dec.Reason)
+	}
+	return dec
 }
 
 func resolveContainerStopLimit(wsRoot string, containerSandbox bool) int {
@@ -145,7 +155,7 @@ func buildUnverifiedStopDecision(wsRoot, branchLabel string, fileCount, strike, 
 	)
 	if branchLabel != "" {
 		reason = fmt.Sprintf(
-			"%s Active branch '%s' has %d modified file(s) without a clean post-edit verification pass. Run 'nomos verify' before ending your turn (Law 2).",
+			"%s Active branch '%s' has %d modified file(s) without a clean post-edit verification pass. Run 'nomos verify' before ending your turn.",
 			strikePrefix, branchLabel, fileCount,
 		)
 	}

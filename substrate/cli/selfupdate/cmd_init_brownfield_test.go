@@ -72,4 +72,18 @@ func TestRenderScaffoldedNomosYAML_InfersCleanArchitectureBoundaries(t *testing.
 	if !strings.Contains(upgraded, `isolation_mode: "worktree"`) {
 		t.Fatalf("expected ApplyIsolationMode upgrade to worktree, got:\n%s", upgraded)
 	}
+
+	branchRatchet := RenderScaffoldedNomosYAMLConfigured(emptyDir, NomosYAMLRenderOptions{
+		RawTemplate:   rawTmpl,
+		ProjectName:   "scratch-app",
+		Branch:        "main",
+		IsolationMode: config.IsolationModeBranch,
+	})
+	if !strings.Contains(branchRatchet, "strict_mode: false") {
+		t.Fatalf("expected Branch Guard init on clean repo to default to strict_mode: false, got:\n%s", branchRatchet)
+	}
+	promoted := ApplyStrictMode(branchRatchet, true)
+	if !strings.Contains(promoted, "strict_mode: true") {
+		t.Fatalf("expected ApplyStrictMode(true) to flip strict_mode: true, got:\n%s", promoted)
+	}
 }

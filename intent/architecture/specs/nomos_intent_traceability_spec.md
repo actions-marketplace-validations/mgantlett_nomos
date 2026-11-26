@@ -347,20 +347,35 @@ type PRDebtDelta struct {
 	BaselineManifest bool   `json:"baseline_manifest"`
 }
 
+// ArchitecturalIntentBrief compresses diff-level verification into four architectural review signals (#ArchitecturalIntentBrief).
+type ArchitecturalIntentBrief struct {
+	ContractsMutated   []string `json:"contracts_mutated,omitempty"`
+	DepsOrBoundaries   []string `json:"deps_or_boundaries,omitempty"`
+	ObligationsDelta   []string `json:"obligations_delta,omitempty"`
+	ZeroMechanicalDebt bool     `json:"zero_mechanical_debt"`
+}
+
 // PRProofReceipt seals 42-gate posture, plane separation, debt delta, and mutation score (#PRProofReceipt).
 type PRProofReceipt struct {
-	SchemaVersion  string              `json:"schema_version"`
-	ProjectName    string              `json:"project_name"`
-	BaseRef        string              `json:"base_ref"`
-	HeadCommit     string              `json:"head_commit"`
-	GatesPassed    int                 `json:"gates_passed"`
-	GatesTotal     int                 `json:"gates_total"`
-	PlaneSummary   string              `json:"plane_summary"`
-	DebtDelta      PRDebtDelta         `json:"debt_delta"`
-	MutationReport *DiffMutationReport `json:"mutation_report,omitempty"`
-	Passed         bool                `json:"passed"`
-	ReceiptSHA256  string              `json:"receipt_sha256"`
+	SchemaVersion  string                    `json:"schema_version"`
+	ProjectName    string                    `json:"project_name"`
+	BaseRef        string                    `json:"base_ref"`
+	HeadCommit     string                    `json:"head_commit"`
+	GatesPassed    int                       `json:"gates_passed"`
+	GatesTotal     int                       `json:"gates_total"`
+	PlaneSummary   string                    `json:"plane_summary"`
+	DebtDelta      PRDebtDelta               `json:"debt_delta"`
+	IntentBrief    *ArchitecturalIntentBrief `json:"intent_brief,omitempty"`
+	MutationReport *DiffMutationReport       `json:"mutation_report,omitempty"`
+	Passed         bool                      `json:"passed"`
+	ReceiptSHA256  string                    `json:"receipt_sha256"`
 }
+
+// BuildArchitecturalIntentBrief summarizes mutated contracts, dependency shifts, and TC-* deltas against baseRef.
+func BuildArchitecturalIntentBrief(repoRoot, baseRef string, zeroMechanicalDebt bool) *ArchitecturalIntentBrief
+
+// FormatArchitecturalIntentBrief renders a compact Markdown architectural decision card.
+func FormatArchitecturalIntentBrief(brief *ArchitecturalIntentBrief) string
 
 // EvaluateDiffMutations mutates single-point AST operators in ephemeral shadow copies and runs targeted tests.
 func EvaluateDiffMutations(repoRoot, baseRef string) (*DiffMutationReport, error)
@@ -435,6 +450,19 @@ func FormatPRProofMarkdownForRepo(receipt *PRProofReceipt, targetDir string) str
 14. **Gate Sensor Execution Scope & Unindexed Extension Telemetry (`TC-DOD-07`):**
    - `Pipeline.Execute` classifies each `GateResult.ExecutionScope` (`ast_verified`, `runtime_verified`, `structural_verified`, `bounded_heuristic`, `no_files_in_scope`, `config_disabled`).
    - `PipelineReport` aggregates `SensorSummary` counts and lists non-AST script or query extensions in `UnindexedExtensions`.
+15. **Diff-Ratcheted Suppression Directive & Type-Escape Guard (`TC-AGT-12`):**
+   - With `forbid_suppressions` active (default `true`), `AntiShimGate` scans modified non-test source files for net-new suppression pragmas and type escapes.
+   - Covered tokens include `eslint-disable`, `@ts-ignore`, `@ts-expect-error`, `//nolint`, `# noqa`, `# type: ignore`, `#[allow(`, `: any`, and `as any`.
+   - Pre-existing baseline occurrences remain grandfathered; net-new tokens trigger rejection unless `nomos.yaml` sets `forbid_suppressions: false`.
+16. **Native Zod 4 Contract Parity & Polyglot Diagnostics (`TC-OBL-017`):**
+   - `VerifySpecTypeSignatures` extracts contract fields from TypeScript `z.object({ ... })` Zod schema blocks alongside `interface`, `type`, `class`, and `record` contracts.
+   - Polyglot signature drift diagnostics report accurate contract-type terminology without Go-specific struct phrasing.
+17. **15-Second Architectural Intent Brief (`--intent-brief`, `TC-PR-03`):**
+   - `BuildArchitecturalIntentBrief` summarizes mutated contracts, dependency or boundary manifest changes, `TC-*` obligation deltas, and mechanical debt posture.
+   - `nomos verify --pr` embeds the brief inside `PRProofReceipt`, and `nomos verify --intent-brief` emits the standalone decision card as Markdown or JSON.
+18. **Optional Runtime Benchmark Ratchet (`benchmark_ratchet`, `--update-bench-baseline`, `TC-BENCH-01`):**
+   - When `governance.quality_gates.benchmark_ratchet` declares `command`, `GoToolchainGate` parses Go benchmark metrics (`ns/op`, `allocs/op`, `B/op`) or JSON metric maps.
+   - Regressions exceeding `max_regression_pct` (default `15%`) relative to `baseline_file` trigger rejection; `nomos verify --update-bench-baseline` refreshes the recorded baseline.
 
 ---
 
@@ -463,6 +491,7 @@ func FormatPRProofMarkdownForRepo(receipt *PRProofReceipt, targetDir string) str
 | `TC-OBL-014` | `VerifyNormativeRegistrySurjection` | Self-hosted `nomos` omits gate `ProbeID`, CLI `--flag`, or `ERR_*` | Rejects undocumented normative surface entry | Law 4 & Law 6 |
 | `TC-OBL-015` | `collectActiveSiblingTwinDeltas` | Concurrent `SUB-*` tasks share one domain spec file | Defers only sibling `INT-*` commit delta without blocking | Law 3 & Law 4 |
 | `TC-OBL-016` | `InferCleanArchitectureBoundariesForFiles` | Polyglot repo with `.gitignore` build output and `$lib/` / `@/` imports | Ignores untracked build trees and enforces `$lib/` / `@/` layer rules | Law 4 & Law 7 |
+| `TC-OBL-017` | `VerifySpecTypeSignatures` | Spec declares Zod `z.object` schema fields vs TypeScript source | Enforces Zod field parity and rejects missing fields cleanly | Law 4 & Law 7 |
 | `TC-MAT-01` | `CanonicalMatrix` | `CanonicalMatrixModel{Laws: 7, Rings: 3, Cells: 21}` | Enforces exact `7x3 = 21` invariant cell topology | Law 2 & Law 6 |
 | `TC-MAT-02` | `CanonicalLaws` | Statutory 1..7 law metadata registry | Binds every cell to one of the 7 laws | Law 4 |
 | `TC-MAT-03` | `InvariantCellSpec` | Cell specification with syntactic, dynamic, or cryptographic ring | Maps every sensor probe to a canonical cell coordinate | Law 2 |
@@ -490,9 +519,12 @@ func FormatPRProofMarkdownForRepo(receipt *PRProofReceipt, targetDir string) str
 | `TC-AGT-09` | `ContractParityGate` | Zero canonical assets discovered during parity check | Fails closed rejecting vacuous asset discovery | Law 4 |
 | `TC-AGT-10` | `AntiShimGate` (`AntiShimDTO`) | Function body consists solely of `panic("TODO")` stub | Fails closed with `IsPanicShim == true` | Law 2 & Law 7 |
 | `TC-AGT-11` | `AntiShimGate` (`ScanOrphanedFixtures`) | Worktree adds orphaned vs test-referenced file in `testdata/` or `examples/` | Rejects orphaned fixture; passes referenced or walked directory fixtures | Law 2 & Law 7 |
+| `TC-AGT-12` | `AntiShimGate` (`ScanSuppressionEscapes`) | Modified source adds net-new linter suppression or `as any` escape | Rejects net-new escapes while grandfathering pre-existing baseline occurrences | Law 2 & Law 7 |
 | `TC-MUT-01` | `EvaluateDiffMutations` | Modified Go function tested only by tautological `true` check | Mutant survives and fails `nomos verify --mutate-diff` | Law 2 & Law 7 |
 | `TC-PR-01` | `BuildPRProofReceipt` | `nomos verify --pr` evaluates clean branch against `main` | Seals 42-gate posture, debt delta, and SHA-256 digest | Law 2 & Law 4 |
 | `TC-PR-02` | `FormatPRProofMarkdown` | `PRProofReceipt` rendered via `--pr` and `--pr-output` | Writes deterministic Markdown table without workstation literals | Law 4 & Law 5 |
+| `TC-PR-03` | `BuildArchitecturalIntentBrief` | Branch mutates exported contract, manifest, and `@verifies TC-*` | Emits 4-section Architectural Intent Brief in `--pr` and `--intent-brief` | Law 2 & Law 4 |
+| `TC-BENCH-01` | `EvaluateBenchmarkRatchet` | Benchmark command emits Go `-bench` or JSON metrics vs baseline | Rejects regressions above `max_regression_pct`; updates baseline via `--update-bench-baseline` | Law 2 & Law 7 |
 | `TC-SHIM-02` | `EvaluateContainerPreToolHook` | Agent reads `/grading/score.py`, `/verifier/run.sh`, or `/proc/1/environ` | Rejects verifier-snooping payload before tool execution | Law 2 & Law 3 |
 
 ---

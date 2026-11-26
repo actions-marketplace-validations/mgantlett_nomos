@@ -61,14 +61,14 @@ func (s *SQLiteTaskStore) CreateTask(t TaskRecord) error {
 
 	query := `INSERT INTO tasks (
 		key, plane, project, schema_type, title, description,
-		scope_paths, obligations, acceptance_criteria, verify_cmd,
+		scope_paths, lock_tests, obligations, acceptance_criteria, verify_cmd,
 		status, tier, priority, created_at, updated_at, completed_at,
 		dependencies, twin_key, arc_id, intent_delta, burden, context_burden, arch_layer
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_, err := s.db.Exec(query,
 		t.Key, t.Plane, t.Project, string(t.SchemaType), t.Title, t.Description,
-		pathsJSON, oblJSON, acJSON, t.VerifyCmd,
+		pathsJSON, boolToSQLiteInt(t.LockTests), oblJSON, acJSON, t.VerifyCmd,
 		string(t.Status), string(t.Tier), t.Priority, t.CreatedAt, t.UpdatedAt,
 		t.CompletedAt, depJSON, t.TwinKey, t.ArcID,
 		t.IntentDelta, t.Burden, t.ContextBurden, t.ArchLayer,
@@ -83,7 +83,7 @@ func (s *SQLiteTaskStore) CreateTask(t TaskRecord) error {
 }
 
 const selectTaskColumns = `SELECT id, key, plane, project, schema_type, title, description,
-	scope_paths, obligations, acceptance_criteria, verify_cmd,
+	scope_paths, lock_tests, obligations, acceptance_criteria, verify_cmd,
 	status, tier, priority, created_at, updated_at, completed_at, dependencies,
 	twin_key, arc_id, intent_delta, burden, context_burden, arch_layer FROM tasks`
 
@@ -119,7 +119,7 @@ func (s *SQLiteTaskStore) UpdateTask(t TaskRecord) error {
 
 	query := `UPDATE tasks SET
 		project = ?, schema_type = ?, title = ?, description = ?,
-		scope_paths = ?, obligations = ?, acceptance_criteria = ?, verify_cmd = ?,
+		scope_paths = ?, lock_tests = ?, obligations = ?, acceptance_criteria = ?, verify_cmd = ?,
 		status = ?, tier = ?, priority = ?, updated_at = ?, completed_at = ?, dependencies = ?,
 		twin_key = ?, arc_id = ?, intent_delta = ?, burden = ?,
 		context_burden = ?, arch_layer = ?
@@ -127,7 +127,7 @@ func (s *SQLiteTaskStore) UpdateTask(t TaskRecord) error {
 
 	res, err := s.db.Exec(query,
 		t.Project, string(t.SchemaType), t.Title, t.Description,
-		pathsJSON, oblJSON, acJSON, t.VerifyCmd,
+		pathsJSON, boolToSQLiteInt(t.LockTests), oblJSON, acJSON, t.VerifyCmd,
 		string(t.Status), string(t.Tier), t.Priority, t.UpdatedAt, t.CompletedAt, depJSON,
 		t.TwinKey, t.ArcID, t.IntentDelta, t.Burden,
 		t.ContextBurden, t.ArchLayer, t.Key,
@@ -233,6 +233,13 @@ func marshalStringSlice(items []string) string {
 	return string(b)
 }
 
+func boolToSQLiteInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}
+
 func unmarshalStringSlice(ns sql.NullString) []string {
 	if !ns.Valid || ns.String == "" {
 		return nil
@@ -255,7 +262,7 @@ func scanTaskRow(scanner rowScanner) (*TaskRecord, error) {
 	)
 	err := scanner.Scan(
 		&row.nullID, &rec.Key, &rec.Plane, &row.project, &row.schemaType, &rec.Title, &row.desc,
-		&row.pathsJSON, &row.oblJSON, &row.acJSON, &row.verifyCmd,
+		&row.pathsJSON, &row.lockTests, &row.oblJSON, &row.acJSON, &row.verifyCmd,
 		&row.status, &row.tier, &row.priority, &rec.CreatedAt, &rec.UpdatedAt,
 		&row.completedAt, &row.depJSON, &row.twinKey, &row.arcID,
 		&row.intentDelta, &row.burden, &row.ctxBurden, &row.archLayer,
@@ -275,6 +282,7 @@ type scannedTaskRow struct {
 	schemaType  sql.NullString
 	desc        sql.NullString
 	pathsJSON   sql.NullString
+	lockTests   sql.NullInt64
 	oblJSON     sql.NullString
 	acJSON      sql.NullString
 	verifyCmd   sql.NullString
@@ -297,6 +305,7 @@ func mapScannedFields(rec *TaskRecord, row *scannedTaskRow) {
 	}
 	rec.Description = row.desc.String
 	rec.ScopePaths = unmarshalStringSlice(row.pathsJSON)
+	rec.LockTests = row.lockTests.Valid && row.lockTests.Int64 != 0
 	rec.Obligations = unmarshalStringSlice(row.oblJSON)
 	rec.AcceptanceCriteria = unmarshalStringSlice(row.acJSON)
 	rec.VerifyCmd = row.verifyCmd.String

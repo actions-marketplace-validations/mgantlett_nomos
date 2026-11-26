@@ -31,7 +31,7 @@ func NewVerifyCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "verify [path]",
 		Short: "Execute automated Definition of Done (DoD) quality gates",
-		Long: `Evaluate the 7 statutory Nomos Laws and 21 Invariant Cells across active worktrees.
+		Long: `Evaluate deterministic AST, security, and test-hygiene quality gates across feature branches or isolated worktrees.
 Zero trust in conversational claims; non-verbal proof via AST and compilation exit code 0.`,
 		Example: tui.HelpVerifyExample,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -44,6 +44,9 @@ Zero trust in conversational claims; non-verbal proof via AST and compilation ex
 			}
 			if impactOnly {
 				return runImpactMap(cmd.OutOrStdout(), targetDir, jsonOutput)
+			}
+			if prFlags.updateBenchBaseline {
+				return runUpdateBenchBaseline(cmd.OutOrStdout(), targetDir, jsonOutput)
 			}
 			if prFlags.sarifMode && (jsonOutput || prFlags.prMode) {
 				return types.NewNomosError(types.ErrCodeValidationFailed, "cannot combine --sarif with --json or --pr on nomos verify").
@@ -61,16 +64,10 @@ Zero trust in conversational claims; non-verbal proof via AST and compilation ex
 	cmd.Flags().BoolVar(&strict, "strict", false, "Fail closed on cognitive debt or minor warnings")
 	cmd.Flags().BoolVar(&impactOnly, "impact", false, "Display deterministic 1-hop AST blast-radius & impact map")
 	cmd.Flags().BoolVar(&jsonOutput, tui.FlagNameJSON, false, "Emit verification report as structured JSON")
-	cmd.Flags().BoolVar(&prFlags.sarifMode, "sarif", false, "Emit OASIS SARIF 2.1.0 JSON report for GitHub Code Scanning")
 	cmd.Flags().StringVarP(&worktreeDir, "worktree", "w", "", "Target worktree path to evaluate")
 	cmd.Flags().StringVar(&fastFile, "fast-file", "", "Evaluate sub-15ms single-file AST & security early-warning radar")
 	cmd.Flags().StringVar(&commitRange, "range", "", "Evaluate unattested commits in range (e.g. origin/main..HEAD) for pre-push verification")
-	cmd.Flags().BoolVar(&prFlags.prMode, "pr", false, "Emit tamper-evident Pull Request proof receipt (Markdown or --json)")
-	cmd.Flags().StringVar(&prFlags.prOutput, "pr-output", "", "Optional file path to write rendered Pull Request proof receipt")
-	// @intent nomos_intent_traceability_spec.md
-	// @intent tree_sitter_ast_gate_spec.md
-	cmd.Flags().BoolVar(&prFlags.mutateDiff, "mutate-diff", false, "Probe modified Go, TypeScript/JS, and Python functions with zero-token AST micro-mutants")
-	cmd.Flags().StringVar(&prFlags.baseRef, "base-ref", "", "Git base reference for PR receipt and diff micro-mutation comparison")
+	bindVerifyPRFlags(cmd, &prFlags)
 
 	cmd.AddCommand(newVerifyProofCmd())
 
@@ -157,15 +154,18 @@ func normalizeVerifyTargetScope(targetDir string, baseline bool) (string, string
 }
 
 func handleFailedVerificationReport(repoRoot, targetDir, activeTask string, allFiles, baseline bool, report *verify.PipelineReport) error {
+	var branchName string
 	if !allFiles && !baseline {
 		hookcmd.MarkWorktreeVerificationFailed(targetDir)
 		trapKey := activeTask
-		if trapKey == "" {
-			if _, cfg, branch, isBranch := hookcmd.ResolveBranchGuardContext(targetDir); isBranch && !hookcmd.IsProtectedTrunkForConfig(branch, cfg) {
+		if _, cfg, branch, isBranch := hookcmd.ResolveBranchGuardContext(targetDir); isBranch && !hookcmd.IsProtectedTrunkForConfig(branch, cfg) {
+			branchName = branch
+			if trapKey == "" {
 				trapKey = "BRANCH-" + hookcmd.SanitizeBranchSlug(branch)
 			}
 		}
 		recordFailedReportTraps(repoRoot, targetDir, trapKey, report)
+		recordFailedReportShieldEvents(repoRoot, branchName, report)
 	}
 	for _, res := range report.GateResults {
 		if !res.Passed && res.GateName == "Plane Separation Invariant" {

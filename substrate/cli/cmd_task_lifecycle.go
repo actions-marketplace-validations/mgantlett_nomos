@@ -133,7 +133,7 @@ func resolveOrAllocateCreateKey(store task.TaskStore, plane, customKey string) (
 }
 
 func newTaskStartCmd() *cobra.Command {
-	var autoEdit, forceProject, jsonOut bool
+	var autoEdit, forceProject, lockTests, jsonOut bool
 	cmd := &cobra.Command{
 		Use:     "start <key>",
 		Short:   "Provision transient worktree and CapBAC lease for task",
@@ -141,11 +141,12 @@ func newTaskStartCmd() *cobra.Command {
 		Example: tui.HelpTaskStartExample,
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTaskStartWithJSON(args[0], autoEdit, forceProject, jsonOut)
+			return runTaskStartFull(args[0], autoEdit, forceProject, lockTests, jsonOut)
 		},
 	}
 	cmd.Flags().BoolVarP(&autoEdit, "edit", "e", false, "Immediately transition worktree into EDIT phase")
 	cmd.Flags().BoolVar(&forceProject, "force-project", false, "Allow starting a task stamped with a different repository project")
+	cmd.Flags().BoolVar(&lockTests, "lock-tests", false, "Freeze pre-existing committed verification suites during task execution")
 	cmd.Flags().BoolVar(&jsonOut, tui.FlagNameJSON, false, "Emit structured JSON response")
 	return cmd
 }
@@ -159,6 +160,10 @@ func runTaskStartWithOpts(rawKey string, autoEdit, forceProject bool) error {
 }
 
 func runTaskStartWithJSON(rawKey string, autoEdit, forceProject, jsonOut bool) error {
+	return runTaskStartFull(rawKey, autoEdit, forceProject, false, jsonOut)
+}
+
+func runTaskStartFull(rawKey string, autoEdit, forceProject, lockTests, jsonOut bool) error {
 	key := strings.ToUpper(strings.TrimSpace(rawKey))
 	if err := task.ValidateTaskKey(key); err != nil {
 		return err
@@ -195,6 +200,9 @@ func runTaskStartWithJSON(rawKey string, autoEdit, forceProject, jsonOut bool) e
 	}
 	allocateWorktreeMTPO(mgr.RepoRoot, key, wtPath)
 	t.Status = targetStatus
+	if lockTests {
+		t.LockTests = true
+	}
 	if err := store.UpdateTask(*t); err != nil {
 		return err
 	}

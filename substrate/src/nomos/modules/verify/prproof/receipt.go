@@ -45,6 +45,7 @@ func BuildPRProofReceipt(targetDir string, posture GatePostureSummary, opts PRPr
 		mutPassed = mutRep.Passed
 	}
 
+	intentBrief := BuildArchitecturalIntentBrief(absTarget, baseRef, posture.PipelinePass && debtDelta.DeltaScore <= 0)
 	receipt := &PRProofReceipt{
 		SchemaVersion:  PRProofSchemaVersion,
 		ProjectName:    projectName,
@@ -54,6 +55,7 @@ func BuildPRProofReceipt(targetDir string, posture GatePostureSummary, opts PRPr
 		GatesTotal:     posture.GatesTotal,
 		PlaneSummary:   planeSummary,
 		DebtDelta:      debtDelta,
+		IntentBrief:    intentBrief,
 		MutationReport: mutRep,
 		Passed:         posture.PipelinePass && mutPassed && planeSummary != "cross-plane",
 	}
@@ -235,6 +237,10 @@ func FormatPRProofMarkdown(receipt *PRProofReceipt) string {
 			receipt.MutationReport.MutantsTotal, receipt.MutationReport.MutantsSurvived)
 	}
 	fmt.Fprintf(&b, "| **Receipt SHA-256** | `%s` |\n", receipt.ReceiptSHA256)
+	if receipt.IntentBrief != nil {
+		b.WriteByte('\n')
+		b.WriteString(FormatArchitecturalIntentBrief(receipt.IntentBrief))
+	}
 	if receipt.MutationReport != nil && len(receipt.MutationReport.Survivors) > 0 {
 		fmt.Fprintf(&b, "\n### Surviving Diff Mutants (Anti-Tautology Failures)\n\n")
 		for _, s := range receipt.MutationReport.Survivors {

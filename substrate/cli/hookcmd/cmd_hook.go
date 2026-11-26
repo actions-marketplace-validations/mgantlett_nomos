@@ -111,6 +111,9 @@ func newHookPreToolCmd(hermeticDir *string, containerSandbox *bool, budgetSec *i
 			ensureSessionBudgetStamp(payload, *hermeticDir, resolveEffectiveBudgetSeconds(*budgetSec))
 			dec := dispatchPreToolHook(payload, *hermeticDir, *containerSandbox, advFlags.resolve())
 			recordPreToolSessionTrace(payload, *hermeticDir, dec.Decision == hookDecisionDeny)
+			if dec.Decision == hookDecisionDeny {
+				recordPreToolShieldDeny(payload, *hermeticDir, dec.Reason)
+			}
 			return writePreToolResponse(cmd.OutOrStdout(), payload, dec)
 		},
 	}

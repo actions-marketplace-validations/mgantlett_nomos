@@ -310,3 +310,94 @@ func TestRootCmd_TwoTierHelpAndHelpAgentSurface(t *testing.T) {
 		}
 	}
 }
+
+// @verifies TC-INIT-08
+// @verifies TC-INIT-10
+// @verifies TC-STATUS-BG-02
+func TestCleanroomBranchGuardOnboarding_RatchetScratchStrictPromotionAndReceipts(t *testing.T) {
+	t.Setenv(constants.EnvNomosHome, t.TempDir())
+	t.Setenv("NOMOS_MNEME_DB_PATH", filepath.Join(t.TempDir(), constants.FileMnemeDB))
+	t.Setenv("NOMOS_IN_TOOLCHAIN_GATE", "")
+	t.Setenv("HOME", t.TempDir())
+
+	// 1. Clean scratch repo starts in Ratchet mode with compact nomos.yaml and zero dumped agent folders.
+	scratchDir := t.TempDir()
+	runGitOrFail(t, scratchDir, "init", "-b", "main")
+	runGitOrFail(t, scratchDir, "config", "user.email", "dev@example.com")
+	runGitOrFail(t, scratchDir, "config", "user.name", "Scratch Tester")
+	if err := os.WriteFile(filepath.Join(scratchDir, "README.md"), []byte("# Scratch\n"), 0644); err != nil {
+		t.Fatalf("write README: %v", err)
+	}
+	runGitOrFail(t, scratchDir, "add", ".")
+	runGitOrFail(t, scratchDir, "commit", "-m", "chore: initial scratch")
+
+	origPath := os.Getenv("PATH")
+	t.Setenv("PATH", t.TempDir())
+	initOut, err := runRootCLIForTest(t, "", "init", "--dir", scratchDir)
+	t.Setenv("PATH", origPath)
+	if err != nil {
+		t.Fatalf("TC-INIT-08: nomos init on scratch repo failed: %v\n%s", err, initOut)
+	}
+	rawCfg, rErr := os.ReadFile(filepath.Join(scratchDir, constants.FileNomosYAML))
+	if rErr != nil {
+		t.Fatalf("read nomos.yaml: %v", rErr)
+	}
+	lines := strings.Split(strings.TrimSpace(string(rawCfg)), "\n")
+	if len(lines) > 40 || !strings.Contains(string(rawCfg), "strict_mode: false") || !strings.Contains(string(rawCfg), "$schema=") {
+		t.Fatalf("TC-INIT-08: expected compact (<=40 lines) strict_mode: false nomos.yaml with $schema, got %d lines:\n%s", len(lines), string(rawCfg))
+	}
+	for _, hiddenDir := range []string{".claude", ".cursor", ".opencode", ".gemini", ".agents"} {
+		if pathExists(filepath.Join(scratchDir, hiddenDir)) {
+			t.Fatalf("TC-INIT-09: did not expect %s dumped when zero agents detected", hiddenDir)
+		}
+	}
+
+	// 2. Post-commit Shield Receipt emits on first commit, stays quiet on routine clean second commit, and emits on catch commit.
+	runGitOrFail(t, scratchDir, "switch", "-c", "feat/receipts")
+	if wErr := os.WriteFile(filepath.Join(scratchDir, "note1.txt"), []byte("one\n"), 0644); wErr != nil {
+		t.Fatalf("write note1: %v", wErr)
+	}
+	runGitOrFail(t, scratchDir, "add", "note1.txt")
+	runGitOrFail(t, scratchDir, "-c", "core.hooksPath=/dev/null", "commit", "-m", "docs: first commit")
+	pc1, pc1Err := runRootCLIForTest(t, "", "hook", "post-commit", "--dir", scratchDir)
+	if pc1Err != nil || !strings.Contains(pc1, "first verified commit") {
+		t.Fatalf("TC-STATUS-BG-02: expected first verified commit receipt, got err=%v out=%q", pc1Err, pc1)
+	}
+
+	if wErr := os.WriteFile(filepath.Join(scratchDir, "note2.txt"), []byte("two\n"), 0644); wErr != nil {
+		t.Fatalf("write note2: %v", wErr)
+	}
+	runGitOrFail(t, scratchDir, "add", "note2.txt")
+	runGitOrFail(t, scratchDir, "-c", "core.hooksPath=/dev/null", "commit", "-m", "docs: clean second commit")
+	pc2, pc2Err := runRootCLIForTest(t, "", "hook", "post-commit", "--dir", scratchDir)
+	if pc2Err != nil || strings.TrimSpace(pc2) != "" {
+		t.Fatalf("TC-STATUS-BG-02: expected quiet clean second commit, got err=%v out=%q", pc2Err, pc2)
+	}
+
+	mem.RecordShieldEvent(scratchDir, mem.ShieldCategoryAntiCheat, "AntiShimGate", "feat/receipts", "blocked skip")
+	if wErr := os.WriteFile(filepath.Join(scratchDir, "note3.txt"), []byte("three\n"), 0644); wErr != nil {
+		t.Fatalf("write note3: %v", wErr)
+	}
+	runGitOrFail(t, scratchDir, "add", "note3.txt")
+	runGitOrFail(t, scratchDir, "-c", "core.hooksPath=/dev/null", "commit", "-m", "fix: commit after catch")
+	pc3, pc3Err := runRootCLIForTest(t, "", "hook", "post-commit", "--dir", scratchDir)
+	if pc3Err != nil || !strings.Contains(pc3, "1 shortcut(s) caught before commit") {
+		t.Fatalf("TC-STATUS-BG-02: expected catch receipt on third commit, got err=%v out=%q", pc3Err, pc3)
+	}
+
+	// 3. Idempotent --strict promotion upgrades existing nomos.yaml while preserving baseline manifest.
+	if bErr := os.WriteFile(filepath.Join(scratchDir, constants.FileNomosBaselineJSON), []byte(`{"hangover_score":0,"grade":"A"}`), 0644); bErr != nil {
+		t.Fatalf("write baseline: %v", bErr)
+	}
+	strictOut, sErr := runRootCLIForTest(t, "", "init", "--strict", "--dir", scratchDir)
+	if sErr != nil {
+		t.Fatalf("TC-INIT-10: nomos init --strict promotion failed: %v\n%s", sErr, strictOut)
+	}
+	promotedCfg, pErr := config.LoadConfig(scratchDir)
+	if pErr != nil || !promotedCfg.Governance.QualityGates.StrictMode {
+		t.Fatalf("TC-INIT-10: expected promoted strict_mode: true, got err=%v cfg=%+v", pErr, promotedCfg)
+	}
+	if !fileExists(filepath.Join(scratchDir, constants.FileNomosBaselineJSON)) {
+		t.Fatalf("TC-INIT-10: expected historical nomos.baseline.json preserved on --strict promotion")
+	}
+}

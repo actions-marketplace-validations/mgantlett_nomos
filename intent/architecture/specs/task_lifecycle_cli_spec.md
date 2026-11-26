@@ -124,6 +124,7 @@ type TaskRecord struct {
 	Title              string     `json:"title"`
 	Description        string     `json:"description,omitempty"`
 	ScopePaths         []string   `json:"scope_paths,omitempty"`
+	LockTests          bool       `json:"lock_tests,omitempty"`
 	Obligations        []string   `json:"obligations,omitempty"`
 	AcceptanceCriteria []string   `json:"acceptance_criteria,omitempty"`
 	VerifyCmd          string     `json:"verify_cmd,omitempty"`
@@ -307,7 +308,7 @@ type UpdateCheckCache struct {
 
 ### 4.1 `nomos status`
 * **Syntax**: `nomos status [-A|--all-projects] [--json]`
-* **Semantics**: Emits a Lipgloss dashboard or JSON payload scoped to the active `project` (or all projects with `-A, --all-projects`). Reports phase, task card, worktree, token budget, DB status, `In Progress` vs `Pending` counts, and DAG wavefront candidates.
+* **Semantics**: Emits a mode-aware Lipgloss dashboard or JSON payload scoped to the active `project` (or all projects with `-A, --all-projects`). Under `worktree` isolation, reports phase, task card, worktree, token budget, DB status, task counts, and DAG wavefront candidates. Under `branch` isolation, renders the Branch Guard card with mode, active branch, hook health, and the Shield Scorecard. The Branch Guard card also displays a 4-rung Graduation Ladder (`Stealth` -> `Branch Guard` -> `CI` -> `Strict/Worktrees`). Readiness nudges suggest `--ci` after `>= 3` verified commits and `--strict` when `HangoverScore == 0` or Grade A.
 
 ### 4.2 `nomos task create` & `nomos task batch`
 * **Syntax**: `nomos task create <TITLE> --plane <intent|substrate> (--scope <TEXT> --ac <ITEM>... --verify <TEXT> | -F|--file <PATH|-> | -d|--desc <MARKDOWN>) [--paths <GLOB>...] [--obligations <TC-ID>...] [--key <KEY>] [--project <PROJECT>] [--depends-on <KEY>...] [--burden <1-10>] [--tier <T1|T2>] [--priority <int>] [--twin-of <KEY>] [--json]`
@@ -371,11 +372,11 @@ type UpdateCheckCache struct {
 * **Fail-Closed Invalidation**: Purges or bypasses cached receipts on any file byte mutation, untracked file addition, trunk `HEAD` advance, `--all` scan, or `NOMOS_NO_VERIFY_CACHE=1`.
 
 ### 4.15 Day-0 Progressive Onboarding (`nomos init`, Modes & `--help-agent`)
-* **Default Branch Guard (`nomos init [--dir <PATH>]`)**: Scaffolds `isolation_mode: "branch"`, skips `worktrees/`, merges `templates/AGENTS_BRANCH.md`, and makes zero silent trunk commits. Agents self-heal rejections invisibly without manual operator CLI chores or unprompted `--worktrees` upgrades.
-* **Smart Auto-Baselining & Strict Override (`--baseline`, `--strict`)**: Bare `nomos init` scans via `xray.ScanRepository` and writes `nomos.baseline.json` (`strict_mode: false`) when `HangoverScore > 0`. Passing `--strict` preserves `strict_mode: true` without creating a baseline manifest. Passing `--baseline` forces baseline creation regardless of score.
+* **Default Branch Guard & Compact Config (`nomos init [--dir <PATH>]`)**: Scaffolds `isolation_mode: "branch"` with compact `templates/nomos_branch.yaml`, merges `templates/AGENTS_BRANCH.md`, skips `worktrees/`, and avoids trunk commits. Prints a plain-English protection summary covering ratchet rules, grandfathered hotspots, auto-locked boundaries, and branch-aware next steps.
+* **Ratchet-by-Default & Idempotent Strict Promotion (`--baseline`, `--strict`)**: Plain `nomos init` initializes `strict_mode: false` across brownfield and clean repositories. It writes `nomos.baseline.json` when `HangoverScore > 0` or `--baseline` applies. Passing `--strict` enables `strict_mode: true` on fresh init and upgrades existing `nomos.yaml` files while keeping `nomos.baseline.json` intact.
 * **Stealth Local Trial (`--local`)**: Skips `.gitignore` edits and registers untracked governance files inside `.git/info/exclude` (`# Nomos Local Stealth Trial`) so `git status` stays clean. Running `nomos init` without `--local` removes that exclude block cleanly.
-* **Agent Detection & Filtering (`--agents`)**: Auto-detects present agent configs or binaries (`claude`, `cursor`, `opencode`, `gemini`, `agy`) and falls back to all five when none appear. Passing `--agents <csv|all>` filters hook manifests strictly to named targets and emits `CLAUDE.md` only when `claude` is active or pre-existing.
-* **Hermetic Worktree Graduation (`--worktrees`)**: Scaffolds `isolation_mode: "worktree"`, provisions `worktrees/`, merges full `templates/AGENTS.md`, seeds `mneme.db`, and stages governance commits when `--local` is false.
+* **Smart Agent Detection & Zero-Dump Fallback (`--agents`)**: Auto-detects present agent signals in order: repository directories, `$PATH` binaries, and `$HOME` config directories (`~/.claude`, `~/.cursor`, `~/.config/opencode`, `~/.gemini`, `~/.agents`). When zero targets match, `nomos init` writes `AGENTS.md` and Git hooks only and prints a `--agents` Remedy. Passing `--agents <csv|all>` filters hook manifests strictly to named targets and emits `CLAUDE.md` only when `claude` is active or pre-existing.
+* **Hermetic Worktree Graduation (`--worktrees`)**: Scaffolds `isolation_mode: "worktree"` using full `templates/nomos.yaml`, provisions `worktrees/`, merges full `templates/AGENTS.md`, seeds `mneme.db`, and stages governance commits when `--local` is false.
 * **Two-Tier Root Help (`--help-agent`)**: Default `nomos --help` displays core developer commands under `Cognitive Memory Commands:` and prints a `--help-agent` footer. External plugin discovery omits entries listed in `boundary.prohibited_commands`. Passing `nomos --help-agent` or `nomos help --help-agent` unhides internal agent RPCs under `Agent Boot & Cognitive Memory Commands:` with zero Cobra aliases.
 * **Thin Binary Bootstrapper Manifests (`skills/nomos/SKILL.md`, `.claude-plugin/`, `packaging/npm/`, `packaging/pypi/`)**: Root skill, plugin, npm (`@mgantlett/nomos`), and PyPI (`nomos-cli`) launchers verify SHA-256 digests and carry zero prompt-pack rules. Ongoing enforcement delegates strictly to compiled Go hooks. `ScanLockedDependencyMutations` permits zero-dependency `packaging/*/pyproject.toml` manifests declaring `dependencies = []`.
 * **Polyglot Ecosystem Manifests (`.pre-commit-hooks.yaml`, `flake.nix`, `Dockerfile`, `scoops`, `winget`)**: Root `.pre-commit-hooks.yaml` exposes `nomos-verify` and `nomos-xray` hooks (`pass_filenames: false`). Root `flake.nix` builds the static Go substrate binary cleanly under Nix flakes (`nix run github:mgantlett/nomos`). Root `Dockerfile` and `.goreleaser.yaml` (`dockers_v2`) publish scratch multi-arch `ghcr.io/mgantlett/nomos` OCI images (`linux/amd64`, `linux/arm64`). `.goreleaser.yaml` (`scoops`, `winget`) also generates Windows Scoop and Winget manifests, and `action.yml` declares GitHub Marketplace `branding`.
@@ -385,7 +386,7 @@ type UpdateCheckCache struct {
 * **`nomos init --baseline [--dir <PATH>]`**: Captures Day-0 `XrayReport` bounds before scaffolding and sets `strict_mode: false` on indebted repositories. Writes `nomos.baseline.json` (`XrayBaselineManifest`) on disk alongside governance contracts.
 
 ### 4.17 Branch Guard Post-Commit Hook (`nomos hook post-commit`)
-* **`nomos hook post-commit`**: Executes automatically from `.git/hooks/post-commit` when `BoundaryConfig.IsolationMode` resolves to `branch`. On non-protected branches, reads the latest commit message and changed files, distills resolved `BRANCH-*` traps into `mneme.db`, and clears the branch trace. Under `branch` mode, `vscope.IsWorktreeContext` treats feature branches as diff-scoped verification targets. `CommitSchemaGate` also accepts standard commit subjects without worktree trailers.
+* **`nomos hook post-commit`**: Executes automatically from `.git/hooks/post-commit` when `BoundaryConfig.IsolationMode` resolves to `branch`. On feature branches, it distills resolved `BRANCH-*` traps into `mneme.db`, logs a `verified_commit` shield event, and clears the branch trace. It prints one Shield Receipt line on the first verified commit, after branch catches, or after lesson distillation. Subsequent quiet clean commits emit zero output. Under `branch` mode, `vscope.IsWorktreeContext` treats feature branches as diff-scoped verification targets. `CommitSchemaGate` also accepts standard commit subjects without worktree trailers.
 
 ### 4.18 Zero-Phone-Home CI Scaffolding & OASIS SARIF 2.1.0 (`nomos init --ci` & `--sarif`)
 * **`nomos init --ci [--dir <PATH>]`**: Generates deterministic `.github/workflows/nomos-verify.yml` and `.gitlab-ci.yml` `nomos-verify` workflows executing `nomos verify` and SARIF upload with zero network phone-home, printing a Markdown verification badge snippet. Rejects combining `--ci` with `--local` (`ERR_VALIDATION_FAILED`). Extends `nomos init` under Law 6 Canonical Singularity instead of adding a duplicate top-level command.
@@ -394,6 +395,11 @@ type UpdateCheckCache struct {
 ### 4.19 Zero-Dependency MCP Stdio Server (`nomos mcp`)
 * **`nomos mcp`**: Hidden agent command serving MCP JSON-RPC 2.0 (`#MCPRequest`, `#MCPResponse`) across `2026-07-28`, `2025-11-25`, `2025-06-18`, `2025-03-26`, and `2024-11-05`, including `server/discover` and `-32022` `_meta` validation.
 * **Read-Only Tool, Resource, and Directive Boundaries**: Exposes seven read-only tools, `resources/*`, and `prompts/*` while rejecting mutations. Each tool declares `title`, sibling-boundary disambiguation, `outputSchema`, and `structuredContent`.
+
+### 4.20 Held-Out Verification Oracle Guard & Hard Scope Write Fence (`--lock-tests`, `immutable_test_paths`, `--scope`)
+* **`nomos task start <KEY> --lock-tests` & `nomos task pair --lock-tests`**: Persists `LockTests` on `TaskRecord`. Pre-tool hooks and `nomos verify` reject edits to pre-existing committed verification suites while allowing net-new verification files.
+* **`governance.quality_gates.immutable_test_paths`**: Declares workspace-relative verification globs that remain write-protected across every `SUB-*` task in both pre-tool hooks and `nomos verify`.
+* **Hard `--scope` Write Fence**: Whenever a task declares non-empty `scope_paths`, pre-tool hooks and `nomos verify` reject mutations outside those globs. Paired unit verification suites for scoped targets remain permitted, and unscoped tasks remain unrestricted.
 
 ---
 
@@ -423,6 +429,8 @@ type UpdateCheckCache struct {
 | `TC-TSK-20` | Law 3 (Pre-Flight MTPO Overlap) | `nomos task dag --json` while active `EDIT` task shares `scope_paths` | Populates `overlaps_active` on colliding wavefront candidates |
 | `TC-TSK-21` | Law 1 (Turn-0 Handoff Brief) | `nomos task start SUB-99 --edit` on task with `scope_paths` and `obligations` | Emits Turn-0 execution brief with target paths and `TC-*` obligations |
 | `TC-TSK-22` | Law 2 & Law 7 (Hard Obligation Sync Gate) | `nomos task sync SUB-99 -m "..."` missing `@verifies` for task `obligations` | Rejects sync (`ERR_VALIDATION_FAILED`) naming unbound `TC-*` vector |
+| `TC-TSK-23` | Law 2 & Law 7 (Held-Out Verification Oracle) | `SUB-*` with `--lock-tests` or `immutable_test_paths` edits existing suite | Pre-tool hook and verify reject existing suite edit; permit new suites |
+| `TC-TSK-24` | Law 3 & Law 7 (Hard Scope Write Fence) | `SUB-*` with `scope_paths` edits out-of-scope file vs paired suite | Pre-tool hook and verify reject out-of-scope edit; permit paired suite |
 | `TC-SYNC-020` | Law 2 (Pre-Verify Rebase & Receipt Cache) | `nomos task commit` -> `nomos task sync` | Rebases before verify; reuses clean tree+trunk receipts; invalidates on drift |
 | `TC-SYNC-021` | Law 5 & Law 7 (Walkthrough Airlock) | `nomos task sync` with `file://` home path or prohibited package literal | Scrubs workspace/home paths; rejects prohibited boundary literals before merge |
 | `TC-SYNC-022` | Law 4 & Law 7 (GoReleaser, Semver & Action Parity) | `nomos verify` on malformed `.goreleaser.yaml`, drifted `PKGBUILD` `pkgver`, or drifted root `action.yml` `go-version` | `ReleaseReceiptGate` rejects template syntax, semver pin, or Go toolchain pin drift |
@@ -461,7 +469,12 @@ type UpdateCheckCache struct {
 | `TC-INIT-04` | Law 3 & Law 7 (Default Branch Guard Init) | `nomos init` on brownfield repository | Scaffolds `isolation_mode: "branch"`, auto-baselines debt, skips `worktrees/`, avoids silent `main` commits |
 | `TC-INIT-05` | Law 3 (Stealth Local Trial & Promotion) | `nomos init --local` then `nomos init` | Uses `.git/info/exclude` with clean `git status`; non-local `init` cleans block |
 | `TC-INIT-06` | Law 6 (Agent Adapter Filtering) | `nomos init --agents claude` | Scaffolds selected agent hooks and compact `AGENTS_BRANCH.md` |
-| `TC-INIT-07` | Law 3 & Law 7 (Worktree & Strict Overrides) | `nomos init --worktrees` and `nomos init --strict` | `--worktrees` sets `isolation_mode: "worktree"`; `--strict` preserves `strict_mode: true` |
+| `TC-INIT-07` | Law 3 & Law 7 (Worktree & Strict Overrides) | `nomos init --worktrees` and `nomos init --strict` | `--worktrees` sets `isolation_mode: "worktree"`; `--strict` preserves or promotes `strict_mode: true` |
+| `TC-INIT-08` | Law 4 & Law 7 (Ratchet-by-Default & Compact Branch Config) | `nomos init` on clean/empty scratch repo | Scaffolds compact `nomos.yaml` (`<= 40` lines) with `strict_mode: false` and `$schema` pin |
+| `TC-INIT-09` | Law 6 (Smart Agent Detection & Zero-Dump Fallback) | `nomos init` with `$HOME/.cursor` vs zero agent signals | Wires `~/.cursor` without `$PATH` binary; zero matches scaffolds `AGENTS.md` + Git hooks only |
+| `TC-INIT-10` | Law 7 (Idempotent Strict Promotion) | `nomos init` followed by `nomos init --strict` | Flips existing `nomos.yaml` to `strict_mode: true` while preserving historical `nomos.baseline.json` |
+| `TC-STATUS-BG-01` | Law 4 & Law 6 (Branch-Guard Status & Shield Scorecard) | `nomos status [--json]` under `isolation_mode: "branch"` | Renders Shield Scorecard, hooks, and 4-rung graduation ladder cleanly |
+| `TC-STATUS-BG-02` | Law 1 & Law 2 (Post-Commit Shield Receipt Quietness) | `nomos hook post-commit` across first, catch, and clean commits | Prints receipt on first, catch, or distill commit; silent otherwise |
 | `TC-HELP-01` | Law 6 (Two-Tier Root Help) | `nomos --help` vs `nomos --help-agent` | Default help hides agent RPCs; `--help-agent` prints full catalog without aliases |
 | `TC-CI-01` | Law 5 & Law 6 (Offline CI & Action) | `nomos init --ci`, `--ci --local`, and root `action.yml` | Writes CI configs, rejects `--ci --local`, and bootstraps static binary + baseline PR proofs |
 | `TC-SARIF-01` | Law 2 & Law 4 (OASIS SARIF 2.1.0 Output) | `nomos xray --sarif` and `nomos verify --sarif` | Emits valid SARIF 2.1.0 JSON with driver rules and locations |

@@ -155,9 +155,29 @@ func NormalizeConventionGateSlug(raw string) string
 
 // ConsolidateConventionAxioms collapses multi-scope convention pitfalls and legacy habit patterns into scrubbed repository axioms (@intent: #Memory).
 func ConsolidateConventionAxioms(store *Store) int
+
+// ShieldSummary aggregates repo-scoped Branch Guard and verification catches for checkpoint visibility (@intent: #ShieldSummary).
+type ShieldSummary struct {
+	RepoID           string         `json:"repo_id"`
+	ShortcutsBlocked int            `json:"shortcuts_blocked"`
+	BlockedLast7Days int            `json:"blocked_last_7_days"`
+	CategoryCounts   map[string]int `json:"category_counts,omitempty"`
+	VerifiedCommits  int            `json:"verified_commits"`
+	DistilledLessons int            `json:"distilled_lessons"`
+	LastEventAt      string         `json:"last_event_at,omitempty"`
+}
+
+// RecordShieldEvent persists a repo-scoped hook block, verification failure, or verified commit counter into mneme.db (@intent: #ShieldSummary).
+func RecordShieldEvent(repoRoot, category, gateName, branch, detail string)
+
+// QueryShieldSummary returns repo-scoped shield catch counters and active Mneme lesson totals (@intent: #ShieldSummary).
+func QueryShieldSummary(repoRoot string) (*ShieldSummary, error)
+
+// QueryBranchShieldCatches returns shortcuts caught on branch since the last verified_commit event (@intent: #ShieldSummary).
+func QueryBranchShieldCatches(repoRoot, branch string) int
 ```
 
-The SQLite persistence schema matches `mem.Memory`:
+The SQLite persistence schema matches `mem.Memory` and `mem.ShieldSummary`:
 
 ```sql
 CREATE TABLE IF NOT EXISTS memories (
@@ -179,6 +199,19 @@ CREATE INDEX IF NOT EXISTS idx_memories_status ON memories(status);
 CREATE INDEX IF NOT EXISTS idx_memories_repo ON memories(repo_id);
 CREATE INDEX IF NOT EXISTS idx_memories_kind ON memories(kind);
 CREATE INDEX IF NOT EXISTS idx_memories_repo_kind_status ON memories(repo_id, kind, status);
+
+CREATE TABLE IF NOT EXISTS shield_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    repo_id TEXT NOT NULL,
+    category TEXT NOT NULL,
+    gate_name TEXT NOT NULL DEFAULT '',
+    branch TEXT NOT NULL DEFAULT '',
+    detail TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_shield_events_repo_created ON shield_events(repo_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_shield_events_repo_branch ON shield_events(repo_id, branch, created_at);
 ```
 
 ### 3.1 Field Specifications
@@ -293,12 +326,15 @@ $$\text{Score} = (0.75 \times \text{CosineSimilarity} + 0.25 \times \text{Lexica
 | `TC-MEM-19` | Dual-gate suppression & `dismiss --stale` | Deleted pattern scope recalled before sync, then `nomos mem dismiss --stale` | Suppressed immediately via `os.Stat` and tombstoned with receipts on `--stale`. |
 | `TC-MEM-20` | Lineage & dead-end recall guardrails | `SearchWithOptions` recalls evolved `decision` with ancestor and same-topic `dead_end` | Attaches `superseded_lineage` and `topic_dead_end` guardrails; skips duplicate clones. |
 | `TC-MEM-21` | Evolved lineage retention in `Maintain` | `Store.Maintain` evaluates `> 30d` evolved ancestor, clone, and `tombstoned` row | Preserves evolved `SupersededBy` ancestor; purges expired clones and `tombstoned` rows. |
+| `TC-SHIELD-01` | Repo-scoped shield event recording | `RecordShieldEvent` for `anti_cheat`, `security_airlock`, `trunk_guard`, `verified_commit` | Persists repo-scoped `shield_events` rows with zero overhead on allow paths. |
+| `TC-SHIELD-02` | Shield summary aggregation | `QueryShieldSummary(repoRoot)` | Returns lifetime and 7-day blocks, categories, commits, and lessons. |
+| `TC-SHIELD-03` | Branch catch watermark reset | `QueryBranchShieldCatches` before and after `verified_commit` | Counts branch catches since last commit and resets to `0`. |
 
 ---
 
 ## 7. Cross-Plane Traceability & DoD Verification
 
-- **Intent Lineage**: `INT-735`, `INT-855`, `INT-899`, `INT-926`, `INT-927`, `INT-1944`, `INT-1956`, `INT-1962`, `INT-1984`, `INT-2055`, `INT-2192`, `INT-2206`, `INT-2208`, `INT-2260`.
-- **Substrate SSoT**: `SUB-1213`, `SUB-1524`, `SUB-1680`, `SUB-2157`, `SUB-2203`, `SUB-2211`, `SUB-2279`, `SUB-3099`, `SUB-3383`, `SUB-3404`, `SUB-3407`, `SUB-3533` (`substrate/src/nomos/modules/mem/*.go`, `substrate/src/nomos/modules/verify/fast_radar.go`, `substrate/cli/maintenance_hook.go`, `substrate/cli/inspectcmd/cmd_mem_dismiss.go`).
+- **Intent Lineage**: `INT-735`, `INT-855`, `INT-899`, `INT-926`, `INT-927`, `INT-1944`, `INT-1956`, `INT-1962`, `INT-1984`, `INT-2055`, `INT-2192`, `INT-2206`, `INT-2208`, `INT-2260`, `INT-2294`.
+- **Substrate SSoT**: `SUB-1213`, `SUB-1524`, `SUB-1680`, `SUB-2157`, `SUB-2203`, `SUB-2211`, `SUB-2279`, `SUB-3099`, `SUB-3383`, `SUB-3404`, `SUB-3407`, `SUB-3533`, `SUB-3851` (`substrate/src/nomos/modules/mem/*.go`, `substrate/src/nomos/modules/verify/fast_radar.go`, `substrate/cli/maintenance_hook.go`, `substrate/cli/inspectcmd/cmd_mem_dismiss.go`).
 - **Canonical 7x3 Matrix Coordinates**: `Cell 1.1 (boundary)`, `Cell 4.1 (intent_traceability)`, `Cell 6.2 (zero_alias)`.
 - **Deterministic Verification**: `nomos verify` executes unit tests across `substrate/src/nomos/modules/mem/` and validates Database Encapsulation and CLI zero-alias invariants with exit code `0`.

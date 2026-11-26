@@ -115,12 +115,22 @@ type QualityGatesConfig struct {
 	CoverageMode                 string                     `yaml:"coverage_mode,omitempty" json:"coverage_mode,omitempty"`
 	CorpusCommand                string                     `yaml:"corpus_command,omitempty" json:"corpus_command,omitempty"`
 	PolyglotToolchains           *bool                      `yaml:"polyglot_toolchains,omitempty" json:"polyglot_toolchains,omitempty"`
+	ForbidSuppressions           *bool                      `yaml:"forbid_suppressions,omitempty" json:"forbid_suppressions,omitempty"`
+	ImmutableTestPaths           []string                   `yaml:"immutable_test_paths,omitempty" json:"immutable_test_paths,omitempty"`
+	BenchmarkRatchet             *BenchmarkRatchetConfig    `yaml:"benchmark_ratchet,omitempty" json:"benchmark_ratchet,omitempty"`
 	Exclude                      []string                   `yaml:"exclude,omitempty" json:"exclude,omitempty"`
 	IntentSourceRoots            []string                   `yaml:"intent_source_roots,omitempty" json:"intent_source_roots,omitempty"`
 	SubstrateSourceRoots         []string                   `yaml:"substrate_source_roots,omitempty" json:"substrate_source_roots,omitempty"`
 	ArchitectureBoundaries       []ArchitectureBoundaryRule `yaml:"architecture_boundaries,omitempty" json:"architecture_boundaries,omitempty"`
 	Contracts                    *ContractsBoundaryConfig   `yaml:"contracts,omitempty" json:"contracts,omitempty"`
 	Thresholds                   ThresholdsConfig           `yaml:"thresholds" json:"thresholds"`
+}
+
+// BenchmarkRatchetConfig defines opt-in runtime benchmark regression enforcement (#BenchmarkRatchetConfig).
+type BenchmarkRatchetConfig struct {
+	Command          string  `yaml:"command" json:"command"`
+	BaselineFile     string  `yaml:"baseline_file,omitempty" json:"baseline_file,omitempty"`
+	MaxRegressionPct float64 `yaml:"max_regression_pct,omitempty" json:"max_regression_pct,omitempty"`
 }
 
 // ContractsBoundaryConfig defines cross-plane contract and infrastructure verification boundaries (#ContractsBoundaryConfig).
