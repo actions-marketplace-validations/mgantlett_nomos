@@ -213,29 +213,37 @@ func collectInFlightSubSpecDigests(ctx *vscope.VerifyContext, root string, inten
 		return nil
 	}
 	trunkRoot := resolvePrimaryObligationRoot(wt, root)
-	twinKey := resolveActiveSubTwinKey(trunkRoot, subKey)
-	return collectInFlightSubSpecDigestsWithTwin(ctx, wt, twinKey, intentRoots)
+	twinKeys := resolveActiveSubTwinKeys(trunkRoot, subKey)
+	return collectInFlightSubSpecDigestsWithTwins(ctx, wt, twinKeys, intentRoots)
 }
 
-func collectInFlightSubSpecDigestsWithTwin(ctx *vscope.VerifyContext, wt, twinKey string, intentRoots []string) map[string]bool {
+func collectInFlightSubSpecDigestsWithTwins(ctx *vscope.VerifyContext, wt string, twinKeys, intentRoots []string) map[string]bool {
 	var modified []string
 	if ctx != nil {
 		modified = vscope.GetModifiedFilesInScope(ctx, wt)
 	}
-	if len(modified) == 0 && twinKey == "" {
+	if len(modified) == 0 && len(twinKeys) == 0 {
 		return nil
 	}
 	active := make(map[string]bool)
-	for k := range task.CollectReferencedSpecDigestsWithRoots(wt, modified, twinKey, intentRoots) {
-		active[k] = true
-	}
 	trunkRoot := resolvePrimaryObligationRoot(wt, wt)
-	if twinKey != "" && trunkRoot != "" && trunkRoot != wt {
-		for k := range task.CollectReferencedSpecDigestsWithRoots(trunkRoot, nil, twinKey, intentRoots) {
-			active[k] = true
+	if len(twinKeys) == 0 {
+		recordReferencedSpecDigests(active, wt, modified, "", intentRoots)
+		return active
+	}
+	for _, twinKey := range twinKeys {
+		recordReferencedSpecDigests(active, wt, modified, twinKey, intentRoots)
+		if trunkRoot != "" && trunkRoot != wt {
+			recordReferencedSpecDigests(active, trunkRoot, nil, twinKey, intentRoots)
 		}
 	}
 	return active
+}
+
+func recordReferencedSpecDigests(dst map[string]bool, root string, modified []string, twinKey string, intentRoots []string) {
+	for k := range task.CollectReferencedSpecDigestsWithRoots(root, modified, twinKey, intentRoots) {
+		dst[k] = true
+	}
 }
 
 func resolvePrimaryObligationRoot(wt, fallback string) string {
@@ -245,10 +253,10 @@ func resolvePrimaryObligationRoot(wt, fallback string) string {
 	return fallback
 }
 
-func resolveActiveSubTwinKey(trunkRoot, subKey string) string {
+func resolveActiveSubTwinKeys(trunkRoot, subKey string) []string {
 	store, err := task.NewDefaultSQLiteTaskStore()
 	if err != nil || store == nil {
-		return ""
+		return nil
 	}
 	defer func() {
 		if cErr := store.Close(); cErr != nil {
@@ -256,12 +264,20 @@ func resolveActiveSubTwinKey(trunkRoot, subKey string) string {
 		}
 	}()
 	project := task.ResolveRepoProject(trunkRoot)
+	seen := make(map[string]bool)
+	var twins []string
 	for _, rec := range task.FilterTasksByProject(store.ListTasks(), project, true) {
-		if rec.Key == subKey && strings.HasPrefix(strings.TrimSpace(rec.TwinKey), "INT-") {
-			return strings.TrimSpace(rec.TwinKey)
+		recTwin := strings.TrimSpace(rec.TwinKey)
+		if rec.Key == subKey && strings.HasPrefix(recTwin, "INT-") && !seen[recTwin] {
+			seen[recTwin] = true
+			twins = append(twins, recTwin)
+		}
+		if strings.HasPrefix(rec.Key, "INT-") && recTwin == subKey && !seen[rec.Key] {
+			seen[rec.Key] = true
+			twins = append(twins, rec.Key)
 		}
 	}
-	return ""
+	return twins
 }
 
 func evaluateConfiguredArchitectureBoundaries(gateName string, ctx *vscope.VerifyContext, root string, rules []config.ArchitectureBoundaryRule) *vscope.GateResult {

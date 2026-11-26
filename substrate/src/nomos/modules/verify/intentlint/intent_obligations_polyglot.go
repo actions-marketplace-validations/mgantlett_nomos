@@ -33,7 +33,7 @@ var (
 	rubyEnvLookupRe = regexp.MustCompile(`\bENV(?:\[\s*|\.fetch\s*\(\s*)['"]([A-Z][A-Z0-9_]+)['"]`)
 )
 
-func verifyPolyglotSpecSignatures(root string, specFiles []string) []string {
+func verifyPolyglotSpecSignatures(root string, specFiles []string, delta *impact.SiblingDelta) []string {
 	specContracts := make(map[string]map[string]map[string]bool)
 	hasAny := false
 	for _, specFile := range specFiles {
@@ -54,12 +54,12 @@ func verifyPolyglotSpecSignatures(root string, specFiles []string) []string {
 			continue
 		}
 		relSpec := toRelSlash(root, specFile)
-		issues = append(issues, diffSpecStructsAgainstAST(relSpec, contracts, sourceFields)...)
+		issues = append(issues, diffSpecStructsAgainstAST(relSpec, contracts, sourceFields, delta)...)
 	}
 	return issues
 }
 
-func diffSpecStructsAgainstAST(relSpec string, specStructs, compiledStructs map[string]map[string]bool) []string {
+func diffSpecStructsAgainstAST(relSpec string, specStructs, compiledStructs map[string]map[string]bool, delta *impact.SiblingDelta) []string {
 	names := make([]string, 0, len(specStructs))
 	for name := range specStructs {
 		names = append(names, name)
@@ -69,15 +69,18 @@ func diffSpecStructsAgainstAST(relSpec string, specStructs, compiledStructs map[
 	for _, typeName := range names {
 		actualFields, exists := compiledStructs[typeName]
 		if !exists {
-			issues = append(issues, fmt.Sprintf("%s: missing compiled Go struct %s", relSpec, typeName))
+			if delta.HasAddedStruct(typeName) {
+				continue
+			}
+			issues = append(issues, fmt.Sprintf("%s: missing compiled contract type %s", relSpec, typeName))
 			continue
 		}
-		issues = append(issues, findMissingStructFields(relSpec, typeName, specStructs[typeName], actualFields)...)
+		issues = append(issues, findMissingStructFields(relSpec, typeName, specStructs[typeName], actualFields, delta)...)
 	}
 	return issues
 }
 
-func findMissingStructFields(relSpec, typeName string, expected, actual map[string]bool) []string {
+func findMissingStructFields(relSpec, typeName string, expected, actual map[string]bool, delta *impact.SiblingDelta) []string {
 	fields := make([]string, 0, len(expected))
 	for field := range expected {
 		fields = append(fields, field)
@@ -85,8 +88,8 @@ func findMissingStructFields(relSpec, typeName string, expected, actual map[stri
 	sort.Strings(fields)
 	var missing []string
 	for _, field := range fields {
-		if !actual[field] {
-			missing = append(missing, fmt.Sprintf("%s: struct %s missing declared field %s", relSpec, typeName, field))
+		if !actual[field] && !delta.HasAddedField(typeName, field) {
+			missing = append(missing, fmt.Sprintf("%s: type %s missing declared field %s", relSpec, typeName, field))
 		}
 	}
 	return missing
@@ -97,8 +100,12 @@ func extractPolyglotSpecContractFields(specFile string) map[string]map[string]bo
 	if err != nil {
 		return nil
 	}
+	return extractPolyglotSpecContractFieldsFromMarkdown(string(raw))
+}
+
+func extractPolyglotSpecContractFieldsFromMarkdown(markdown string) map[string]map[string]bool {
 	out := make(map[string]map[string]bool)
-	for _, m := range polyglotFencedBlockRe.FindAllStringSubmatch(string(raw), -1) {
+	for _, m := range polyglotFencedBlockRe.FindAllStringSubmatch(markdown, -1) {
 		if len(m) < 3 {
 			continue
 		}
@@ -106,6 +113,42 @@ func extractPolyglotSpecContractFields(specFile string) map[string]map[string]bo
 		parsePolyglotContractSnippet(lang, m[2], out)
 	}
 	return out
+}
+
+func recordPolyglotSpecDelta(beforeMD, afterMD string, into *impact.SiblingDelta) {
+	if into == nil {
+		return
+	}
+	before := extractPolyglotSpecContractFieldsFromMarkdown(beforeMD)
+	after := extractPolyglotSpecContractFieldsFromMarkdown(afterMD)
+	recordPolyglotAddedDeltas(before, after, into)
+	recordPolyglotRemovedDeltas(before, after, into)
+}
+
+func recordPolyglotAddedDeltas(before, after map[string]map[string]bool, into *impact.SiblingDelta) {
+	for typeName, afterFields := range after {
+		beforeFields, existed := before[typeName]
+		if !existed {
+			into.AddedStructs[typeName] = true
+			continue
+		}
+		for field := range afterFields {
+			if !beforeFields[field] {
+				ensureStructFieldSet(into.AddedFields, typeName)[field] = true
+			}
+		}
+	}
+}
+
+func recordPolyglotRemovedDeltas(before, after map[string]map[string]bool, into *impact.SiblingDelta) {
+	for typeName, beforeFields := range before {
+		afterFields, existed := after[typeName]
+		for field := range beforeFields {
+			if !existed || !afterFields[field] {
+				ensureStructFieldSet(into.RemovedFields, typeName)[field] = true
+			}
+		}
+	}
 }
 
 func parsePolyglotContractSnippet(lang, src string, out map[string]map[string]bool) {

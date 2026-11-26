@@ -71,7 +71,7 @@ func VerifySpecTypeSignaturesWithDelta(root, targetDir string, specPaths []strin
 			}
 		}
 	}
-	issues = append(issues, verifyPolyglotSpecSignatures(root, resolvedSpecs)...)
+	issues = append(issues, verifyPolyglotSpecSignatures(root, resolvedSpecs, delta)...)
 	return issues
 }
 
