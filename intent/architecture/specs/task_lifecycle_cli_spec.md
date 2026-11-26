@@ -124,6 +124,7 @@ type TaskRecord struct {
 	Title              string     `json:"title"`
 	Description        string     `json:"description,omitempty"`
 	ScopePaths         []string   `json:"scope_paths,omitempty"`
+	LockTests          bool       `json:"lock_tests,omitempty"`
 	Obligations        []string   `json:"obligations,omitempty"`
 	AcceptanceCriteria []string   `json:"acceptance_criteria,omitempty"`
 	VerifyCmd          string     `json:"verify_cmd,omitempty"`
@@ -395,6 +396,11 @@ type UpdateCheckCache struct {
 * **`nomos mcp`**: Hidden agent command serving MCP JSON-RPC 2.0 (`#MCPRequest`, `#MCPResponse`) across `2026-07-28`, `2025-11-25`, `2025-06-18`, `2025-03-26`, and `2024-11-05`, including `server/discover` and `-32022` `_meta` validation.
 * **Read-Only Tool, Resource, and Directive Boundaries**: Exposes seven read-only tools, `resources/*`, and `prompts/*` while rejecting mutations. Each tool declares `title`, sibling-boundary disambiguation, `outputSchema`, and `structuredContent`.
 
+### 4.20 Held-Out Verification Oracle Guard & Hard Scope Write Fence (`--lock-tests`, `immutable_test_paths`, `--scope`)
+* **`nomos task start <KEY> --lock-tests` & `nomos task pair --lock-tests`**: Persists `LockTests` on `TaskRecord`. Pre-tool hooks and `nomos verify` reject edits to pre-existing committed verification suites while allowing net-new verification files.
+* **`governance.quality_gates.immutable_test_paths`**: Declares workspace-relative verification globs that remain write-protected across every `SUB-*` task in both pre-tool hooks and `nomos verify`.
+* **Hard `--scope` Write Fence**: Whenever a task declares non-empty `scope_paths`, pre-tool hooks and `nomos verify` reject mutations outside those globs. Paired unit verification suites for scoped targets remain permitted, and unscoped tasks remain unrestricted.
+
 ---
 
 ## 5. Table-Driven Verification Vectors
@@ -423,6 +429,8 @@ type UpdateCheckCache struct {
 | `TC-TSK-20` | Law 3 (Pre-Flight MTPO Overlap) | `nomos task dag --json` while active `EDIT` task shares `scope_paths` | Populates `overlaps_active` on colliding wavefront candidates |
 | `TC-TSK-21` | Law 1 (Turn-0 Handoff Brief) | `nomos task start SUB-99 --edit` on task with `scope_paths` and `obligations` | Emits Turn-0 execution brief with target paths and `TC-*` obligations |
 | `TC-TSK-22` | Law 2 & Law 7 (Hard Obligation Sync Gate) | `nomos task sync SUB-99 -m "..."` missing `@verifies` for task `obligations` | Rejects sync (`ERR_VALIDATION_FAILED`) naming unbound `TC-*` vector |
+| `TC-TSK-23` | Law 2 & Law 7 (Held-Out Verification Oracle) | `SUB-*` with `--lock-tests` or `immutable_test_paths` edits existing suite | Pre-tool hook and verify reject existing suite edit; permit new suites |
+| `TC-TSK-24` | Law 3 & Law 7 (Hard Scope Write Fence) | `SUB-*` with `scope_paths` edits out-of-scope file vs paired suite | Pre-tool hook and verify reject out-of-scope edit; permit paired suite |
 | `TC-SYNC-020` | Law 2 (Pre-Verify Rebase & Receipt Cache) | `nomos task commit` -> `nomos task sync` | Rebases before verify; reuses clean tree+trunk receipts; invalidates on drift |
 | `TC-SYNC-021` | Law 5 & Law 7 (Walkthrough Airlock) | `nomos task sync` with `file://` home path or prohibited package literal | Scrubs workspace/home paths; rejects prohibited boundary literals before merge |
 | `TC-SYNC-022` | Law 4 & Law 7 (GoReleaser, Semver & Action Parity) | `nomos verify` on malformed `.goreleaser.yaml`, drifted `PKGBUILD` `pkgver`, or drifted root `action.yml` `go-version` | `ReleaseReceiptGate` rejects template syntax, semver pin, or Go toolchain pin drift |

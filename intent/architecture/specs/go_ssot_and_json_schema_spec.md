@@ -116,6 +116,7 @@ type QualityGatesConfig struct {
 	CorpusCommand                string                     `yaml:"corpus_command,omitempty" json:"corpus_command,omitempty"`
 	PolyglotToolchains           *bool                      `yaml:"polyglot_toolchains,omitempty" json:"polyglot_toolchains,omitempty"`
 	ForbidSuppressions           *bool                      `yaml:"forbid_suppressions,omitempty" json:"forbid_suppressions,omitempty"`
+	ImmutableTestPaths           []string                   `yaml:"immutable_test_paths,omitempty" json:"immutable_test_paths,omitempty"`
 	Exclude                      []string                   `yaml:"exclude,omitempty" json:"exclude,omitempty"`
 	IntentSourceRoots            []string                   `yaml:"intent_source_roots,omitempty" json:"intent_source_roots,omitempty"`
 	SubstrateSourceRoots         []string                   `yaml:"substrate_source_roots,omitempty" json:"substrate_source_roots,omitempty"`
